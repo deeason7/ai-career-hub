@@ -8,6 +8,7 @@ Two execution paths based on environment:
 Zero-hallucination: only uses facts from the candidate's actual resume.
 """
 import logging
+
 from langchain_core.prompts import PromptTemplate
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ def _rag_retrieve(resume_text: str, job_description: str) -> tuple[str, int]:
     from langchain_community.vectorstores import FAISS  # noqa: PLC0415
     from langchain_core.documents import Document  # noqa: PLC0415
     from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: PLC0415
+
     from app.core.config import settings  # noqa: PLC0415
 
     splitter = RecursiveCharacterTextSplitter(
@@ -121,7 +123,7 @@ def generate_cover_letter(resume_text: str, job_description: str) -> dict:
 
 def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
     """Identify missing skills and generate prioritised learning recommendations."""
-    from app.services.ats_scorer import calculate_ats_score, PRIORITY_KEYWORDS  # noqa: PLC0415
+    from app.services.ats_scorer import PRIORITY_KEYWORDS, calculate_ats_score  # noqa: PLC0415
 
     ats = calculate_ats_score(resume_text, job_description)
     missing = ats.missing_keywords[:15]
