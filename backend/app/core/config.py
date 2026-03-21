@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # AI — Groq (free cloud alternative; takes priority over Ollama when set)
     # Get a free key at: https://console.groq.com
     GROQ_API_KEY: str = ""
-    GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"  # Free, 6000 req/day
+    GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"
 
     @computed_field
     def USE_GROQ(self) -> bool:
@@ -64,7 +64,6 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
-
 
 
 settings = Settings()
