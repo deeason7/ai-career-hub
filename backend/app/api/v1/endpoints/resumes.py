@@ -16,6 +16,7 @@ from app.services.resume_parser import parse_resume
 router = APIRouter()
 
 MAX_RESUMES_PER_USER = 10
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @router.post("/upload", response_model=ResumeRead, status_code=status.HTTP_201_CREATED)
@@ -33,6 +34,15 @@ async def upload_resume(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Maximum of {MAX_RESUMES_PER_USER} resumes per user. Delete one first.",
         )
+
+    # Enforce 10 MB file size limit
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large. Maximum size is 10 MB.",
+        )
+    await file.seek(0)  # Reset so extract_text_from_upload can read it
 
     try:
         raw_text = await extract_text_from_upload(file)
