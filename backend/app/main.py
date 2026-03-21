@@ -15,6 +15,10 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# Show docs only in development (hide attack surface in prod)
+_docs_url = "/docs" if not settings.PRODUCTION else None
+_redoc_url = "/redoc" if not settings.PRODUCTION else None
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
@@ -23,17 +27,21 @@ app = FastAPI(
         "ATS scoring, skill gap analysis, interview question generation, and job application tracking."
     ),
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://ai-career-hub-frontend.onrender.com",
+        "http://localhost:8501",   # Streamlit local dev
+        "http://localhost:3000",   # Future Next.js dev
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

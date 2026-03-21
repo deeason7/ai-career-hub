@@ -68,12 +68,12 @@ async def test_register_duplicate_email(client: AsyncClient):
     await client.post("/api/v1/auth/register", json={
         "email": "dup@example.com",
         "full_name": "Dup User",
-        "password": "pass123",
+        "password": "pass1234",
     })
     response = await client.post("/api/v1/auth/register", json={
         "email": "dup@example.com",
         "full_name": "Another",
-        "password": "pass456",
+        "password": "pass5678",
     })
     assert response.status_code == 409
 
@@ -112,11 +112,11 @@ async def test_get_me_authenticated(client: AsyncClient):
     await client.post("/api/v1/auth/register", json={
         "email": "me@example.com",
         "full_name": "Me User",
-        "password": "mepass",
+        "password": "mepassword",
     })
     login = await client.post("/api/v1/auth/login", data={
         "username": "me@example.com",
-        "password": "mepass",
+        "password": "mepassword",
     })
     token = login.json()["access_token"]
     response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
@@ -131,9 +131,9 @@ async def auth_token(client: AsyncClient):
     """Create a user and return auth token."""
     email = "ats_user@example.com"
     await client.post("/api/v1/auth/register", json={
-        "email": email, "full_name": "ATS User", "password": "atspass",
+        "email": email, "full_name": "ATS User", "password": "atspass1",
     })
-    login = await client.post("/api/v1/auth/login", data={"username": email, "password": "atspass"})
+    login = await client.post("/api/v1/auth/login", data={"username": email, "password": "atspass1"})
     return login.json()["access_token"]
 
 
