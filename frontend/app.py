@@ -261,7 +261,7 @@ def page_cover_letter():
             })
 
         if resp.status_code != 202:
-            show_error(resp.json().get("detail", "Failed to start task."))
+            show_error(resp.json().get("detail", "Failed to start task.") if resp.content else "Failed to start task (empty response).")
             return
 
         cl = resp.json()
