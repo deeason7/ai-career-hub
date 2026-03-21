@@ -6,10 +6,9 @@ Scores a resume against a job description using:
 2. Semantic similarity (cosine similarity via TF-IDF / FAISS)
 3. Structure scoring (sections present, formatting heuristics)
 """
-import re
 import logging
+import re
 from dataclasses import dataclass
-from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +58,9 @@ def _score_keywords(resume_text: str, jd_text: str) -> tuple[float, list[str], l
     resume_tokens = _tokenize(resume_text)
     jd_tokens = _tokenize(jd_text)
 
-    # Also check bigrams
     resume_bigrams = _extract_ngrams(resume_text)
     jd_bigrams = _extract_ngrams(jd_text)
 
-    # Extract meaningful JD keywords (filter stop words)
     stop_words = {
         "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
         "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
@@ -79,31 +76,26 @@ def _score_keywords(resume_text: str, jd_text: str) -> tuple[float, list[str], l
     matched = []
     missing = []
 
-    # Single-word matches
     for kw in jd_keywords:
         if kw in resume_tokens:
             matched.append(kw)
         else:
             missing.append(kw)
 
-    # Bigram matches
     for phrase in jd_phrases:
         if phrase in resume_bigrams:
             if phrase not in matched:
                 matched.append(phrase)
 
-    # Priority keyword bonus
     priority_matched = sum(1 for kw in matched if kw in PRIORITY_KEYWORDS)
-    priority_missing = [kw for kw in PRIORITY_KEYWORDS if kw in jd_keywords and kw not in matched]
 
     if not jd_keywords:
         return 0.0, [], []
 
     base_score = len(matched) / max(len(jd_keywords), 1) * 100
-    bonus = min(priority_matched * 2, 10)  # Up to +10 bonus
+    bonus = min(priority_matched * 2, 10)
     final_score = min(base_score + bonus, 100)
 
-    # Sort missing by priority
     missing_sorted = sorted(missing, key=lambda k: k in PRIORITY_KEYWORDS, reverse=True)
 
     return round(final_score, 1), sorted(matched), missing_sorted[:20]
@@ -130,7 +122,7 @@ def _score_structure(resume_text: str) -> tuple[float, list[str]]:
 
     word_count = len(resume_text.split())
     if word_count < 200:
-        recs.append(f"Resume is short ({word_count} words). Aim for 400–600 words.")
+        recs.append(f"Resume is short ({word_count} words). Aim for 400-600 words.")
     elif word_count > 900:
         recs.append(f"Resume is very long ({word_count} words). Consider trimming to 1 page.")
 
@@ -138,13 +130,10 @@ def _score_structure(resume_text: str) -> tuple[float, list[str]]:
 
 
 def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
-    """
-    Main entry point. Calculate full ATS score for a resume against a JD.
-    """
+    """Main entry point. Calculate full ATS score for a resume against a JD."""
     kw_score, matched, missing = _score_keywords(resume_text, job_description)
     struct_score, struct_recs = _score_structure(resume_text)
 
-    # Weighted final score: 70% keywords, 30% structure
     final = round(kw_score * 0.70 + struct_score * 0.30, 1)
 
     recommendations = []

@@ -1,0 +1,5 @@
+# This directory stores individual Alembic migration files.
+# Each file represents a schema change (revision) to the database.
+# Files are named: <revision_id>_<description>.py
+# Run: alembic upgrade head     — apply all pending migrations
+# Run: alembic downgrade -1     — roll back the last migration

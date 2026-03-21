@@ -1,17 +1,15 @@
 """
 Cover Letter Generator Service
 
-Uses a RAG pipeline with FAISS + Ollama to generate honest, resume-grounded cover letters.
-Zero-hallucination: only uses facts retrieved from the candidate's resume.
+Two execution paths based on environment:
+  - Groq (cloud/free): sends full resume text directly — uses 128K context window, no FAISS needed
+  - Ollama (local dev): uses RAG pipeline with FAISS for context retrieval
+
+Zero-hallucination: only uses facts from the candidate's actual resume.
 """
 import logging
-from langchain_community.llms import Ollama
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 from langchain_core.prompts import PromptTemplate
-from langchain_core.documents import Document
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +28,7 @@ in related areas without fabricating experience.
 
 === COVER LETTER STRUCTURE ===
 Paragraph 1 (Hook): Why this role excites the candidate + strongest matching credential.
-Paragraph 2 (Evidence): 2–3 specific achievements from the verified facts above that match the JD.
+Paragraph 2 (Evidence): 2-3 specific achievements from the verified facts above that match the JD.
 Paragraph 3 (Fit): Cultural/team fit + what the candidate will contribute.
 Closing: Professional sign-off requesting an interview.
 
@@ -39,95 +37,109 @@ Write the full cover letter below (no metadata, no placeholders):
 )
 
 
-def _ensure_models_available(ollama_url: str):
-    """Pull Ollama models if not already available."""
-    import requests
-    for model in [settings.OLLAMA_EMBED_MODEL, settings.OLLAMA_LLM_MODEL]:
-        try:
-            resp = requests.get(f"{ollama_url}/api/tags", timeout=5)
-            if resp.status_code == 200:
-                available = [m["name"] for m in resp.json().get("models", [])]
-                if model not in available and f"{model}:latest" not in available:
-                    logger.info(f"Pulling model: {model}")
-                    requests.post(f"{ollama_url}/api/pull", json={"name": model}, timeout=300)
-        except Exception as e:
-            logger.warning(f"Could not verify/pull model {model}: {e}")
+def _build_llm():
+    """
+    Return the appropriate LLM client.
+    Groq is preferred (free, fast, 128K context). Falls back to Ollama for local dev.
+    """
+    from app.core.config import settings  # noqa: PLC0415
+
+    if settings.USE_GROQ:
+        from langchain_groq import ChatGroq  # noqa: PLC0415
+        logger.info("LLM backend: Groq (%s)", settings.GROQ_LLM_MODEL)
+        return ChatGroq(
+            model=settings.GROQ_LLM_MODEL,
+            api_key=settings.GROQ_API_KEY,
+            temperature=0.3,
+        )
+    else:
+        from langchain_community.llms import Ollama  # noqa: PLC0415
+        logger.info("LLM backend: Ollama (%s)", settings.OLLAMA_LLM_MODEL)
+        return Ollama(
+            model=settings.OLLAMA_LLM_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+        )
+
+
+def _extract_text(result) -> str:
+    """Handle both AIMessage (ChatGroq) and str (Ollama) responses."""
+    return result.content if hasattr(result, "content") else str(result)
+
+
+def _rag_retrieve(resume_text: str, job_description: str) -> tuple[str, int]:
+    """
+    FAISS-based RAG retrieval for Ollama path.
+    Returns (context_string, chunks_used).
+    """
+    from langchain_community.embeddings import OllamaEmbeddings  # noqa: PLC0415
+    from langchain_community.vectorstores import FAISS  # noqa: PLC0415
+    from langchain_core.documents import Document  # noqa: PLC0415
+    from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: PLC0415
+
+    from app.core.config import settings  # noqa: PLC0415
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=400, chunk_overlap=60,
+        separators=["\n\n", "\n", ".", " ", ""],
+    )
+    docs = [Document(page_content=chunk) for chunk in splitter.split_text(resume_text)]
+
+    embeddings = OllamaEmbeddings(
+        model=settings.OLLAMA_EMBED_MODEL,
+        base_url=settings.OLLAMA_BASE_URL,
+    )
+    vectorstore = FAISS.from_documents(docs, embeddings)
+    relevant_docs = vectorstore.as_retriever(search_kwargs={"k": 6}).invoke(job_description)
+    context = "\n\n---\n\n".join(doc.page_content for doc in relevant_docs)
+    return context, len(relevant_docs)
 
 
 def generate_cover_letter(resume_text: str, job_description: str) -> dict:
     """
-    Generate a zero-hallucination cover letter using RAG.
-
-    Returns:
-        dict with keys: 'cover_letter', 'rag_context', 'chunks_used'
+    Generate a zero-hallucination cover letter.
+    - Groq path: sends full resume (128K context window) directly — no FAISS needed
+    - Ollama path: uses RAG to retrieve top-6 relevant chunks via FAISS
     """
-    ollama_url = settings.OLLAMA_BASE_URL
-    _ensure_models_available(ollama_url)
+    from app.core.config import settings  # noqa: PLC0415
 
-    # --- Step 1: Chunk the resume ---
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=400,
-        chunk_overlap=60,
-        separators=["\n\n", "\n", ".", " ", ""],
-    )
-    chunks = splitter.split_text(resume_text)
-    docs = [Document(page_content=chunk) for chunk in chunks]
+    if settings.USE_GROQ:
+        # Groq has 128K context — send the full resume directly, no vector search needed
+        context = resume_text[:6000]
+        chunks_used = 1
+    else:
+        context, chunks_used = _rag_retrieve(resume_text, job_description)
 
-    # --- Step 2: Embed into FAISS ---
-    embeddings = OllamaEmbeddings(
-        model=settings.OLLAMA_EMBED_MODEL,
-        base_url=ollama_url,
-    )
-    vectorstore = FAISS.from_documents(docs, embeddings)
-
-    # --- Step 3: Retrieve top-k resume facts matching the JD ---
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
-    relevant_docs = retriever.invoke(job_description)
-    rag_context = "\n\n---\n\n".join(doc.page_content for doc in relevant_docs)
-
-    # --- Step 4: Generate cover letter ---
-    llm = Ollama(
-        model=settings.OLLAMA_LLM_MODEL,
-        base_url=ollama_url,
-    )
+    llm = _build_llm()
     chain = _COVER_LETTER_PROMPT | llm
-    cover_letter = chain.invoke({
-        "context": rag_context,
-        "job_description": job_description,
-    })
+    result = chain.invoke({"context": context, "job_description": job_description})
+    cover_letter = _extract_text(result).strip()
 
     return {
-        "cover_letter": cover_letter.strip(),
-        "rag_context": rag_context,
-        "chunks_used": len(relevant_docs),
+        "cover_letter": cover_letter,
+        "rag_context": context[:500] + "..." if len(context) > 500 else context,
+        "chunks_used": chunks_used,
     }
 
 
 def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
-    """
-    Identify missing skills from the job description not present in the resume.
-    Returns structured skill gap with learning recommendations.
-    """
-    from app.services.ats_scorer import calculate_ats_score, _tokenize, PRIORITY_KEYWORDS
-    import re
+    """Identify missing skills and generate prioritised learning recommendations."""
+    from app.services.ats_scorer import PRIORITY_KEYWORDS, calculate_ats_score  # noqa: PLC0415
 
     ats = calculate_ats_score(resume_text, job_description)
     missing = ats.missing_keywords[:15]
-
-    # Use LLM for learning recommendations on priority gaps
     priority_gaps = [kw for kw in missing if kw in PRIORITY_KEYWORDS][:5]
 
     recommendations = []
     if priority_gaps:
-        llm = Ollama(model=settings.OLLAMA_LLM_MODEL, base_url=settings.OLLAMA_BASE_URL)
+        llm = _build_llm()
         prompt = PromptTemplate.from_template(
             "For a job seeker missing these skills: {skills}\n"
             "Give 3 specific, actionable learning recommendations (course name, platform, timeline).\n"
             "Be concise. Format as a numbered list."
         )
-        chain = prompt | llm
-        recs_text = chain.invoke({"skills": ", ".join(priority_gaps)})
-        recommendations = [r.strip() for r in recs_text.strip().split("\n") if r.strip()]
+        result = (prompt | llm).invoke({"skills": ", ".join(priority_gaps)})
+        recs_text = _extract_text(result).strip()
+        recommendations = [r.strip() for r in recs_text.split("\n") if r.strip()]
 
     return {
         "ats_score": ats.score,
@@ -139,10 +151,8 @@ def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
 
 
 def generate_interview_questions(resume_text: str, job_description: str) -> list[str]:
-    """
-    Generate 10 tailored interview questions based on the JD and the candidate's resume.
-    """
-    llm = Ollama(model=settings.OLLAMA_LLM_MODEL, base_url=settings.OLLAMA_BASE_URL)
+    """Generate 10 tailored interview questions based on the JD and resume."""
+    llm = _build_llm()
     prompt = PromptTemplate.from_template(
         "You are a senior technical interviewer. Based on this job description and candidate resume, "
         "generate exactly 10 highly specific interview questions. "
@@ -152,12 +162,11 @@ def generate_interview_questions(resume_text: str, job_description: str) -> list
         "Output format: Numbered list 1-10. One question per line. No explanations.\n\n"
         "Interview Questions:"
     )
-    chain = prompt | llm
-    output = chain.invoke({
+    result = (prompt | llm).invoke({
         "job_description": job_description[:1500],
         "resume_excerpt": resume_text[:1500],
     })
-
-    lines = [l.strip() for l in output.strip().split("\n") if l.strip()]
-    questions = [l for l in lines if l[0].isdigit() or l.startswith("-")]
-    return questions[:10] if questions else [output.strip()]
+    output = _extract_text(result).strip()
+    lines = [line.strip() for line in output.split("\n") if line.strip()]
+    questions = [line for line in lines if line[0].isdigit() or line.startswith("-")]
+    return questions[:10] if questions else [output]

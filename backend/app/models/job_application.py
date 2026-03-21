@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
-from sqlmodel import Field, SQLModel, Relationship, Column
+from typing import TYPE_CHECKING, Optional
+
 from sqlalchemy import Text
+from sqlmodel import Column, Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from app.models.user import User
