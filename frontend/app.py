@@ -15,8 +15,10 @@ import json
 import requests
 import streamlit as st
 
+import os
+
 # ─── Config ───────────────────────────────────────────────────────────────────
-API_URL = "http://api:8000/api/v1"
+API_URL = os.environ.get("API_URL", "http://api:8000/api/v1")
 
 st.set_page_config(
     page_title="AI Career Hub",
@@ -259,7 +261,11 @@ def page_cover_letter():
             })
 
         if resp.status_code != 202:
-            show_error(resp.json().get("detail", "Failed to start task."))
+            try:
+                detail = resp.json().get("detail", "Failed to start task.")
+            except Exception:
+                detail = f"API error (HTTP {resp.status_code}). Is the backend running?"
+            show_error(detail)
             return
 
         cl = resp.json()
