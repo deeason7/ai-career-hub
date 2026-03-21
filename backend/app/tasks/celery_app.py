@@ -1,10 +1,7 @@
-"""
-Celery Application & Task Definitions
-
-All AI tasks run asynchronously via Celery workers backed by Redis.
-"""
 import logging
+
 from celery import Celery
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -18,12 +15,10 @@ celery_app = Celery(
 
 celery_app.conf.update(
     task_serializer="json",
-    result_serializer="json",
     accept_content=["json"],
+    result_serializer="json",
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_acks_late=True,
-    worker_prefetch_multiplier=1,  # Process one task at a time per worker
-    result_expires=3600 * 24,       # Keep results for 24 hours
+    broker_connection_retry_on_startup=True,
 )

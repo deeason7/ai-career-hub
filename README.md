@@ -2,8 +2,8 @@
 
 A production-grade, AI-powered career acceleration platform built with a senior-level engineering stack.
 
-[![CI](https://github.com/YOUR_USERNAME/ai-career-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/ai-career-hub/actions/workflows/ci.yml)
-[![Deploy](https://github.com/YOUR_USERNAME/ai-career-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/YOUR_USERNAME/ai-career-hub/actions/workflows/deploy.yml)
+[![CI](https://github.com/deeason7/ai-career-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/deeason7/ai-career-hub/actions/workflows/ci.yml)
+[![Deploy](https://github.com/deeason7/ai-career-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/deeason7/ai-career-hub/actions/workflows/deploy.yml)
 
 ---
 
@@ -68,7 +68,7 @@ A production-grade, AI-powered career acceleration platform built with a senior-
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/YOUR_USERNAME/ai-career-hub.git
+git clone https://github.com/deeason7/ai-career-hub.git
 cd ai-career-hub
 ```
 
@@ -155,4 +155,4 @@ Once running, full interactive API docs are available at:
 
 ## 📄 License
 
-MIT © 2026 AI Career Hub
+MIT © 2026 [deeason7](https://github.com/deeason7)
