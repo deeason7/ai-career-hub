@@ -9,13 +9,13 @@ Full-featured multi-section app with:
   - Interview Question Generator
   - Job Application Tracker
 """
-import time
 import io
 import json
+import os
+import time
+
 import requests
 import streamlit as st
-
-import os
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 API_URL = os.environ.get("API_URL", "http://api:8000/api/v1")
