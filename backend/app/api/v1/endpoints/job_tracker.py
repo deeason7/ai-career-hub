@@ -1,8 +1,8 @@
 import uuid
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_async_session
 from app.api.v1.deps import get_current_user
 from app.models.user import User
@@ -48,8 +48,8 @@ async def list_applications(
     if status_filter:
         query = query.where(JobApplication.status == status_filter)
     query = query.order_by(JobApplication.created_at.desc())
-    result = await session.exec(query)
-    return result.all()
+    result = await session.execute(query)
+    return result.scalars().all()
 
 
 @router.get("/stats")
@@ -58,10 +58,10 @@ async def application_stats(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Return a breakdown of job applications by status."""
-    result = await session.exec(
+    result = await session.execute(
         select(JobApplication).where(JobApplication.user_id == current_user.id)
     )
-    apps = result.all()
+    apps = result.scalars().all()
     breakdown = {s: 0 for s in VALID_STATUSES}
     for app in apps:
         breakdown[app.status] = breakdown.get(app.status, 0) + 1
