@@ -2,7 +2,6 @@
 Real integration tests for the resume parser (ParsedResume schema).
 Tests the service logic and Pydantic model validation — no LLM mocking.
 """
-import pytest
 from app.services.resume_parser import ParsedResume
 
 

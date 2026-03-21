@@ -1,21 +1,22 @@
-from sqlmodel import SQLModel, create_engine, Session
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel, create_engine
+
 from app.core.config import settings
 
 # --- Synchronous engine (for Alembic migrations & Celery workers) ---
 sync_engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=5,
+    max_overflow=10,
 )
 
 # --- Async engine (for FastAPI endpoints) ---
 async_engine = create_async_engine(
     settings.SQLALCHEMY_ASYNC_DATABASE_URI,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=5,
+    max_overflow=10,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -26,18 +27,12 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_async_session():
-    """FastAPI dependency: yields an async DB session."""
     async with AsyncSessionLocal() as session:
         yield session
 
 
-def get_sync_session():
-    """Celery / sync dependency: yields a sync DB session."""
-    with Session(sync_engine) as session:
-        yield session
-
-
 async def create_db_and_tables():
-    """Create all tables (used in dev/testing). Alembic handles prod migrations."""
+    """Create all tables (dev only). Use Alembic migrations in production."""
+    import app.models  # noqa: F401 — ensures all models are registered
     async with async_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

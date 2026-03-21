@@ -1,11 +1,14 @@
 """
 Resume Parser Service
-Extracts structured information from raw resume text using Ollama LLM with Pydantic schema enforcement.
-Langchain imports are lazy (inside functions) so this module is importable without langchain installed.
+
+Extracts structured information from raw resume text using an LLM.
+Auto-detects: uses Groq (free cloud API) if GROQ_API_KEY is set, otherwise falls back to Ollama (local).
+All heavy imports are lazy so this module is importable without langchain installed.
 """
 import json
 import logging
 from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -58,28 +61,49 @@ Resume Text:
 JSON Output:"""
 
 
-def parse_resume(raw_text: str) -> ParsedResume:
+def _build_llm():
     """
-    Parse a resume using the LLM and return a validated ParsedResume object.
-    Falls back to an empty ParsedResume on any error.
-    Langchain/settings imports are deferred so this module is importable without them.
+    Build the LLM client based on available configuration.
+    Priority: Groq (free cloud) > Ollama (local)
     """
-    # Lazy imports — only needed at runtime, not at import time
-    from langchain_community.llms import Ollama  # noqa: PLC0415
-    from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
     from app.core.config import settings  # noqa: PLC0415
 
-    try:
-        prompt = PromptTemplate.from_template(_PARSE_PROMPT_TEMPLATE)
-        llm = Ollama(
+    if settings.USE_GROQ:
+        from langchain_groq import ChatGroq  # noqa: PLC0415
+        logger.info("Using Groq API for resume parsing")
+        return ChatGroq(
+            model=settings.GROQ_LLM_MODEL,
+            api_key=settings.GROQ_API_KEY,
+            temperature=0,
+        )
+    else:
+        from langchain_community.llms import Ollama  # noqa: PLC0415
+        logger.info("Using Ollama for resume parsing")
+        return Ollama(
             model=settings.OLLAMA_LLM_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
         )
-        chain = prompt | llm
-        raw_output = chain.invoke({"resume_text": raw_text[:4000]})  # Limit input tokens
 
-        # Strip markdown fences if present
+
+def parse_resume(raw_text: str) -> ParsedResume:
+    """
+    Parse a resume using LLM (Groq or Ollama) and return a validated ParsedResume.
+    Falls back to an empty ParsedResume on any error.
+    """
+    from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
+
+    try:
+        prompt = PromptTemplate.from_template(_PARSE_PROMPT_TEMPLATE)
+        llm = _build_llm()
+        chain = prompt | llm
+
+        result = chain.invoke({"resume_text": raw_text[:4000]})
+
+        # ChatGroq returns an AIMessage; Ollama returns a string
+        raw_output = result.content if hasattr(result, "content") else str(result)
         raw_output = raw_output.strip()
+
+        # Strip markdown code fences if present
         if raw_output.startswith("```"):
             raw_output = raw_output.split("```")[1]
             if raw_output.startswith("json"):
