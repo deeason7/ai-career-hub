@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: ai-career-hub-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: POSTGRES_SERVER
+        sync: false
+      - key: POSTGRES_USER
+        sync: false
+      - key: POSTGRES_PASSWORD
+        sync: false
+      - key: POSTGRES_DB
+        sync: false
+      - key: POSTGRES_PORT
+        value: "5432"
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        value: "6379"
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+      - key: GROQ_API_KEY
+        sync: false
+
+  - type: web
+    name: ai-career-hub-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    branch: main
+    envVars:
+      - key: API_URL
+        value: https://ai-career-hub-api.onrender.com/api/v1
