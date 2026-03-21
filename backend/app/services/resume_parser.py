@@ -8,6 +8,7 @@ All heavy imports are lazy so this module is importable without langchain instal
 import json
 import logging
 from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
