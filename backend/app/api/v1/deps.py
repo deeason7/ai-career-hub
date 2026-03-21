@@ -1,9 +1,11 @@
-from typing import Annotated
 import uuid
+from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.db import get_async_session
 from app.core.security import verify_token
 from app.models.user import User
@@ -22,8 +24,11 @@ async def get_current_user(
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    result = await session.exec(select(User).where(User.id == uuid.UUID(user_id)))
-    user = result.first()
+    result = await session.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalars().first()
     if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive.",
+        )
     return user
