@@ -1,14 +1,7 @@
-"""
-Async AI Task Definitions
-
-These tasks are dispatched by API endpoints and executed by Celery workers.
-On completion, results are written back to the PostgreSQL database.
-"""
 import uuid
 import logging
-from datetime import datetime, timezone
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.db import sync_engine
 from app.models.cover_letter import CoverLetter

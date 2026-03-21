@@ -1,9 +1,11 @@
-from typing import Annotated
 import uuid
+from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.db import get_async_session
 from app.core.security import verify_token
 from app.models.user import User

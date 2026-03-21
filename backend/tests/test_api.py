@@ -8,13 +8,13 @@ Start services first: docker compose up db redis -d
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from app.main import app
-from app.core.db import get_async_session
 from app.core.config import settings
+from app.core.db import get_async_session
+from app.main import app
 
 # --- Test Database (uses same postgres, separate test DB ideally) ---
 TEST_ENGINE = create_async_engine(

@@ -1,15 +1,17 @@
 import uuid
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.db import get_async_session
+
 from app.api.v1.deps import get_current_user
-from app.models.user import User
+from app.core.db import get_async_session
 from app.models.resume import Resume
+from app.models.user import User
 from app.services.ats_scorer import calculate_ats_score
-from app.services.cover_letter import generate_skill_gap_analysis, generate_interview_questions
+from app.services.cover_letter import generate_interview_questions, generate_skill_gap_analysis
 
 router = APIRouter()
 
@@ -31,7 +33,7 @@ async def _get_resume_text(
             raise HTTPException(status_code=404, detail="Resume not found.")
     else:
         result = await session.execute(
-            select(Resume).where(Resume.user_id == current_user.id, Resume.is_active == True)
+            select(Resume).where(Resume.user_id == current_user.id, Resume.is_active.is_(True))
         )
         resume = result.scalars().first()
         if not resume:

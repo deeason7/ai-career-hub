@@ -1,17 +1,19 @@
 import uuid
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.db import get_async_session
+
 from app.api.v1.deps import get_current_user
-from app.models.user import User
+from app.core.db import get_async_session
 from app.models.job_application import (
     JobApplication,
     JobApplicationCreate,
     JobApplicationRead,
     JobApplicationUpdate,
 )
+from app.models.user import User
 
 router = APIRouter()
 
