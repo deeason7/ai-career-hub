@@ -1,18 +1,14 @@
 """
 Cover Letter Generator Service
 
-Uses a RAG pipeline (FAISS + LLM) to generate honest, resume-grounded cover letters.
-Zero-hallucination: only uses facts retrieved from the candidate's actual resume.
+Two execution paths based on environment:
+  - Groq (cloud/free): sends full resume text directly — uses 128K context window, no FAISS needed
+  - Ollama (local dev): uses RAG pipeline with FAISS for context retrieval
 
-LLM auto-detection:
-  - Groq API (free, cloud): used when GROQ_API_KEY is set in environment
-  - Ollama (local):         used as fallback for local development
+Zero-hallucination: only uses facts from the candidate's actual resume.
 """
 import logging
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import PromptTemplate
-from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +27,7 @@ in related areas without fabricating experience.
 
 === COVER LETTER STRUCTURE ===
 Paragraph 1 (Hook): Why this role excites the candidate + strongest matching credential.
-Paragraph 2 (Evidence): 2–3 specific achievements from the verified facts above that match the JD.
+Paragraph 2 (Evidence): 2-3 specific achievements from the verified facts above that match the JD.
 Paragraph 3 (Fit): Cultural/team fit + what the candidate will contribute.
 Closing: Professional sign-off requesting an interview.
 
@@ -43,7 +39,7 @@ Write the full cover letter below (no metadata, no placeholders):
 def _build_llm():
     """
     Return the appropriate LLM client.
-    Groq is preferred (free, fast, cloud-native). Falls back to Ollama for local dev.
+    Groq is preferred (free, fast, 128K context). Falls back to Ollama for local dev.
     """
     from app.core.config import settings  # noqa: PLC0415
 
@@ -64,72 +60,67 @@ def _build_llm():
         )
 
 
-def _build_embeddings():
+def _extract_text(result) -> str:
+    """Handle both AIMessage (ChatGroq) and str (Ollama) responses."""
+    return result.content if hasattr(result, "content") else str(result)
+
+
+def _rag_retrieve(resume_text: str, job_description: str) -> tuple[str, int]:
     """
-    Return embedding model.
-    Groq does not provide embeddings — we use Ollama embeddings locally
-    or HuggingFace sentence-transformers as a cloud fallback.
+    FAISS-based RAG retrieval for Ollama path.
+    Returns (context_string, chunks_used).
     """
+    from langchain_community.embeddings import OllamaEmbeddings  # noqa: PLC0415
+    from langchain_community.vectorstores import FAISS  # noqa: PLC0415
+    from langchain_core.documents import Document  # noqa: PLC0415
+    from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: PLC0415
     from app.core.config import settings  # noqa: PLC0415
 
-    if settings.USE_GROQ:
-        # Use a lightweight local embedding model that doesn't need Ollama
-        from langchain_community.embeddings import HuggingFaceEmbeddings  # noqa: PLC0415
-        logger.info("Embedding backend: HuggingFace (all-MiniLM-L6-v2)")
-        return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    else:
-        from langchain_community.embeddings import OllamaEmbeddings  # noqa: PLC0415
-        logger.info("Embedding backend: Ollama (%s)", settings.OLLAMA_EMBED_MODEL)
-        return OllamaEmbeddings(
-            model=settings.OLLAMA_EMBED_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-        )
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=400, chunk_overlap=60,
+        separators=["\n\n", "\n", ".", " ", ""],
+    )
+    docs = [Document(page_content=chunk) for chunk in splitter.split_text(resume_text)]
 
-
-def _extract_text(result) -> str:
-    """Handle both AIMessage (Groq/ChatModels) and str (Ollama) responses."""
-    return result.content if hasattr(result, "content") else str(result)
+    embeddings = OllamaEmbeddings(
+        model=settings.OLLAMA_EMBED_MODEL,
+        base_url=settings.OLLAMA_BASE_URL,
+    )
+    vectorstore = FAISS.from_documents(docs, embeddings)
+    relevant_docs = vectorstore.as_retriever(search_kwargs={"k": 6}).invoke(job_description)
+    context = "\n\n---\n\n".join(doc.page_content for doc in relevant_docs)
+    return context, len(relevant_docs)
 
 
 def generate_cover_letter(resume_text: str, job_description: str) -> dict:
     """
-    Generate a zero-hallucination cover letter using RAG.
-    Returns: dict with keys: 'cover_letter', 'rag_context', 'chunks_used'
+    Generate a zero-hallucination cover letter.
+    - Groq path: sends full resume (128K context window) directly — no FAISS needed
+    - Ollama path: uses RAG to retrieve top-6 relevant chunks via FAISS
     """
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=400,
-        chunk_overlap=60,
-        separators=["\n\n", "\n", ".", " ", ""],
-    )
-    chunks = splitter.split_text(resume_text)
-    docs = [Document(page_content=chunk) for chunk in chunks]
+    from app.core.config import settings  # noqa: PLC0415
 
-    embeddings = _build_embeddings()
-    vectorstore = FAISS.from_documents(docs, embeddings)
-
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
-    relevant_docs = retriever.invoke(job_description)
-    rag_context = "\n\n---\n\n".join(doc.page_content for doc in relevant_docs)
+    if settings.USE_GROQ:
+        # Groq has 128K context — send the full resume directly, no vector search needed
+        context = resume_text[:6000]
+        chunks_used = 1
+    else:
+        context, chunks_used = _rag_retrieve(resume_text, job_description)
 
     llm = _build_llm()
     chain = _COVER_LETTER_PROMPT | llm
-    result = chain.invoke({
-        "context": rag_context,
-        "job_description": job_description,
-    })
+    result = chain.invoke({"context": context, "job_description": job_description})
     cover_letter = _extract_text(result).strip()
 
     return {
         "cover_letter": cover_letter,
-        "rag_context": rag_context,
-        "chunks_used": len(relevant_docs),
+        "rag_context": context[:500] + "..." if len(context) > 500 else context,
+        "chunks_used": chunks_used,
     }
 
 
 def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
-    """
-    Identify missing skills and generate prioritised learning recommendations.
-    """
+    """Identify missing skills and generate prioritised learning recommendations."""
     from app.services.ats_scorer import calculate_ats_score, PRIORITY_KEYWORDS  # noqa: PLC0415
 
     ats = calculate_ats_score(resume_text, job_description)
@@ -144,8 +135,7 @@ def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
             "Give 3 specific, actionable learning recommendations (course name, platform, timeline).\n"
             "Be concise. Format as a numbered list."
         )
-        chain = prompt | llm
-        result = chain.invoke({"skills": ", ".join(priority_gaps)})
+        result = (prompt | llm).invoke({"skills": ", ".join(priority_gaps)})
         recs_text = _extract_text(result).strip()
         recommendations = [r.strip() for r in recs_text.split("\n") if r.strip()]
 
@@ -159,9 +149,7 @@ def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
 
 
 def generate_interview_questions(resume_text: str, job_description: str) -> list[str]:
-    """
-    Generate 10 tailored interview questions based on the JD and candidate's resume.
-    """
+    """Generate 10 tailored interview questions based on the JD and resume."""
     llm = _build_llm()
     prompt = PromptTemplate.from_template(
         "You are a senior technical interviewer. Based on this job description and candidate resume, "
@@ -172,13 +160,11 @@ def generate_interview_questions(resume_text: str, job_description: str) -> list
         "Output format: Numbered list 1-10. One question per line. No explanations.\n\n"
         "Interview Questions:"
     )
-    chain = prompt | llm
-    result = chain.invoke({
+    result = (prompt | llm).invoke({
         "job_description": job_description[:1500],
         "resume_excerpt": resume_text[:1500],
     })
     output = _extract_text(result).strip()
-
     lines = [line.strip() for line in output.split("\n") if line.strip()]
     questions = [line for line in lines if line[0].isdigit() or line.startswith("-")]
     return questions[:10] if questions else [output]
