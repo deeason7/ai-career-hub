@@ -53,7 +53,7 @@ async def root():
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "status": "healthy",
-        "docs": "/docs",
+        "docs": "/docs" if not settings.PRODUCTION else None,
     }
 
 
