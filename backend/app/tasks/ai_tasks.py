@@ -6,8 +6,14 @@ On completion, results are written back to the PostgreSQL database.
 """
 import uuid
 import logging
-from app.tasks.celery_app import celery_app
+from datetime import datetime, timezone
+
+from sqlmodel import Session, select
+
+from app.core.db import sync_engine
+from app.models.cover_letter import CoverLetter
 from app.services.cover_letter import generate_cover_letter
+from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +28,6 @@ def generate_cover_letter_task(self, cover_letter_id: str, resume_text: str, job
         resume_text: Raw resume text.
         job_description: Raw job description text.
     """
-    from sqlmodel import Session, select
-    from app.core.db import sync_engine
-    from app.models.cover_letter import CoverLetter
-    from datetime import datetime, timezone
-
     logger.info(f"Starting cover letter generation for CoverLetter ID: {cover_letter_id}")
     try:
         result = generate_cover_letter(resume_text, job_description)
@@ -49,9 +50,6 @@ def generate_cover_letter_task(self, cover_letter_id: str, resume_text: str, job
     except Exception as exc:
         logger.error(f"Cover letter task failed: {exc}", exc_info=True)
         try:
-            from sqlmodel import Session
-            from app.core.db import sync_engine
-            from app.models.cover_letter import CoverLetter
             with Session(sync_engine) as session:
                 cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
                 if cl:
