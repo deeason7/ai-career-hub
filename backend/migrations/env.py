@@ -14,10 +14,10 @@ from sqlalchemy import engine_from_config, pool
 # ── Make sure `app` is importable from /app (Docker) or backend/ (local) ────
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.config import settings  # noqa: E402
-import app.models  # noqa: F401,E402  — registers all SQLModel models with metadata
-
 from sqlmodel import SQLModel  # noqa: E402
+
+import app.models  # noqa: F401,E402  — registers all SQLModel models with metadata
+from app.core.config import settings  # noqa: E402
 
 # this is the Alembic Config object
 config = context.config
