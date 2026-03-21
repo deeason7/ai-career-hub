@@ -31,14 +31,17 @@ class Settings(BaseSettings):
     # Redis & Celery
     REDIS_HOST: str
     REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str = ""  # Required for Upstash; empty for local Docker Redis
 
     @computed_field
     def CELERY_BROKER_URL(self) -> str:
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+        auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
+        return f"redis://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/0"
 
     @computed_field
     def CELERY_RESULT_BACKEND(self) -> str:
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
+        auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
+        return f"redis://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/1"
 
     # AI — Ollama (local dev default)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
