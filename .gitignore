@@ -43,3 +43,11 @@ coverage.xml
 node_modules/
 .next/
 out/
+
+# Planning / internal docs (not for repo)
+engineering_plan.md
+
+# Stray alembic init artefacts at repo root (real ones live in backend/)
+/alembic.ini
+/migrations/
+/app/
