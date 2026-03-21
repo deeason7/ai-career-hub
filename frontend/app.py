@@ -15,8 +15,10 @@ import json
 import requests
 import streamlit as st
 
+import os
+
 # ─── Config ───────────────────────────────────────────────────────────────────
-API_URL = "http://api:8000/api/v1"
+API_URL = os.environ.get("API_URL", "http://api:8000/api/v1")
 
 st.set_page_config(
     page_title="AI Career Hub",
