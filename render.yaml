@@ -40,4 +40,4 @@ services:
     branch: main
     envVars:
       - key: API_URL
-        value: https://ai-career-hub-2qhn.onrender.com/api/v1
+        value: https://ai-career-hub-api.onrender.com/api/v1
