@@ -11,10 +11,9 @@ alembic==1.13.2
 psycopg[binary]==3.2.1
 greenlet>=3.0.3
 
-# --- Task Queue ---
+# --- Task Queue (broker config; tasks run as BackgroundTasks in prod) ---
 celery==5.4.0
 redis==5.0.7
-flower==2.0.1
 
 # --- AI & NLP ---
 langchain-community==0.2.10
