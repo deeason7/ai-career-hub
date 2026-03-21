@@ -1,13 +1,15 @@
 import uuid
-from typing import Annotated, Optional
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.db import get_async_session
+
 from app.api.v1.deps import get_current_user
-from app.models.user import User
-from app.models.resume import Resume
+from app.core.db import get_async_session
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
+from app.models.resume import Resume
+from app.models.user import User
 from app.tasks.ai_tasks import generate_cover_letter_task
 
 router = APIRouter()
@@ -26,7 +28,9 @@ async def generate_cover_letter(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
         result = await session.execute(
-            select(Resume).where(Resume.user_id == current_user.id, Resume.is_active == True)
+            select(Resume).where(
+                Resume.user_id == current_user.id, Resume.is_active.is_(True)
+            )
         )
         resume = result.scalars().first()
         if not resume:
@@ -79,8 +83,9 @@ async def poll_task_status(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Poll a Celery task by ID."""
-    from app.tasks.celery_app import celery_app
     from celery.result import AsyncResult
+
+    from app.tasks.celery_app import celery_app
 
     task_result = AsyncResult(task_id, app=celery_app)
     return {
