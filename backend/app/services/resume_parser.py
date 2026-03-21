@@ -1,14 +1,12 @@
 """
 Resume Parser Service
 Extracts structured information from raw resume text using Ollama LLM with Pydantic schema enforcement.
+Langchain imports are lazy (inside functions) so this module is importable without langchain installed.
 """
 import json
 import logging
 from typing import Optional
 from pydantic import BaseModel
-from langchain_community.llms import Ollama
-from langchain_core.prompts import PromptTemplate
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +30,7 @@ class ParsedResume(BaseModel):
     projects: list[dict] = []     # [{name, description, tech_stack}]
 
 
-_PARSE_PROMPT = PromptTemplate.from_template(
-    """You are an expert resume parser. Extract structured information from the resume text below.
+_PARSE_PROMPT_TEMPLATE = """You are an expert resume parser. Extract structured information from the resume text below.
 Return ONLY a valid JSON object matching this exact schema. Do not include explanations.
 
 Schema:
@@ -56,23 +53,29 @@ Schema:
 }}
 
 Resume Text:
-{resume_text}
+{{resume_text}}
 
 JSON Output:"""
-)
 
 
 def parse_resume(raw_text: str) -> ParsedResume:
     """
     Parse a resume using the LLM and return a validated ParsedResume object.
     Falls back to an empty ParsedResume on any error.
+    Langchain/settings imports are deferred so this module is importable without them.
     """
+    # Lazy imports — only needed at runtime, not at import time
+    from langchain_community.llms import Ollama  # noqa: PLC0415
+    from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
+    from app.core.config import settings  # noqa: PLC0415
+
     try:
+        prompt = PromptTemplate.from_template(_PARSE_PROMPT_TEMPLATE)
         llm = Ollama(
             model=settings.OLLAMA_LLM_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
         )
-        chain = _PARSE_PROMPT | llm
+        chain = prompt | llm
         raw_output = chain.invoke({"resume_text": raw_text[:4000]})  # Limit input tokens
 
         # Strip markdown fences if present
