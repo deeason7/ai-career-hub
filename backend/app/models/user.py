@@ -1,12 +1,13 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
-from sqlmodel import Field, SQLModel, Relationship
+from typing import TYPE_CHECKING, Optional
+
+from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from app.models.resume import Resume
     from app.models.cover_letter import CoverLetter
     from app.models.job_application import JobApplication
+    from app.models.resume import Resume
 
 
 class UserBase(SQLModel):

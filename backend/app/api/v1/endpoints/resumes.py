@@ -1,13 +1,15 @@
-import uuid
 import json
+import uuid
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.db import get_async_session
+
 from app.api.v1.deps import get_current_user
-from app.models.user import User
+from app.core.db import get_async_session
 from app.models.resume import Resume, ResumeRead, ResumeReadWithText
+from app.models.user import User
 from app.services.file_extractor import extract_text_from_upload
 from app.services.resume_parser import parse_resume
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, resumes, cover_letters, ai_tools, job_tracker
+
+from app.api.v1.endpoints import ai_tools, auth, cover_letters, job_tracker, resumes
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
