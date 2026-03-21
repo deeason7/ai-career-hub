@@ -40,10 +40,20 @@ class Settings(BaseSettings):
     def CELERY_RESULT_BACKEND(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
 
-    # AI
+    # AI — Ollama (local dev default)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_LLM_MODEL: str = "llama3.2:1b"
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
+
+    # AI — Groq (free cloud alternative; takes priority over Ollama when set)
+    # Get a free key at: https://console.groq.com
+    GROQ_API_KEY: str = ""
+    GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"  # Free, 6000 req/day
+
+    @computed_field
+    def USE_GROQ(self) -> bool:
+        """True when GROQ_API_KEY is configured — used in cloud deployments."""
+        return bool(self.GROQ_API_KEY)
 
     # Security
     SECRET_KEY: str
@@ -54,6 +64,7 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+
 
 
 settings = Settings()
