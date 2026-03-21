@@ -1,11 +1,11 @@
-from datetime import timedelta
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_async_session
 from app.core.security import create_access_token, get_password_hash, verify_password
+from app.api.v1.deps import get_current_user
 from app.models.user import User, UserCreate, UserRead
 
 router = APIRouter()
@@ -17,8 +17,8 @@ async def register(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Register a new user account."""
-    result = await session.exec(select(User).where(User.email == user_in.email))
-    if result.first():
+    result = await session.execute(select(User).where(User.email == user_in.email))
+    if result.scalars().first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Email '{user_in.email}' is already registered.",
@@ -40,8 +40,8 @@ async def login(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Authenticate and return a JWT access token."""
-    result = await session.exec(select(User).where(User.email == form_data.username))
-    user = result.first()
+    result = await session.execute(select(User).where(User.email == form_data.username))
+    user = result.scalars().first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -57,7 +57,7 @@ async def login(
 
 @router.get("/me", response_model=UserRead)
 async def get_me(
-    current_user: Annotated[User, Depends(__import__("app.api.v1.deps", fromlist=["get_current_user"]).get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Return the currently authenticated user's profile."""
     return current_user
