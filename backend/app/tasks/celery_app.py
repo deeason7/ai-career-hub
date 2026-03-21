@@ -24,6 +24,7 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     task_acks_late=True,
-    worker_prefetch_multiplier=1,  # Process one task at a time per worker
-    result_expires=3600 * 24,       # Keep results for 24 hours
+    worker_prefetch_multiplier=1,
+    result_expires=3600 * 24,
+    broker_connection_retry_on_startup=True,  # suppress deprecation warning
 )
