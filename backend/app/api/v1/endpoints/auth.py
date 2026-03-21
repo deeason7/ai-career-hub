@@ -23,7 +23,7 @@ async def register(
     if result.scalars().first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Email '{user_in.email}' is already registered.",
+            detail="An account with this email already exists.",  # Don't expose which email
         )
     user = User(
         email=user_in.email,
