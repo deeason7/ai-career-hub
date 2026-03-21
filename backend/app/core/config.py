@@ -1,0 +1,59 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import computed_field
+
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "AI Career Hub"
+    VERSION: str = "2.0.0"
+    API_V1_STR: str = "/api/v1"
+
+    # Database
+    POSTGRES_SERVER: str
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
+    POSTGRES_PORT: int = 5432
+
+    @computed_field
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        return (
+            f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    @computed_field
+    def SQLALCHEMY_ASYNC_DATABASE_URI(self) -> str:
+        return (
+            f"postgresql+psycopg_async://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    # Redis & Celery
+    REDIS_HOST: str
+    REDIS_PORT: int = 6379
+
+    @computed_field
+    def CELERY_BROKER_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+
+    @computed_field
+    def CELERY_RESULT_BACKEND(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
+
+    # AI
+    OLLAMA_BASE_URL: str = "http://ollama:11434"
+    OLLAMA_LLM_MODEL: str = "llama3.2:1b"
+    OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
+
+    # Security
+    SECRET_KEY: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+
+    model_config = SettingsConfigDict(
+        env_file="backend/.env",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+
+settings = Settings()
