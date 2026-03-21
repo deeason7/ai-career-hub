@@ -1,27 +1,73 @@
+"""Cover letter endpoints — uses FastAPI BackgroundTasks instead of Celery.
+
+No separate worker service needed: generation runs as a thread inside the API process.
+"""
+import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import Session
 
 from app.api.v1.deps import get_current_user
-from app.core.db import get_async_session
+from app.core.db import get_async_session, sync_engine
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
 from app.models.resume import Resume
 from app.models.user import User
-from app.tasks.ai_tasks import generate_cover_letter_task
+from app.services.cover_letter import generate_cover_letter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Map DB status → Celery-compatible names (frontend polls these)
+_STATUS_MAP = {
+    "processing": "STARTED",
+    "pending": "PENDING",
+    "success": "SUCCESS",
+    "failure": "FAILURE",
+}
+
+
+def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
+    """Background thread: generates cover letter and persists result to DB."""
+    logger.info(f"Background: generating cover letter {cover_letter_id}")
+    try:
+        result = generate_cover_letter(resume_text, job_description)
+        cover_letter_text = result["cover_letter"]
+
+        with Session(sync_engine) as session:
+            cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
+            if cl:
+                cl.generated_text = cover_letter_text
+                cl.status = "success"
+                session.add(cl)
+                session.commit()
+                logger.info(f"Cover letter saved: {cover_letter_id}")
+
+    except Exception as exc:
+        logger.error(f"Cover letter background task failed: {exc}", exc_info=True)
+        try:
+            with Session(sync_engine) as session:
+                cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
+                if cl:
+                    cl.status = "failure"
+                    session.add(cl)
+                    session.commit()
+        except Exception:
+            pass
+
 
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
-async def generate_cover_letter(
+async def generate_cover_letter_endpoint(
     payload: CoverLetterCreate,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Dispatch an async Celery job to generate a cover letter."""
+    """Dispatch a background task to generate a cover letter (no Celery needed)."""
     if payload.resume_id:
         resume = await session.get(Resume, payload.resume_id)
         if not resume or resume.user_id != current_user.id:
@@ -39,27 +85,24 @@ async def generate_cover_letter(
                 detail="No active resume found. Please upload and activate a resume first.",
             )
 
+    task_id = str(uuid.uuid4())
     cover_letter = CoverLetter(
         user_id=current_user.id,
         resume_id=resume.id,
         job_description=payload.job_description,
-        status="pending",
+        task_id=task_id,
+        status="processing",
     )
     session.add(cover_letter)
     await session.commit()
     await session.refresh(cover_letter)
 
-    task = generate_cover_letter_task.delay(
+    background_tasks.add_task(
+        _run_cover_letter_bg,
         str(cover_letter.id),
         resume.raw_text,
         payload.job_description,
     )
-
-    cover_letter.task_id = task.id
-    cover_letter.status = "processing"
-    session.add(cover_letter)
-    await session.commit()
-    await session.refresh(cover_letter)
     return cover_letter
 
 
@@ -81,17 +124,23 @@ async def list_cover_letters(
 async def poll_task_status(
     task_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Poll a Celery task by ID."""
-    from celery.result import AsyncResult
+    """Poll cover letter generation status by task_id — reads from DB, no Celery."""
+    result = await session.execute(
+        select(CoverLetter).where(
+            CoverLetter.task_id == task_id,
+            CoverLetter.user_id == current_user.id,
+        )
+    )
+    cl = result.scalars().first()
+    if not cl:
+        return {"task_id": task_id, "status": "PENDING", "result": None}
 
-    from app.tasks.celery_app import celery_app
-
-    task_result = AsyncResult(task_id, app=celery_app)
     return {
         "task_id": task_id,
-        "status": task_result.status,
-        "result": task_result.result if task_result.ready() else None,
+        "status": _STATUS_MAP.get(cl.status, "PENDING"),
+        "result": cl.generated_text if cl.status == "success" else None,
     }
 
 
