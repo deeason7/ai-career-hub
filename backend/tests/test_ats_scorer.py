@@ -2,7 +2,6 @@
 Real integration tests for the ATS Scorer service.
 No mocks — tests the actual algorithmic scoring logic.
 """
-import pytest
 from app.services.ats_scorer import calculate_ats_score, ATSResult
 
 SAMPLE_RESUME = """
