@@ -3,7 +3,7 @@ from sqlmodel import SQLModel, create_engine
 
 from app.core.config import settings
 
-# --- Synchronous engine (for Alembic migrations & Celery workers) ---
+# --- Synchronous engine (for Alembic migrations & BackgroundTask threads) ---
 sync_engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI,
     pool_pre_ping=True,
