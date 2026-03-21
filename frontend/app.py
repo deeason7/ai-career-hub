@@ -261,7 +261,11 @@ def page_cover_letter():
             })
 
         if resp.status_code != 202:
-            show_error(resp.json().get("detail", "Failed to start task.") if resp.content else "Failed to start task (empty response).")
+            try:
+                detail = resp.json().get("detail", "Failed to start task.")
+            except Exception:
+                detail = f"API error (HTTP {resp.status_code}). Is the backend running?"
+            show_error(detail)
             return
 
         cl = resp.json()
