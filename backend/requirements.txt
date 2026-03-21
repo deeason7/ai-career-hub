@@ -1,0 +1,41 @@
+# --- Core ---
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.8.2
+pydantic-settings==2.3.4
+python-multipart==0.0.9
+
+# --- Database ---
+sqlmodel==0.0.19
+alembic==1.13.2
+psycopg[binary]==3.2.1
+greenlet>=3.0.3
+
+# --- Task Queue ---
+celery==5.4.0
+redis==5.0.7
+flower==2.0.1
+
+# --- AI & NLP ---
+langchain-community==0.2.10
+langchain-core>=0.2.23,<0.3.0
+langchain-text-splitters==0.2.4
+faiss-cpu==1.8.0.post1
+tiktoken==0.7.0
+pymupdf==1.24.7
+python-docx==1.1.2
+
+# --- File Handling ---
+python-magic==0.4.27
+
+# --- Security ---
+bcrypt==4.1.3
+python-jose[cryptography]==3.3.0
+
+# --- Testing & Dev ---
+pytest==8.3.2
+pytest-asyncio==0.23.8
+httpx==0.27.0
+ruff==0.5.5
+mypy==1.11.1
+pre-commit==3.7.1

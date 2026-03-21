@@ -1,0 +1,49 @@
+name: Deploy — Build & Push to Render
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build Docker Image & Deploy to Render
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & Push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ai-career-hub-api:latest
+
+      - name: Build & Push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ai-career-hub-frontend:latest
+
+      - name: Trigger Render deploy (Backend)
+        run: |
+          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_API }}"
+          echo "API deploy triggered."
+
+      - name: Trigger Render deploy (Frontend)
+        run: |
+          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}"
+          echo "Frontend deploy triggered."
+
+      - name: Notify success
+        run: echo "✅ Deploy pipeline complete. Check https://dashboard.render.com"

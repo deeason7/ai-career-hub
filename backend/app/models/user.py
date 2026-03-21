@@ -1,0 +1,45 @@
+import uuid
+from datetime import datetime, timezone
+from typing import Optional, TYPE_CHECKING
+from sqlmodel import Field, SQLModel, Relationship
+
+if TYPE_CHECKING:
+    from app.models.resume import Resume
+    from app.models.cover_letter import CoverLetter
+    from app.models.job_application import JobApplication
+
+
+class UserBase(SQLModel):
+    email: str = Field(unique=True, index=True, max_length=255)
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    role: str = Field(default="candidate")
+    is_active: bool = Field(default=True)
+
+
+class User(UserBase, table=True):
+    __tablename__ = "users"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    hashed_password: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    resumes: list["Resume"] = Relationship(back_populates="user")
+    cover_letters: list["CoverLetter"] = Relationship(back_populates="user")
+    job_applications: list["JobApplication"] = Relationship(back_populates="user")
+
+
+class UserCreate(UserBase):
+    password: str
+
+
+class UserRead(UserBase):
+    id: uuid.UUID
+    created_at: datetime
+
+
+class UserUpdate(SQLModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
