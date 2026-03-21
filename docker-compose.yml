@@ -57,7 +57,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./backend:/app
+      # Mount only the app source code for hot-reload — NOT the whole backend dir
+      # This avoids shadowing /app/site-packages installed inside the container
+      - ./backend/app:/app/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # ─── Celery Worker ────────────────────────────────────────
@@ -76,6 +78,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app
     command: celery -A app.tasks.celery_app.celery_app worker --loglevel=info --concurrency=2
 
   # ─── Flower (Celery Monitor) ──────────────────────────────

@@ -1,13 +1,15 @@
 import uuid
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
-from app.core.db import get_async_session
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.v1.deps import get_current_user
-from app.models.user import User
-from app.models.resume import Resume
+from app.core.db import get_async_session
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
+from app.models.resume import Resume
+from app.models.user import User
 from app.tasks.ai_tasks import generate_cover_letter_task
 
 router = APIRouter()
@@ -19,29 +21,24 @@ async def generate_cover_letter(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """
-    Dispatch an async Celery job to generate a cover letter.
-    - If resume_id is provided, use that resume.
-    - Otherwise, use the user's active resume.
-    Returns the CoverLetter record with task_id for polling.
-    """
-    # Resolve which resume to use
+    """Dispatch an async Celery job to generate a cover letter."""
     if payload.resume_id:
         resume = await session.get(Resume, payload.resume_id)
         if not resume or resume.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
-        result = await session.exec(
-            select(Resume).where(Resume.user_id == current_user.id, Resume.is_active == True)
+        result = await session.execute(
+            select(Resume).where(
+                Resume.user_id == current_user.id, Resume.is_active.is_(True)
+            )
         )
-        resume = result.first()
+        resume = result.scalars().first()
         if not resume:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="No active resume found. Please upload a resume and activate it first.",
+                detail="No active resume found. Please upload and activate a resume first.",
             )
 
-    # Create a pending CoverLetter record
     cover_letter = CoverLetter(
         user_id=current_user.id,
         resume_id=resume.id,
@@ -52,20 +49,17 @@ async def generate_cover_letter(
     await session.commit()
     await session.refresh(cover_letter)
 
-    # Dispatch async Celery task
     task = generate_cover_letter_task.delay(
         str(cover_letter.id),
         resume.raw_text,
         payload.job_description,
     )
 
-    # Save task_id to the record
     cover_letter.task_id = task.id
     cover_letter.status = "processing"
     session.add(cover_letter)
     await session.commit()
     await session.refresh(cover_letter)
-
     return cover_letter
 
 
@@ -75,12 +69,12 @@ async def list_cover_letters(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Return all generated cover letters for the current user."""
-    result = await session.exec(
+    result = await session.execute(
         select(CoverLetter)
         .where(CoverLetter.user_id == current_user.id)
         .order_by(CoverLetter.created_at.desc())
     )
-    return result.all()
+    return result.scalars().all()
 
 
 @router.get("/task/{task_id}")
@@ -88,12 +82,10 @@ async def poll_task_status(
     task_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    """
-    Poll a Celery task by ID.
-    Returns: {status, result, cover_letter_id}
-    """
-    from app.tasks.celery_app import celery_app
+    """Poll a Celery task by ID."""
     from celery.result import AsyncResult
+
+    from app.tasks.celery_app import celery_app
 
     task_result = AsyncResult(task_id, app=celery_app)
     return {

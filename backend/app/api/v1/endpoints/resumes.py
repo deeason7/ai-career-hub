@@ -1,13 +1,15 @@
-import uuid
 import json
+import uuid
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
-from app.core.db import get_async_session
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.v1.deps import get_current_user
-from app.models.user import User
+from app.core.db import get_async_session
 from app.models.resume import Resume, ResumeRead, ResumeReadWithText
+from app.models.user import User
 from app.services.file_extractor import extract_text_from_upload
 from app.services.resume_parser import parse_resume
 
@@ -23,30 +25,22 @@ async def upload_resume(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """
-    Upload a resume (PDF, DOCX, or TXT).
-    Extracts text and runs LLM-based structured parsing.
-    """
-    # Check limit
-    result = await session.exec(select(Resume).where(Resume.user_id == current_user.id))
-    existing = result.all()
+    """Upload a resume (PDF, DOCX, or TXT). Extracts text and runs LLM-based structured parsing."""
+    result = await session.execute(select(Resume).where(Resume.user_id == current_user.id))
+    existing = result.scalars().all()
     if len(existing) >= MAX_RESUMES_PER_USER:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Maximum of {MAX_RESUMES_PER_USER} resumes per user reached. Delete one first.",
+            detail=f"Maximum of {MAX_RESUMES_PER_USER} resumes per user. Delete one first.",
         )
 
-    # Extract text
     try:
         raw_text = await extract_text_from_upload(file)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
-    # Parse structured data (runs async in a threadpool via Ollama)
     parsed = parse_resume(raw_text)
     parsed_json = parsed.model_dump_json()
-
-    # If this is the first resume, make it active
     is_first = len(existing) == 0
 
     resume = Resume(
@@ -69,10 +63,10 @@ async def list_resumes(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """List all resumes for the current user."""
-    result = await session.exec(
+    result = await session.execute(
         select(Resume).where(Resume.user_id == current_user.id).order_by(Resume.created_at.desc())
     )
-    return result.all()
+    return result.scalars().all()
 
 
 @router.get("/{resume_id}", response_model=ResumeReadWithText)
@@ -95,8 +89,8 @@ async def activate_resume(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Set a resume as the active one (deactivates all others)."""
-    result = await session.exec(select(Resume).where(Resume.user_id == current_user.id))
-    all_resumes = result.all()
+    result = await session.execute(select(Resume).where(Resume.user_id == current_user.id))
+    all_resumes = result.scalars().all()
 
     target = next((r for r in all_resumes if r.id == resume_id), None)
     if not target:
@@ -117,11 +111,10 @@ async def delete_resume(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Delete a resume. Cannot delete the active resume if it's the only one."""
+    """Delete a resume."""
     resume = await session.get(Resume, resume_id)
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
-
     await session.delete(resume)
     await session.commit()
 
@@ -137,5 +130,5 @@ async def get_resume_analysis(
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     if not resume.parsed_json:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No analysis available for this resume.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No analysis available.")
     return json.loads(resume.parsed_json)
