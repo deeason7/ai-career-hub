@@ -66,4 +66,5 @@ jobs:
           REDIS_PORT: 6379
           OLLAMA_BASE_URL: http://localhost:11434
           SECRET_KEY: ci-test-secret-key-at-least-32-characters-long
+          TESTING: "true"
         run: pytest tests/ -v --tb=short -x
