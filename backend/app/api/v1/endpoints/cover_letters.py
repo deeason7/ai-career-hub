@@ -13,7 +13,7 @@ from sqlmodel import Session
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session, sync_engine
-from app.core.limiter import limiter
+from app.core.limiter import rate_limit
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
 from app.models.resume import Resume
 from app.models.user import User
@@ -62,7 +62,7 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
 
 
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("5/minute")
+@rate_limit("5/minute")
 async def generate_cover_letter_endpoint(
     request: Request,
     payload: CoverLetterCreate,

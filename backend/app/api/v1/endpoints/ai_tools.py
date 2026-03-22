@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
-from app.core.limiter import limiter
+from app.core.limiter import rate_limit
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.ats_scorer import calculate_ats_score
@@ -46,7 +46,7 @@ async def _get_resume_text(
 
 
 @router.post("/ats-score")
-@limiter.limit("20/minute")
+@rate_limit("20/minute")
 async def ats_score(
     request: Request,
     payload: AIRequest,
@@ -68,7 +68,7 @@ async def ats_score(
 
 
 @router.post("/skill-gap")
-@limiter.limit("20/minute")
+@rate_limit("20/minute")
 async def skill_gap(
     request: Request,
     payload: AIRequest,
@@ -82,7 +82,7 @@ async def skill_gap(
 
 
 @router.post("/interview-questions")
-@limiter.limit("20/minute")
+@rate_limit("20/minute")
 async def interview_questions(
     request: Request,
     payload: AIRequest,
