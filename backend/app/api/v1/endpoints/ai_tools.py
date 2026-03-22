@@ -1,13 +1,14 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
+from app.core.limiter import rate_limit
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.ats_scorer import calculate_ats_score
@@ -45,12 +46,14 @@ async def _get_resume_text(
 
 
 @router.post("/ats-score")
+@rate_limit("20/minute")
 async def ats_score(
+    request: Request,
     payload: AIRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Score the resume against a job description using the ATS scorer."""
+    """Score the resume against a job description. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     result = calculate_ats_score(resume_text, payload.job_description)
     return {
@@ -65,24 +68,28 @@ async def ats_score(
 
 
 @router.post("/skill-gap")
+@rate_limit("20/minute")
 async def skill_gap(
+    request: Request,
     payload: AIRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Perform a skill gap analysis between the resume and job description."""
+    """Perform a skill gap analysis. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     result = generate_skill_gap_analysis(resume_text, payload.job_description)
     return result
 
 
 @router.post("/interview-questions")
+@rate_limit("20/minute")
 async def interview_questions(
+    request: Request,
     payload: AIRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Generate 10 tailored interview questions based on the resume and job description."""
+    """Generate interview questions. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     questions = generate_interview_questions(resume_text, payload.job_description)
     return {"questions": questions, "count": len(questions)}
