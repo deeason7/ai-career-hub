@@ -1,13 +1,19 @@
 """Central rate-limiter instance shared across all routers."""
 import os
+from typing import Callable
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# When TESTING=true (set in CI), override all per-endpoint limits with a very
-# high cap so tests never hit limits. In production, no default limit is set
-# and per-endpoint decorators control each route individually.
-_testing = os.getenv("TESTING", "false").lower() == "true"
-_default_limits = ["10000/minute"] if _testing else []
+limiter = Limiter(key_func=get_remote_address)
 
-limiter = Limiter(key_func=get_remote_address, default_limits=_default_limits)
+# When TESTING=true (CI), return a no-op decorator so @limiter.limit()
+# per-endpoint limits don't fire — default_limits doesn't override them.
+_testing = os.getenv("TESTING", "false").lower() == "true"
+
+
+def rate_limit(limit_string: str) -> Callable:
+    """Apply a slowapi rate limit; full no-op when TESTING=true."""
+    if _testing:
+        return lambda f: f  # pass-through, no rate limit applied
+    return limiter.limit(limit_string)
