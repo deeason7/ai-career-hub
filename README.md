@@ -58,6 +58,21 @@ Upload your resume, score it against job descriptions, generate honest cover let
 
 ---
 
+## 🛡️ Security & Reliability
+
+| Area | Implementation |
+|------|---------------|
+| **Rate Limiting** | `slowapi` — register: 5/min, login: 10/min, AI endpoints: 20/min, cover letter: 5/min |
+| **CORS** | Restricted to known origins only (no wildcard `*`) |
+| **Password Policy** | Minimum 8 characters enforced at model level |
+| **API Docs** | Hidden in production (`PRODUCTION=true` env var) |
+| **File Uploads** | 10 MB size limit, 10-resume cap per user |
+| **Email Enumeration** | Generic conflict message on duplicate registration |
+| **Frontend Resilience** | All API calls wrapped in `safe_json()` — graceful errors on 429/502/503 |
+| **Migrations** | `alembic upgrade head` runs on every container start |
+
+---
+
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
@@ -67,6 +82,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **AI / LLM** | Groq API (LLaMA 3.1 8B) — cloud; Ollama (local dev) |
 | **RAG** | LangChain · FAISS · nomic-embed-text embeddings |
 | **Frontend** | Streamlit |
+| **Rate Limiting** | slowapi (per-IP, in-memory) |
 | **Async Tasks** | FastAPI BackgroundTasks (threads) |
 | **Infrastructure** | Docker · Docker Compose |
 | **CI/CD** | GitHub Actions → Render.com auto-deploy |
@@ -110,7 +126,7 @@ docker compose up --build
 ## 🌿 Branch Strategy (GitFlow-Lite)
 
 | Branch | Purpose | Merges to |
-|--------|---------|-----------|
+|--------|---------|-----------| 
 | `main` | Production — protected, auto-deploys | — |
 | `develop` | Integration — all PRs merge here first | `main` (via release) |
 | `feature/*` | New feature work | `develop` |
@@ -140,6 +156,8 @@ docker exec -it ai-career-hub-api-1 pytest tests/ -v --tb=short
 
 Tests cover: authentication, resume upload, ATS scoring, job tracker CRUD.
 
+> Rate limiting is automatically disabled in CI via `TESTING=true` environment variable.
+
 ---
 
 ## 📦 Deployment
@@ -155,26 +173,31 @@ Deployed on [Render.com](https://render.com) with infrastructure-as-code via `re
 **Required environment variables on Render:**
 ```
 POSTGRES_SERVER, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT
-REDIS_HOST, REDIS_PORT, REDIS_PASSWORD   (Upstash — optional, for future Celery)
+REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 SECRET_KEY
 GROQ_API_KEY
+PRODUCTION=true
 ```
 
 ---
 
 ## 🗺️ Roadmap
 
-### v1.1 — Reliability
-- [ ] Resume file size limit (10 MB max) & MIME type validation
-- [ ] Rate limiting on AI endpoints (`slowapi` — 10 req/min per user)
-- [ ] Sentry.io error tracking integration
-- [ ] UptimeRobot monitoring for health endpoint
+### v1.1 — Security & Reliability (Done)
+- [x] Resume file size limit (10 MB) & 10-resume cap
+- [x] Rate limiting on auth + AI endpoints (`slowapi`)
+- [x] Frontend error boundaries — graceful errors on all API failures
+- [x] CORS restricted to known origins
+- [x] Password minimum length (8 chars)
+- [x] API docs hidden in production
+- [x] Email enumeration prevention
 
 ### v1.2 — Features
 - [ ] Password reset via email (SendGrid/Resend)
 - [ ] Cover letter export to PDF (`weasyprint`)
 - [ ] LinkedIn job URL → auto-fill job description
 - [ ] Application deadline reminders
+- [ ] Sentry.io error tracking
 
 ### v2.0 — Scale
 - [ ] Next.js frontend (replace Streamlit)
