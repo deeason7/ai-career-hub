@@ -62,6 +62,22 @@ def show_success(msg: str):
     st.success(f"✅ {msg}")
 
 
+def safe_json(resp: requests.Response, fallback=None):
+    """Safely parse JSON from a response; returns fallback on decode errors (e.g. 502s)."""
+    try:
+        return resp.json()
+    except Exception:
+        return fallback
+
+
+def _detail(resp: requests.Response, default: str = "An unexpected error occurred.") -> str:
+    """Extract error detail from an error response, safely."""
+    data = safe_json(resp, {})
+    if isinstance(data, dict):
+        return data.get("detail", default)
+    return f"API error (HTTP {resp.status_code})"
+
+
 # ─── AUTH PAGES ───────────────────────────────────────────────────────────────
 
 def page_auth():
@@ -79,13 +95,17 @@ def page_auth():
             if st.form_submit_button("Login", type="primary"):
                 resp = requests.post(f"{API_URL}/auth/login", data={"username": email, "password": password})
                 if resp.status_code == 200:
-                    st.session_state.token = resp.json()["access_token"]
-                    me = api("get", "/auth/me").json()
+                    data = safe_json(resp, {})
+                    st.session_state.token = data.get("access_token")
+                    if not st.session_state.token:
+                        show_error("Login failed: no token received.")
+                        return
+                    me = safe_json(api("get", "/auth/me"), {})
                     st.session_state.user = me
                     show_success("Logged in!")
                     st.rerun()
                 else:
-                    show_error(resp.json().get("detail", "Login failed."))
+                    show_error(_detail(resp, "Login failed."))
 
     with tab_register:
         with st.form("register_form"):
@@ -99,7 +119,7 @@ def page_auth():
                 if resp.status_code == 201:
                     show_success("Account created! Please log in.")
                 else:
-                    show_error(resp.json().get("detail", "Registration failed."))
+                    show_error(_detail(resp, "Registration failed."))
 
 
 # ─── SIDEBAR & NAVIGATION ─────────────────────────────────────────────────────
@@ -138,9 +158,9 @@ def page_dashboard():
     st.title("📋 Dashboard")
 
     # Resume count
-    resumes = api("get", "/resumes/").json() if st.session_state.token else []
-    jobs = api("get", "/jobs/stats").json() if st.session_state.token else {}
-    cover_letters = api("get", "/cover-letters/").json() if st.session_state.token else []
+    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
+    jobs = safe_json(api("get", "/jobs/stats"), {}) if st.session_state.token else {}
+    cover_letters = safe_json(api("get", "/cover-letters/"), []) if st.session_state.token else []
 
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 Resumes", len(resumes) if isinstance(resumes, list) else 0)
@@ -192,7 +212,7 @@ def page_resumes():
                         show_success(f"Resume '{label}' uploaded and parsed!")
                         st.rerun()
                     else:
-                        show_error(resp.json().get("detail", "Upload failed."))
+                        show_error(_detail(resp, "Upload failed."))
 
     # List
     resumes_resp = api("get", "/resumes/")
@@ -200,7 +220,7 @@ def page_resumes():
         show_error("Could not fetch resumes.")
         return
 
-    resumes = resumes_resp.json()
+    resumes = safe_json(resumes_resp, [])
     if not resumes:
         st.info("No resumes yet. Upload one above!")
         return
@@ -237,7 +257,7 @@ def page_cover_letter():
     st.markdown("Generates a **zero-hallucination** cover letter using RAG — only facts from YOUR resume.")
 
     # Resume selector
-    resumes = api("get", "/resumes/").json() if st.session_state.token else []
+    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
         st.warning("⚠️ Upload a resume first in **My Resumes**.")
         return
@@ -261,14 +281,10 @@ def page_cover_letter():
             })
 
         if resp.status_code != 202:
-            try:
-                detail = resp.json().get("detail", "Failed to start task.")
-            except Exception:
-                detail = f"API error (HTTP {resp.status_code}). Is the backend running?"
-            show_error(detail)
+            show_error(_detail(resp, f"API error (HTTP {resp.status_code}). Is the backend running?"))
             return
 
-        cl = resp.json()
+        cl = safe_json(resp, {})
         task_id = cl.get("task_id")
         cl_id = cl.get("id")
         st.info(f"Task started. ID: `{task_id}`")
@@ -279,7 +295,7 @@ def page_cover_letter():
         while True:
             time.sleep(2)
             ticks += 1
-            poll = api("get", f"/cover-letters/task/{task_id}").json()
+            poll = safe_json(api("get", f"/cover-letters/task/{task_id}"), {})
             status = poll.get("status", "PENDING")
             progress.progress(min(ticks * 5, 90), text=f"Status: {status}")
             status_box.markdown(f"**Status:** `{status}`")
@@ -287,7 +303,7 @@ def page_cover_letter():
             if status == "SUCCESS":
                 progress.progress(100, text="Done!")
                 # Fetch updated record from DB
-                detail = api("get", f"/cover-letters/{cl_id}").json()
+                detail = safe_json(api("get", f"/cover-letters/{cl_id}"), {})
                 cover_text = detail.get("generated_text", "")
                 show_success("Cover letter generated!")
                 st.text_area("📝 Your Cover Letter", cover_text, height=450)
@@ -297,13 +313,13 @@ def page_cover_letter():
                 show_error("Task failed. Check the backend worker logs.")
                 break
             elif ticks > 60:
-                show_error("Timed out after 2 minutes. Check if the Celery worker is running.")
+                show_error("Timed out after 2 minutes. Check the backend logs.")
                 break
 
     # History
     st.divider()
     st.subheader("📜 Past Cover Letters")
-    history = api("get", "/cover-letters/").json()
+    history = safe_json(api("get", "/cover-letters/"), [])
     if isinstance(history, list) and history:
         for cl in history[:5]:
             with st.expander(f"Cover Letter — {cl['created_at'][:10]} | Status: `{cl['status']}`"):
@@ -339,10 +355,10 @@ def page_ats_score():
             resp = api("post", "/ai/ats-score", json={"job_description": jd, "resume_id": selected_id})
 
         if resp.status_code != 200:
-            show_error(resp.json().get("detail", "Scoring failed."))
+            show_error(_detail(resp, "Scoring failed."))
             return
 
-        data = resp.json()
+        data = safe_json(resp, {})
         score = data["score"]
 
         col1, col2, col3 = st.columns(3)
@@ -373,7 +389,7 @@ def page_skill_gap():
     st.title("🔍 Skill Gap Analysis")
     st.markdown("Identify your skill gaps and get **personalized learning recommendations**.")
 
-    resumes = api("get", "/resumes/").json() if st.session_state.token else []
+    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
         st.warning("Upload a resume first.")
         return
@@ -393,10 +409,10 @@ def page_skill_gap():
             resp = api("post", "/ai/skill-gap", json={"job_description": jd, "resume_id": selected_id})
 
         if resp.status_code != 200:
-            show_error(resp.json().get("detail", "Analysis failed."))
+            show_error(_detail(resp, "Analysis failed."))
             return
 
-        data = resp.json()
+        data = safe_json(resp, {})
         st.metric("ATS Score", f"{data['ats_score']}%")
 
         col_l, col_r = st.columns(2)
@@ -425,7 +441,7 @@ def page_interview_questions():
     st.title("🎙️ Interview Question Generator")
     st.markdown("Get **10 tailored interview questions** based on your resume and the job description.")
 
-    resumes = api("get", "/resumes/").json() if st.session_state.token else []
+    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
         st.warning("Upload a resume first.")
         return
@@ -445,10 +461,10 @@ def page_interview_questions():
             resp = api("post", "/ai/interview-questions", json={"job_description": jd, "resume_id": selected_id})
 
         if resp.status_code != 200:
-            show_error(resp.json().get("detail", "Failed to generate questions."))
+            show_error(_detail(resp, "Failed to generate questions."))
             return
 
-        questions = resp.json().get("questions", [])
+        questions = safe_json(resp, {}).get("questions", [])
         st.subheader(f"🎤 {len(questions)} Interview Questions")
         for i, q in enumerate(questions, 1):
             st.markdown(f"**{i}.** {q}")
@@ -482,10 +498,10 @@ def page_job_tracker():
                     show_success("Application added!")
                     st.rerun()
                 else:
-                    show_error(resp.json().get("detail", "Failed to add."))
+                    show_error(_detail(resp, "Failed to add."))
 
     # Stats
-    stats = api("get", "/jobs/stats").json()
+    stats = safe_json(api("get", "/jobs/stats"), {})
     if isinstance(stats, dict) and "by_status" in stats:
         st.subheader(f"📈 Pipeline — {stats['total']} Applications")
         cols = st.columns(7)
