@@ -6,13 +6,14 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Session
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session, sync_engine
+from app.core.limiter import limiter
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
 from app.models.resume import Resume
 from app.models.user import User
@@ -61,13 +62,15 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
 
 
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("5/minute")
 async def generate_cover_letter_endpoint(
+    request: Request,
     payload: CoverLetterCreate,
     background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Dispatch a background task to generate a cover letter (no Celery needed)."""
+    """Dispatch a background task to generate a cover letter. Rate limited: 5 req/min per IP."""
     if payload.resume_id:
         resume = await session.get(Resume, payload.resume_id)
         if not resume or resume.user_id != current_user.id:
