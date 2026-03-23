@@ -218,3 +218,65 @@ PRODUCTION=true
 ## 📄 License
 
 MIT © 2026 [deeason7](https://github.com/deeason7)
+
+---
+
+## ⚠️ Disclaimer
+
+> **This project is for educational and demonstration purposes only.**
+
+The author makes no warranties — express or implied — about the completeness, reliability, accuracy, or suitability of this software or the AI-generated content it produces. Any action you take based on information or output from this platform is **strictly at your own risk**.
+
+The author will **not** be liable for any losses, damages, or negative outcomes — financial, professional, or otherwise — arising from:
+
+- Use or misuse of this software
+- AI-generated cover letters, ATS scores, or interview questions that are inaccurate or unsuitable
+- Reliance on this platform's output as professional career, legal, or financial advice
+- Data loss or security incidents resulting from self-hosted deployments
+
+**AI-generated content is not professional advice.** Always review and verify AI outputs before using them in real job applications.
+
+---
+
+## 🤖 AI Content Notice
+
+This platform uses large language models (LLaMA 3.1 via Groq API) to generate content. The AI:
+
+- May produce **inaccurate, incomplete, or hallucinated** information despite RAG safeguards
+- Should **not** be used as a substitute for professional career counselling
+- Generates outputs based on the resume and job description you provide — the author is **not responsible** for the content of your inputs or outputs
+
+Always proofread AI-generated cover letters and questions before submitting to employers.
+
+---
+
+## 🔒 Privacy Notice
+
+**Live Demo Deployment**
+
+The live demo at `ai-career-hub-frontend.onrender.com` is hosted on third-party platforms:
+
+| Platform | Role | Their Privacy Policy |
+|----------|------|---------------------|
+| [Render.com](https://render.com) | Hosts the API and frontend containers | [render.com/privacy](https://render.com/privacy) |
+| [Supabase](https://supabase.com) | Hosts the PostgreSQL database | [supabase.com/privacy](https://supabase.com/privacy) |
+| [Groq](https://groq.com) | Processes AI inference requests | [groq.com/privacy-policy](https://groq.com/privacy-policy/) |
+
+**What is stored:**
+- Account email, hashed password (bcrypt), and full name
+- Resume text content extracted from uploaded files
+- Cover letters, ATS scores, and job application records you create
+
+**What is NOT stored:**
+- Raw uploaded files (only extracted text is persisted)
+- Payment information (no payments collected)
+- Browser fingerprints, cookies beyond session, or tracking data
+
+**Your rights:**
+- You can delete your resumes and job tracker entries at any time from the UI
+- To request full account deletion, open a GitHub issue or contact the author directly
+
+**Recommendations:**
+- Do **not** upload resumes containing passport numbers, government IDs, or financial account details to the public demo
+- If handling sensitive data, self-host using the Docker Compose setup — your data stays on your infrastructure
+- The live demo is provided as-is with **no uptime or data retention guarantees**; free-tier Render services may be suspended or reset at any time
