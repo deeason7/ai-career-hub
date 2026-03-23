@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -24,6 +24,7 @@ def create_access_token(subject: Any, expires_delta: timedelta | None = None) ->
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode = {"exp": expire, "sub": str(subject)}
+    # PyJWT encode() returns str directly (no .decode() needed)
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -31,5 +32,5 @@ def verify_token(token: str) -> str | None:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         return payload.get("sub")
-    except JWTError:
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
