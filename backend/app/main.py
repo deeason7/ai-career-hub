@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -10,6 +11,14 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.db import create_db_and_tables
 from app.core.limiter import limiter
+
+# Initialise Sentry — no-op when SENTRY_DSN is empty (local / CI)
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=0.1,   # 10% of requests get performance traces
+        send_default_pii=False,   # Never send passwords, tokens, or PII
+    )
 
 
 @asynccontextmanager

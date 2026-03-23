@@ -31,6 +31,8 @@ st.set_page_config(
 for key in ["token", "user"]:
     if key not in st.session_state:
         st.session_state[key] = None
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "📋 Dashboard"
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -125,29 +127,35 @@ def page_auth():
 # ─── SIDEBAR & NAVIGATION ─────────────────────────────────────────────────────
 
 def sidebar():
+    _pages = [
+        "📋 Dashboard",
+        "📄 My Resumes",
+        "✉️ Cover Letter",
+        "🎯 ATS Score",
+        "🔍 Skill Gap",
+        "🎙️ Interview Questions",
+        "📊 Job Tracker",
+    ]
     with st.sidebar:
         st.title("🚀 AI Career Hub")
         user = st.session_state.user or {}
         st.markdown(f"👤 **{user.get('full_name', 'User')}**  \n`{user.get('email', '')}`")
         st.divider()
 
+        # Sync radio with session state so buttons can drive navigation
+        current_idx = _pages.index(st.session_state["current_page"]) if st.session_state["current_page"] in _pages else 0
         page = st.radio(
             "Navigation",
-            [
-                "📋 Dashboard",
-                "📄 My Resumes",
-                "✉️ Cover Letter",
-                "🎯 ATS Score",
-                "🔍 Skill Gap",
-                "🎙️ Interview Questions",
-                "📊 Job Tracker",
-            ],
+            _pages,
+            index=current_idx,
             label_visibility="collapsed",
         )
+        st.session_state["current_page"] = page
         st.divider()
         if st.button("🚪 Logout"):
             st.session_state.token = None
             st.session_state.user = None
+            st.session_state["current_page"] = "📋 Dashboard"
             st.rerun()
     return page
 
@@ -182,9 +190,15 @@ def page_dashboard():
     st.divider()
     st.subheader("🚀 Quick Actions")
     q1, q2, q3 = st.columns(3)
-    q1.info("Upload a resume → **My Resumes**")
-    q2.info("Generate a cover letter → **Cover Letter**")
-    q3.info("Score your resume → **ATS Score**")
+    if q1.button("📄 Upload Resume", use_container_width=True, type="primary"):
+        st.session_state["current_page"] = "📄 My Resumes"
+        st.rerun()
+    if q2.button("✉️ Generate Cover Letter", use_container_width=True, type="primary"):
+        st.session_state["current_page"] = "✉️ Cover Letter"
+        st.rerun()
+    if q3.button("🎯 Score My Resume", use_container_width=True, type="primary"):
+        st.session_state["current_page"] = "🎯 ATS Score"
+        st.rerun()
 
 
 # ─── PAGE: RESUMES ────────────────────────────────────────────────────────────
