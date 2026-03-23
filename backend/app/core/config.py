@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    SENTRY_DSN: str = ""  # Optional — set on Render to enable error tracking
 
     model_config = SettingsConfigDict(
         env_file="backend/.env",
