@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from typing import Annotated
 
@@ -16,12 +17,19 @@ from app.services.resume_parser import parse_resume
 router = APIRouter()
 
 MAX_RESUMES_PER_USER = 10
-MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB — matches Streamlit frontend cap
+
+# Only accept genuine document MIME types — blocks executables, archives, etc.
+ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+}
 
 
 @router.post("/upload", response_model=ResumeRead, status_code=status.HTTP_201_CREATED)
 async def upload_resume(
-    name: Annotated[str, Form()],
+    name: Annotated[str, Form(max_length=100)],
     file: Annotated[UploadFile, File()],
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
@@ -35,12 +43,19 @@ async def upload_resume(
             detail=f"Maximum of {MAX_RESUMES_PER_USER} resumes per user. Delete one first.",
         )
 
-    # Enforce 10 MB file size limit
+    # Validate MIME type — only allow PDF, DOCX, TXT
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Unsupported file type. Please upload a PDF, DOCX, or TXT file.",
+        )
+
+    # Enforce 5 MB file size limit
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File too large. Maximum size is 10 MB.",
+            detail="File too large. Maximum size is 5 MB.",
         )
     await file.seek(0)  # Reset so extract_text_from_upload can read it
 
@@ -53,10 +68,13 @@ async def upload_resume(
     parsed_json = parsed.model_dump_json()
     is_first = len(existing) == 0
 
+    # Sanitize filename — prevent path traversal attacks
+    safe_filename = os.path.basename(file.filename or "resume")[:255]
+
     resume = Resume(
         user_id=current_user.id,
-        name=name,
-        original_filename=file.filename or "resume",
+        name=name.strip(),
+        original_filename=safe_filename,
         raw_text=raw_text,
         parsed_json=parsed_json,
         is_active=is_first,
