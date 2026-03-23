@@ -1,0 +1,5 @@
+[server]
+maxUploadSize = 5          # MB — resumes never exceed this; blocks oversized uploads early
+
+[browser]
+gatherUsageStats = false   # Disable Streamlit telemetry
