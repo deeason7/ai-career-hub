@@ -2,7 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +18,7 @@ router = APIRouter()
 
 
 class AIRequest(BaseModel):
-    job_description: str
+    job_description: str = Field(..., max_length=10_000)
     resume_id: uuid.UUID | None = None
 
 
