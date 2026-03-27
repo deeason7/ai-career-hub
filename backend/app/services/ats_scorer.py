@@ -13,7 +13,7 @@ Why sentence-transformers over TF-IDF:
 """
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
