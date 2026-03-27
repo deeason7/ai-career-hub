@@ -29,6 +29,7 @@ python-docx==1.1.2
 
 # --- File Handling ---
 python-magic==0.4.27
+reportlab==4.2.2
 
 # --- Security ---
 passlib[bcrypt]==1.7.4
