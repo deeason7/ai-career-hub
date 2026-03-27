@@ -559,15 +559,43 @@ def page_interview_questions():
             st.markdown(f"**{i}.** {q}")
 
 
-# ─── PAGE: JOB TRACKER ────────────────────────────────────────────────────────
+# ─── PAGE: JOB TRACKER ───────────────────────────────────────────────────────
+
+STATUS_EMOJIS = {
+    "wishlist": "💭",
+    "applied": "📤",
+    "phone_screen": "📞",
+    "interview": "🎯",
+    "offer": "🎉",
+    "rejected": "❌",
+    "accepted": "✅",
+}
+
+
+def _deadline_badge(deadline_str: str | None) -> str:
+    """Return an urgency badge string based on how close the deadline is."""
+    if not deadline_str:
+        return ""
+    from datetime import date
+    try:
+        dl = date.fromisoformat(deadline_str)
+    except ValueError:
+        return ""
+    days = (dl - date.today()).days
+    if days < 0:
+        return f"  🔴 **Overdue** ({abs(days)}d ago)"
+    elif days == 0:
+        return "  🔴 **Due Today!**"
+    elif days == 1:
+        return "  🟡 **Due Tomorrow**"
+    elif days <= 7:
+        return f"  🟠 **Due in {days}d**"
+    else:
+        return f"  🗓️ Due {dl.strftime('%b %d')}"
+
 
 def page_job_tracker():
     st.title("📊 Job Application Tracker")
-
-    STATUS_EMOJIS = {
-        "wishlist": "⭐", "applied": "📨", "phone_screen": "📞",
-        "interview": "🎤", "offer": "🎉", "rejected": "❌", "accepted": "✅"
-    }
 
     # Add application
     with st.expander("➕ Add New Application"):
@@ -577,11 +605,13 @@ def page_job_tracker():
             role = col2.text_input("Role / Title")
             status = st.selectbox("Status", list(STATUS_EMOJIS.keys()))
             job_url = st.text_input("Job URL (optional)")
+            deadline = st.date_input("Application Deadline (optional)", value=None)
             notes = st.text_area("Notes", height=80)
             if st.form_submit_button("Add Application", type="primary"):
                 resp = api("post", "/jobs/", json={
                     "company": company, "role": role, "status": status,
                     "job_url": job_url or None, "notes": notes or None,
+                    "deadline": deadline.isoformat() if deadline else None,
                 })
                 if resp.status_code == 201:
                     show_success("Application added!")
@@ -610,10 +640,14 @@ def page_job_tracker():
 
     for app in apps:
         emoji = STATUS_EMOJIS.get(app["status"], "")
-        with st.expander(f"{emoji} **{app['company']}** — {app['role']}  |  `{app['status']}`"):
+        badge = _deadline_badge(app.get("deadline"))
+        with st.expander(f"{emoji} **{app['company']}** — {app['role']}  |  `{app['status']}`{badge}"):
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.markdown(f"**Applied:** {app.get('applied_at', 'N/A')}")
+                if app.get("deadline"):
+                    badge_text = _deadline_badge(app["deadline"])
+                    st.markdown(f"**Deadline:** `{app['deadline']}`{badge_text}")
                 if app.get("job_url"):
                     st.markdown(f"**URL:** [{app['job_url']}]({app['job_url']})")
                 if app.get("notes"):
@@ -625,8 +659,17 @@ def page_job_tracker():
                     index=list(STATUS_EMOJIS.keys()).index(app["status"]),
                     key=f"status_{app['id']}",
                 )
+                new_deadline = st.date_input(
+                    "Deadline",
+                    value=None,
+                    key=f"dl_{app['id']}",
+                    help="Leave empty to keep existing deadline",
+                )
                 if st.button("Save", key=f"save_{app['id']}"):
-                    api("patch", f"/jobs/{app['id']}", json={"status": new_status})
+                    patch = {"status": new_status}
+                    if new_deadline:
+                        patch["deadline"] = new_deadline.isoformat()
+                    api("patch", f"/jobs/{app['id']}", json=patch)
                     st.rerun()
                 if st.button("🗑️ Delete", key=f"del_{app['id']}"):
                     api("delete", f"/jobs/{app['id']}")

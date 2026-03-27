@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Text
@@ -17,6 +17,7 @@ class JobApplicationBase(SQLModel):
     # Status: wishlist | applied | phone_screen | interview | offer | rejected | accepted
     notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     applied_at: Optional[datetime] = Field(default=None)
+    deadline: Optional[date] = Field(default=None)  # Application deadline date
 
 
 class JobApplication(JobApplicationBase, table=True):
@@ -41,6 +42,7 @@ class JobApplicationUpdate(SQLModel):
     status: Optional[str] = None
     notes: Optional[str] = None
     applied_at: Optional[datetime] = None
+    deadline: Optional[date] = None
 
 
 class JobApplicationRead(JobApplicationBase):
