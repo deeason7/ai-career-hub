@@ -63,11 +63,13 @@ async def ats_score(
     result = calculate_ats_score(resume_text, payload.job_description)
     return {
         "score": result.score,
+        "semantic_score": result.semantic_score,
         "keyword_score": result.keyword_score,
         "structure_score": result.structure_score,
         "matched_keywords": result.matched_keywords,
         "missing_keywords": result.missing_keywords,
         "recommendations": result.recommendations,
+        "section_scores": result.section_scores,
         "breakdown": result.breakdown,
     }
 
