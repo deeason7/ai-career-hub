@@ -7,6 +7,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Session
@@ -18,6 +19,7 @@ from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterR
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.cover_letter import generate_cover_letter
+from app.services.pdf_generator import generate_cover_letter_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -158,3 +160,31 @@ async def get_cover_letter(
     if not cl or cl.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover letter not found.")
     return cl
+
+
+@router.get("/{cover_letter_id}/pdf")
+async def download_cover_letter_pdf(
+    cover_letter_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> StreamingResponse:
+    """Stream a professionally formatted PDF of the cover letter."""
+    cl = await session.get(CoverLetter, cover_letter_id)
+    if not cl or cl.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover letter not found.")
+    if not cl.generated_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cover letter has not been generated yet.",
+        )
+
+    user_name = f"{current_user.full_name}" if hasattr(current_user, "full_name") else ""
+    pdf_bytes = generate_cover_letter_pdf(cl.generated_text, user_name=user_name)
+
+    import io
+    filename = f"cover_letter_{str(cover_letter_id)[:8]}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
