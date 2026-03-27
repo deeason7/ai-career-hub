@@ -493,15 +493,36 @@ def page_ats_score():
 
         data = safe_json(resp, {})
         score = data["score"]
+        sem_score = data.get("semantic_score", 0)
 
-        col1, col2, col3 = st.columns(3)
+        # --- Main metrics row ---
         color = "🟢" if score >= 70 else "🟡" if score >= 45 else "🔴"
-        col1.metric(f"{color} ATS Score", f"{score}%")
-        col2.metric("🔑 Keyword Score", f"{data['keyword_score']}%")
-        col3.metric("📐 Structure Score", f"{data['structure_score']}%")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric(f"{color} ATS Score", f"{score}%", help="Composite: 50% semantic + 30% keyword + 20% structure")
+        col2.metric("🧠 Semantic Match", f"{sem_score}%", help="Sentence-transformer cosine similarity — catches synonyms and paraphrases")
+        col3.metric("🔑 Keyword Score", f"{data['keyword_score']}%", help="Exact + bigram keyword overlap")
+        col4.metric("📐 Structure Score", f"{data['structure_score']}%", help="Section presence and resume length")
 
         st.progress(int(score) / 100)
 
+        # --- Semantic score interpretation ---
+        if sem_score >= 70:
+            st.success("🧠 High semantic alignment — your resume language closely matches the job description.")
+        elif sem_score >= 45:
+            st.warning("🧠 Moderate semantic alignment — consider mirroring more of the job description's phrasing.")
+        elif sem_score > 0:
+            st.error("🧠 Low semantic alignment — your resume content may not be addressing what this role requires.")
+
+        # --- Section-level breakdown ---
+        section_scores = data.get("section_scores", {})
+        if section_scores:
+            st.subheader("📊 Section Alignment with JD")
+            sec_cols = st.columns(len(section_scores))
+            for col, (sec, sec_score) in zip(sec_cols, section_scores.items()):
+                sec_color = "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
+                col.metric(f"{sec_color} {sec.title()}", f"{sec_score}%" if sec_score > 0 else "—")
+
+        st.divider()
         col_l, col_r = st.columns(2)
         with col_l:
             st.subheader("✅ Matched Keywords")
