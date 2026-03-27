@@ -127,6 +127,42 @@ def page_auth():
                 else:
                     show_error(_detail(resp, "Registration failed."))
 
+# ─── Job URL Import Helper ─────────────────────────────────────────────────────
+
+def _job_url_import(key_prefix: str) -> str:
+    """
+    Show a collapsible 'Import from URL' expander.
+    Returns the fetched job description text, or empty string if not used.
+    """
+    fetched_jd = ""
+    with st.expander("🔗 Import Job from URL (LinkedIn, Greenhouse, Lever…)"):
+        st.caption(
+            "Paste any public job posting URL. LinkedIn may require login for the full description — "
+            "in that case paste the text manually."
+        )
+        job_url_input = st.text_input(
+            "Job Posting URL",
+            placeholder="https://www.linkedin.com/jobs/view/...",
+            key=f"{key_prefix}_url_input",
+        )
+        if st.button("🚀 Fetch Job Description", key=f"{key_prefix}_fetch_btn"):
+            if not job_url_input.strip():
+                show_error("Please enter a URL.")
+            else:
+                with st.spinner("Fetching job description…"):
+                    resp = api("post", "/ai/fetch-job", json={"url": job_url_input.strip()})
+                data = safe_json(resp, {})
+                if resp.status_code == 200 and data.get("success"):
+                    fetched_jd = data.get("job_description", "")
+                    st.session_state[f"{key_prefix}_prefilled_jd"] = fetched_jd
+                    show_success("Job description fetched! Scroll down — it’s pre-filled below.")
+                    if data.get("warning"):
+                        st.warning(data["warning"])
+                else:
+                    show_error(_detail(resp, "Could not fetch job description."))
+    # Return any previously fetched JD stored in session state
+    return st.session_state.get(f"{key_prefix}_prefilled_jd", "")
+
 
 # ─── Disclaimer Modal ───────────────────────────────────────────────────────
 
@@ -320,7 +356,13 @@ def page_cover_letter():
     selected_name = st.selectbox("Choose Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
     selected_id = resume_options[selected_name]
 
-    jd = st.text_area("Paste the Job Description", height=300, placeholder="Paste the full job posting here...")
+    prefilled_jd = _job_url_import("cover_letter")
+    jd = st.text_area(
+        "Paste the Job Description",
+        value=prefilled_jd,
+        height=300,
+        placeholder="Paste the full job posting here, or import from URL above.",
+    )
 
     if st.button("🚀 Generate Cover Letter", type="primary"):
         if not jd.strip():
@@ -434,7 +476,9 @@ def page_ats_score():
     selected_name = st.selectbox("Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
     selected_id = resume_options[selected_name]
 
-    jd = st.text_area("Job Description", height=250)
+    prefilled_jd = _job_url_import("ats")
+    jd = st.text_area("Job Description", value=prefilled_jd, height=250,
+                      placeholder="Paste the job description or import from URL above.")
 
     if st.button("🎯 Score My Resume", type="primary"):
         if not jd.strip():
@@ -488,7 +532,9 @@ def page_skill_gap():
     selected_name = st.selectbox("Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
     selected_id = resume_options[selected_name]
 
-    jd = st.text_area("Job Description", height=250)
+    prefilled_jd = _job_url_import("skill_gap")
+    jd = st.text_area("Job Description", value=prefilled_jd, height=250,
+                      placeholder="Paste the job description or import from URL above.")
 
     if st.button("🔍 Analyze Skill Gap", type="primary"):
         if not jd.strip():
@@ -540,7 +586,9 @@ def page_interview_questions():
     selected_name = st.selectbox("Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
     selected_id = resume_options[selected_name]
 
-    jd = st.text_area("Job Description", height=200)
+    prefilled_jd = _job_url_import("interview")
+    jd = st.text_area("Job Description", value=prefilled_jd, height=200,
+                      placeholder="Paste the job description or import from URL above.")
 
     if st.button("🎙️ Generate Questions", type="primary"):
         if not jd.strip():

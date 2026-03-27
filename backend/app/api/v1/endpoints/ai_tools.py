@@ -2,7 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.models.resume import Resume
 from app.models.user import User
 from app.services.ats_scorer import calculate_ats_score
 from app.services.cover_letter import generate_interview_questions, generate_skill_gap_analysis
+from app.services.job_scraper import JobFetchError, fetch_job_description
 
 router = APIRouter()
 
@@ -20,6 +21,10 @@ router = APIRouter()
 class AIRequest(BaseModel):
     job_description: str = Field(..., max_length=10_000)
     resume_id: uuid.UUID | None = None
+
+
+class JobUrlRequest(BaseModel):
+    url: str = Field(..., max_length=2000)
 
 
 async def _get_resume_text(
@@ -93,3 +98,20 @@ async def interview_questions(
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     questions = generate_interview_questions(resume_text, payload.job_description)
     return {"questions": questions, "count": len(questions)}
+
+
+@router.post("/fetch-job")
+@rate_limit("10/minute")
+async def fetch_job_from_url(
+    request: Request,
+    payload: JobUrlRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Fetch and extract a job description from any public URL (LinkedIn, Greenhouse, etc.).
+    Rate limited: 10 req/min per IP to avoid hammering external sites.
+    """
+    try:
+        result = fetch_job_description(payload.url)
+        return result
+    except JobFetchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
