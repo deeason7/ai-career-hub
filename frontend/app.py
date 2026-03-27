@@ -360,7 +360,24 @@ def page_cover_letter():
                 cover_text = detail.get("generated_text", "")
                 show_success("Cover letter generated!")
                 st.text_area("📝 Your Cover Letter", cover_text, height=450)
-                st.download_button("⬇️ Download as TXT", cover_text, file_name="cover_letter.txt")
+                dl_col1, dl_col2 = st.columns(2)
+                dl_col1.download_button(
+                    " Download TXT",
+                    cover_text,
+                    file_name="cover_letter.txt",
+                    use_container_width=True,
+                )
+                # PDF download — fetch from backend
+                pdf_resp = api("get", f"/cover-letters/{cl_id}/pdf")
+                if pdf_resp.status_code == 200:
+                    dl_col2.download_button(
+                        "📄 Download PDF",
+                        pdf_resp.content,
+                        file_name="cover_letter.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary",
+                    )
                 break
             elif status == "FAILURE":
                 show_error("Task failed. Check the backend worker logs.")
@@ -369,15 +386,34 @@ def page_cover_letter():
                 show_error("Timed out after 2 minutes. Check the backend logs.")
                 break
 
-    # History
     st.divider()
     st.subheader("📜 Past Cover Letters")
     history = safe_json(api("get", "/cover-letters/"), [])
     if isinstance(history, list) and history:
         for cl in history[:5]:
-            with st.expander(f"Cover Letter — {cl['created_at'][:10]} | Status: `{cl['status']}`"):
+            status_label = cl.get("status", "")
+            with st.expander(f"Cover Letter — {cl['created_at'][:10]} | Status: `{status_label}`"):
                 if cl.get("generated_text"):
                     st.text_area("", cl["generated_text"], height=250, key=f"hist_{cl['id']}")
+                    h_col1, h_col2 = st.columns(2)
+                    h_col1.download_button(
+                        " TXT",
+                        cl["generated_text"],
+                        file_name="cover_letter.txt",
+                        key=f"txt_{cl['id']}",
+                        use_container_width=True,
+                    )
+                    pdf_resp = api("get", f"/cover-letters/{cl['id']}/pdf")
+                    if pdf_resp.status_code == 200:
+                        h_col2.download_button(
+                            "📄 PDF",
+                            pdf_resp.content,
+                            file_name="cover_letter.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_{cl['id']}",
+                            use_container_width=True,
+                            type="primary",
+                        )
     else:
         st.info("No cover letters generated yet.")
 
