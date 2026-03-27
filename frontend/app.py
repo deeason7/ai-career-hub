@@ -362,7 +362,7 @@ def page_cover_letter():
                 st.text_area("📝 Your Cover Letter", cover_text, height=450)
                 dl_col1, dl_col2 = st.columns(2)
                 dl_col1.download_button(
-                    "⬇️ Download TXT",
+                    " Download TXT",
                     cover_text,
                     file_name="cover_letter.txt",
                     use_container_width=True,
@@ -397,7 +397,7 @@ def page_cover_letter():
                     st.text_area("", cl["generated_text"], height=250, key=f"hist_{cl['id']}")
                     h_col1, h_col2 = st.columns(2)
                     h_col1.download_button(
-                        "⬇️ TXT",
+                        " TXT",
                         cl["generated_text"],
                         file_name="cover_letter.txt",
                         key=f"txt_{cl['id']}",
