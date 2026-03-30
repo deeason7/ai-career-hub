@@ -1,22 +1,27 @@
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlmodel import SQLModel, create_engine
 
 from app.core.config import settings
 
-# Supabase free tier has a limited connection pool (Session mode: ~10 clients).
-# Two engines (sync + async) × pool_size → keep totals well under that limit.
-_pool_kwargs = dict(
-    pool_pre_ping=True,   # Detect stale/broken connections before use
-    pool_size=2,          # Max idle connections per engine (2 × 2 engines = 4 idle)
-    max_overflow=3,       # Burst connections allowed  (up to 5 per engine)
-    pool_recycle=1800,    # Recycle connections after 30 min (matches Render spin-down)
+# Async engine — NullPool: no client-side pooling.
+# Supabase Supavisor (port 6543) handles connection pooling server-side.
+# This is the correct pattern for Render free tier (spin-down/spin-up cycles)
+# because there are no stale pool connections to recover on wake-up.
+async_engine = create_async_engine(
+    settings.SQLALCHEMY_ASYNC_DATABASE_URI,
+    poolclass=NullPool,
 )
 
-# --- Synchronous engine (for Alembic migrations & BackgroundTask threads) ---
-sync_engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, **_pool_kwargs)
-
-# --- Async engine (for FastAPI endpoints) ---
-async_engine = create_async_engine(settings.SQLALCHEMY_ASYNC_DATABASE_URI, **_pool_kwargs)
+# Sync engine — minimal pool, used only by Alembic migrations.
+# pool_size=1 is enough; migrations run once at startup.
+_sync_pool_kwargs = dict(
+    pool_pre_ping=True,
+    pool_size=1,
+    max_overflow=1,
+    pool_recycle=1800,
+)
+sync_engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, **_sync_pool_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
