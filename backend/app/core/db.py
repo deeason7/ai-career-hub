@@ -8,9 +8,14 @@ from app.core.config import settings
 # Supabase Supavisor (port 6543) handles connection pooling server-side.
 # This is the correct pattern for Render free tier (spin-down/spin-up cycles)
 # because there are no stale pool connections to recover on wake-up.
+#
+# prepare_threshold=0 disables prepared statements (int, not URL string).
+# Required for Supabase Supavisor/PgBouncer in transaction mode — passing it
+# as a URL query param causes a TypeError because psycopg receives it as str.
 async_engine = create_async_engine(
     settings.SQLALCHEMY_ASYNC_DATABASE_URI,
     poolclass=NullPool,
+    connect_args={"prepare_threshold": 0},
 )
 
 # Sync engine — minimal pool, used only by Alembic migrations.

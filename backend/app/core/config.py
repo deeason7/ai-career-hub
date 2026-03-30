@@ -27,14 +27,13 @@ class Settings(BaseSettings):
     def SQLALCHEMY_ASYNC_DATABASE_URI(self) -> str:
         """Async URI — FastAPI endpoints via NullPool + Supabase Supavisor (port 6543).
 
-        prepare_threshold=0 disables prepared statements, which are unsupported
-        by Supavisor (PgBouncer in transaction mode). Without this flag the first
-        query after a cold-start may fail with 'prepared statement does not exist'.
+        Note: prepare_threshold=0 is passed via connect_args in db.py (as int).
+        Do NOT add it here as a URL query param — psycopg would receive it as a
+        string and raise TypeError: '>=' not supported between int and str.
         """
         return (
             f"postgresql+psycopg_async://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-            f"?prepare_threshold=0"
         )
 
     # Redis & Celery
