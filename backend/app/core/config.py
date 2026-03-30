@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     @computed_field
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """Sync URI — Alembic migrations only. Uses direct connection (port 5432)."""
         return (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -24,9 +25,16 @@ class Settings(BaseSettings):
 
     @computed_field
     def SQLALCHEMY_ASYNC_DATABASE_URI(self) -> str:
+        """Async URI — FastAPI endpoints via NullPool + Supabase Supavisor (port 6543).
+
+        prepare_threshold=0 disables prepared statements, which are unsupported
+        by Supavisor (PgBouncer in transaction mode). Without this flag the first
+        query after a cold-start may fail with 'prepared statement does not exist'.
+        """
         return (
             f"postgresql+psycopg_async://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            f"?prepare_threshold=0"
         )
 
     # Redis & Celery
