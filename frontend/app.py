@@ -110,6 +110,8 @@ def page_auth():
                     st.session_state.user = me
                     show_success("Logged in!")
                     st.rerun()
+                elif resp.status_code == 429:
+                    show_error("Too many login attempts. Please wait 1 minute and try again.")
                 else:
                     show_error(_detail(resp, "Login failed."))
 
@@ -124,6 +126,8 @@ def page_auth():
                 })
                 if resp.status_code == 201:
                     show_success("Account created! Please log in.")
+                elif resp.status_code == 429:
+                    show_error("Too many registration attempts. Please wait 1 minute and try again.")
                 else:
                     show_error(_detail(resp, "Registration failed."))
 
