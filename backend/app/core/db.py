@@ -1,22 +1,43 @@
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlmodel import SQLModel, create_engine
 
 from app.core.config import settings
 
-# Supabase free tier has a limited connection pool (Session mode: ~10 clients).
-# Two engines (sync + async) × pool_size → keep totals well under that limit.
-_pool_kwargs = dict(
-    pool_pre_ping=True,   # Detect stale/broken connections before use
-    pool_size=2,          # Max idle connections per engine (2 × 2 engines = 4 idle)
-    max_overflow=3,       # Burst connections allowed  (up to 5 per engine)
-    pool_recycle=1800,    # Recycle connections after 30 min (matches Render spin-down)
+# Async engine — NullPool: no client-side pooling.
+# Supabase Supavisor (port 6543) handles connection pooling server-side.
+# This is the correct pattern for Render free tier (spin-down/spin-up cycles)
+# because there are no stale pool connections to recover on wake-up.
+#
+# prepare_threshold=0 disables prepared statements (int, not URL string).
+# Required for Supabase Supavisor/PgBouncer in transaction mode — passing it
+# as a URL query param causes a TypeError because psycopg receives it as str.
+async_engine = create_async_engine(
+    settings.SQLALCHEMY_ASYNC_DATABASE_URI,
+    poolclass=NullPool,
+    # prepare_threshold=None fully disables prepared statements.
+    # prepare_threshold=0 (our previous value) means "prepare on first execution"
+    # which still sends PREPARE statements — unsupported by Supabase Supavisor
+    # (PgBouncer in transaction mode). None = never prepare = correct for poolers.
+    connect_args={"prepare_threshold": None},
 )
 
-# --- Synchronous engine (for Alembic migrations & BackgroundTask threads) ---
-sync_engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, **_pool_kwargs)
-
-# --- Async engine (for FastAPI endpoints) ---
-async_engine = create_async_engine(settings.SQLALCHEMY_ASYNC_DATABASE_URI, **_pool_kwargs)
+# Sync engine — used by Alembic (startup) AND cover letter BackgroundTask.
+# The background task holds a connection for the entire LLM call (30-60s),
+# so pool_size=1 would starve any concurrent sync DB access.
+# pool_size=3, max_overflow=5 allows concurrent background tasks + migrations.
+# prepare_threshold=None: disable psycopg3 prepared statements — same reason
+# as async engine (Supavisor incompatibility; direct port 5432 is fine but
+# keeps the config consistent and avoids DuplicatePreparedStatement if ever
+# switched back to Supavisor).
+_sync_pool_kwargs = dict(
+    pool_pre_ping=True,
+    pool_size=3,
+    max_overflow=5,
+    pool_recycle=1800,
+    connect_args={"prepare_threshold": None},
+)
+sync_engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, **_sync_pool_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,

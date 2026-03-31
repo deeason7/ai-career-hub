@@ -15,9 +15,13 @@ import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 
-import numpy as np
-from sentence_transformers import SentenceTransformer
+# numpy and sentence_transformers are imported LAZILY inside functions.
+# Reason: sentence-transformers pulls in torch (~700MB). Importing it at
+# module load time causes an OOM kill on Render free tier (512MB RAM)
+# before Uvicorn ever binds to port 8000 — the container crash-loops.
+# Lazy import means torch only loads on the FIRST ATS scoring request.
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +32,13 @@ MODEL_NAME = "all-MiniLM-L6-v2"
 
 
 @lru_cache(maxsize=1)
-def _get_model() -> SentenceTransformer:
-    """Load model once and reuse across requests (lru_cache = singleton)."""
+def _get_model() -> Any:
+    """Load model once and reuse across requests (lru_cache = singleton).
+
+    Import is inside this function so torch only loads on first ATS request,
+    not at app startup. The lru_cache ensures it's loaded at most once.
+    """
+    from sentence_transformers import SentenceTransformer  # lazy import
     logger.info(f"Loading sentence-transformers model: {MODEL_NAME}")
     return SentenceTransformer(MODEL_NAME)
 
@@ -78,8 +87,9 @@ class ATSResult:
 
 # ─── Semantic Similarity ──────────────────────────────────────────────────────
 
-def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+def _cosine_similarity(a: Any, b: Any) -> float:
     """Numerically stable cosine similarity."""
+    import numpy as np  # lazy import — torch/numpy only loaded on first ATS request
     norm_a = np.linalg.norm(a)
     norm_b = np.linalg.norm(b)
     if norm_a == 0 or norm_b == 0:
