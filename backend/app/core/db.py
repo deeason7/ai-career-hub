@@ -15,7 +15,11 @@ from app.core.config import settings
 async_engine = create_async_engine(
     settings.SQLALCHEMY_ASYNC_DATABASE_URI,
     poolclass=NullPool,
-    connect_args={"prepare_threshold": 0},
+    # prepare_threshold=None fully disables prepared statements.
+    # prepare_threshold=0 (our previous value) means "prepare on first execution"
+    # which still sends PREPARE statements — unsupported by Supabase Supavisor
+    # (PgBouncer in transaction mode). None = never prepare = correct for poolers.
+    connect_args={"prepare_threshold": None},
 )
 
 # Sync engine — minimal pool, used only by Alembic migrations.
