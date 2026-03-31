@@ -22,13 +22,20 @@ async_engine = create_async_engine(
     connect_args={"prepare_threshold": None},
 )
 
-# Sync engine — minimal pool, used only by Alembic migrations.
-# pool_size=1 is enough; migrations run once at startup.
+# Sync engine — used by Alembic (startup) AND cover letter BackgroundTask.
+# The background task holds a connection for the entire LLM call (30-60s),
+# so pool_size=1 would starve any concurrent sync DB access.
+# pool_size=3, max_overflow=5 allows concurrent background tasks + migrations.
+# prepare_threshold=None: disable psycopg3 prepared statements — same reason
+# as async engine (Supavisor incompatibility; direct port 5432 is fine but
+# keeps the config consistent and avoids DuplicatePreparedStatement if ever
+# switched back to Supavisor).
 _sync_pool_kwargs = dict(
     pool_pre_ping=True,
-    pool_size=1,
-    max_overflow=1,
+    pool_size=3,
+    max_overflow=5,
     pool_recycle=1800,
+    connect_args={"prepare_threshold": None},
 )
 sync_engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, **_sync_pool_kwargs)
 
