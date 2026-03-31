@@ -87,7 +87,7 @@ class ATSResult:
 
 # ─── Semantic Similarity ──────────────────────────────────────────────────────
 
-def _cosine_similarity(a: "np.ndarray", b: "np.ndarray") -> float:  # type: ignore[name-defined]
+def _cosine_similarity(a: Any, b: Any) -> float:
     """Numerically stable cosine similarity."""
     import numpy as np  # lazy import — torch/numpy only loaded on first ATS request
     norm_a = np.linalg.norm(a)
