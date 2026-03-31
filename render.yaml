@@ -17,7 +17,7 @@ services:
       - key: POSTGRES_DB
         sync: false
       - key: POSTGRES_PORT
-        value: "5432"
+        value: "6543"
       - key: REDIS_HOST
         sync: false
       - key: REDIS_PORT

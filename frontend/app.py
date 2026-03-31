@@ -110,6 +110,8 @@ def page_auth():
                     st.session_state.user = me
                     show_success("Logged in!")
                     st.rerun()
+                elif resp.status_code == 429:
+                    show_error("Too many login attempts. Please wait 1 minute and try again.")
                 else:
                     show_error(_detail(resp, "Login failed."))
 
@@ -124,6 +126,8 @@ def page_auth():
                 })
                 if resp.status_code == 201:
                     show_success("Account created! Please log in.")
+                elif resp.status_code == 429:
+                    show_error("Too many registration attempts. Please wait 1 minute and try again.")
                 else:
                     show_error(_detail(resp, "Registration failed."))
 
@@ -466,7 +470,7 @@ def page_ats_score():
     st.title("🎯 ATS Score Analyzer")
     st.markdown("Scores your resume against any job description in **< 1 second** — instant algorithmic analysis.")
 
-    resumes = api("get", "/resumes/").json() if st.session_state.token else []
+    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
         st.warning("Upload a resume first.")
         return
@@ -487,6 +491,9 @@ def page_ats_score():
         with st.spinner("Scoring..."):
             resp = api("post", "/ai/ats-score", json={"job_description": jd, "resume_id": selected_id})
 
+        if resp.status_code == 429:
+            show_error("Too many requests. Please wait 1 minute and try again.")
+            return
         if resp.status_code != 200:
             show_error(_detail(resp, "Scoring failed."))
             return

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     @computed_field
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """Sync URI — Alembic migrations only. Uses direct connection (port 5432)."""
         return (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -24,6 +25,12 @@ class Settings(BaseSettings):
 
     @computed_field
     def SQLALCHEMY_ASYNC_DATABASE_URI(self) -> str:
+        """Async URI — FastAPI endpoints via NullPool + Supabase Supavisor (port 6543).
+
+        Note: prepare_threshold=0 is passed via connect_args in db.py (as int).
+        Do NOT add it here as a URL query param — psycopg would receive it as a
+        string and raise TypeError: '>=' not supported between int and str.
+        """
         return (
             f"postgresql+psycopg_async://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
