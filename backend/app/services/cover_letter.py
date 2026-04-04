@@ -13,6 +13,9 @@ from langchain_core.prompts import PromptTemplate
 
 logger = logging.getLogger(__name__)
 
+# Resumes are typically 2–5 K chars; 6 K is generous while well within Groq's 128 K token window.
+_GROQ_RESUME_MAX_CHARS = 6_000
+
 _COVER_LETTER_PROMPT = PromptTemplate.from_template(
     """You are a professional career coach. Write a compelling, honest, and tailored cover letter.
 
@@ -103,8 +106,7 @@ def generate_cover_letter(resume_text: str, job_description: str) -> dict:
     from app.core.config import settings  # noqa: PLC0415
 
     if settings.USE_GROQ:
-        # Groq has 128K context — send the full resume directly, no vector search needed
-        context = resume_text[:6000]
+        context = resume_text[:_GROQ_RESUME_MAX_CHARS]
         chunks_used = 1
     else:
         context, chunks_used = _rag_retrieve(resume_text, job_description)

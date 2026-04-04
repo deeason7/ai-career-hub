@@ -1,7 +1,5 @@
-"""Cover letter endpoints — uses FastAPI BackgroundTasks instead of Celery.
-
-No separate worker service needed: generation runs as a thread inside the API process.
-"""
+"""Cover letter generation, status polling, and PDF download endpoints."""
+import io
 import logging
 import uuid
 from typing import Annotated
@@ -25,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Map DB status → Celery-compatible names (frontend polls these)
+# DB status values mapped to task-status names the frontend already understands.
 _STATUS_MAP = {
     "processing": "STARTED",
     "pending": "PENDING",
@@ -36,7 +34,7 @@ _STATUS_MAP = {
 
 def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
     """Background thread: generates cover letter and persists result to DB."""
-    logger.info(f"Background: generating cover letter {cover_letter_id}")
+    logger.info("Background: generating cover letter %s", cover_letter_id)
     try:
         result = generate_cover_letter(resume_text, job_description)
         cover_letter_text = result["cover_letter"]
@@ -48,10 +46,10 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                 cl.status = "success"
                 session.add(cl)
                 session.commit()
-                logger.info(f"Cover letter saved: {cover_letter_id}")
+                logger.info("Cover letter saved: %s", cover_letter_id)
 
     except Exception as exc:
-        logger.error(f"Cover letter background task failed: {exc}", exc_info=True)
+        logger.error("Cover letter background task failed: %s", exc, exc_info=True)
         try:
             with Session(sync_engine) as session:
                 cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
@@ -59,8 +57,8 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                     cl.status = "failure"
                     session.add(cl)
                     session.commit()
-        except Exception:
-            pass
+        except Exception as inner_exc:
+            logger.error("Failed to persist failure status for %s: %s", cover_letter_id, inner_exc)
 
 
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
@@ -178,10 +176,9 @@ async def download_cover_letter_pdf(
             detail="Cover letter has not been generated yet.",
         )
 
-    user_name = f"{current_user.full_name}" if hasattr(current_user, "full_name") else ""
+    user_name = current_user.full_name or ""
     pdf_bytes = generate_cover_letter_pdf(cl.generated_text, user_name=user_name)
 
-    import io
     filename = f"cover_letter_{str(cover_letter_id)[:8]}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
