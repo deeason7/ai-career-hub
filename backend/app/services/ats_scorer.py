@@ -1,15 +1,12 @@
 """
-ATS (Applicant Tracking System) Scorer Service - v2 with Semantic Similarity
+ATS Scorer — hybrid semantic + keyword + structure scoring.
 
-Scoring architecture:
-  50%  Semantic similarity  — sentence-transformers dense vector cosine sim
-  30%  Keyword match score  — exact + bigram overlap (kept as recall signal)
-  20%  Structure score      — section presence, length heuristics
+Weights:
+  50%  Semantic similarity  — sentence-transformers cosine similarity
+  30%  Keyword match        — exact + bigram overlap
+  20%  Structure heuristics — section presence and length
 
-Why sentence-transformers over TF-IDF:
-  - Captures synonyms: "built scalable pipelines" ↔ "data engineering"
-  - Language-model-grade embeddings (fine-tuned on MS-MARCO / NLI pairs)
-  - Fast inference: all-MiniLM-L6-v2 is only 80MB and runs in < 100ms on CPU
+Falls back to 80/20 keyword/structure if the embedding model fails to load.
 """
 import logging
 import re
@@ -17,11 +14,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-# numpy and sentence_transformers are imported LAZILY inside functions.
-# Reason: sentence-transformers pulls in torch (~700MB). Importing it at
-# module load time causes an OOM kill on Render free tier (512MB RAM)
-# before Uvicorn ever binds to port 8000 — the container crash-loops.
-# Lazy import means torch only loads on the FIRST ATS scoring request.
 
 logger = logging.getLogger(__name__)
 

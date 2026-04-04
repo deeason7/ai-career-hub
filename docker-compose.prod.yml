@@ -43,24 +43,6 @@ services:
         awslogs-region: us-east-1
         awslogs-stream: api
 
-  # ─── Celery Worker ────────────────────────────────────────────────────────
-  worker:
-    image: ${ECR_REGISTRY}/careerhub-backend:latest
-    restart: unless-stopped
-    env_file: .env.prod
-    environment:
-      REDIS_HOST: redis
-    depends_on:
-      redis:
-        condition: service_healthy
-    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=info --concurrency=2
-    logging:
-      driver: awslogs
-      options:
-        awslogs-group: /portfolio/careerhub-backend
-        awslogs-region: us-east-1
-        awslogs-stream: worker
-
   # ─── Streamlit Frontend ───────────────────────────────────────────────────
   frontend:
     image: ${ECR_REGISTRY}/careerhub-frontend:latest
