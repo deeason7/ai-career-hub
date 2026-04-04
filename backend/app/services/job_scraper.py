@@ -108,7 +108,7 @@ def _is_linkedin_url(url: str) -> bool:
     return "linkedin.com" in urlparse(url).netloc
 
 
-def fetch_job_description(url: str) -> dict:
+async def fetch_job_description(url: str) -> dict:
     """
     Fetch a job posting URL and extract the job description.
 
@@ -121,8 +121,8 @@ def fetch_job_description(url: str) -> dict:
         }
     """
     try:
-        with httpx.Client(headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True) as client:
-            resp = client.get(url)
+        async with httpx.AsyncClient(headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True) as client:
+            resp = await client.get(url)
     except httpx.TimeoutException:
         raise JobFetchError("Request timed out. The job site may be slow or unavailable.")
     except httpx.RequestError as exc:
@@ -134,12 +134,12 @@ def fetch_job_description(url: str) -> dict:
             "LinkedIn blocked the request (HTTP 999). "
             "Please paste the job description text manually."
         )
-    if resp.status_code == 401 or resp.status_code == 403:
+    if resp.status_code in (401, 403):
         raise JobFetchError(
             f"Access denied (HTTP {resp.status_code}). "
             "This job posting requires a login. Please paste the description manually."
         )
-    if resp.status_code != 200:
+    if not resp.is_success:
         raise JobFetchError(f"Failed to fetch page (HTTP {resp.status_code}).")
 
     soup = BeautifulSoup(resp.text, "html.parser")
