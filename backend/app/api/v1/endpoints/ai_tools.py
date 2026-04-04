@@ -129,7 +129,7 @@ async def fetch_job_from_url(
     Rate limited: 10 req/min per IP to avoid hammering external sites.
     """
     try:
-        result = fetch_job_description(payload.url)
+        result = await fetch_job_description(payload.url)
         return result
     except JobFetchError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

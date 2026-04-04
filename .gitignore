@@ -47,8 +47,7 @@ out/
 # Planning / internal docs (not for repo)
 
 
-# Stray artefacts at repo root (real ones live in backend/)
+# Stray empty ghost directories (real code lives in backend/)
 /alembic.ini
 /migrations/
 /app/
-/nginx/

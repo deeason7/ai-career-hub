@@ -30,7 +30,7 @@ def _get_model() -> Any:
     not at app startup. The lru_cache ensures it's loaded at most once.
     """
     from sentence_transformers import SentenceTransformer  # lazy import
-    logger.info(f"Loading sentence-transformers model: {MODEL_NAME}")
+    logger.info("Loading sentence-transformers model: %s", MODEL_NAME)
     return SentenceTransformer(MODEL_NAME)
 
 
@@ -219,7 +219,7 @@ def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
         semantic_score, section_scores = _score_semantic(resume_text, job_description)
     except Exception as exc:
         # Graceful degradation: fall back to keyword-only if model fails
-        logger.warning(f"Semantic scoring failed, falling back to keyword-only: {exc}")
+        logger.warning("Semantic scoring failed, falling back to keyword-only: %s", exc)
         semantic_score = 0.0
         section_scores = {}
 

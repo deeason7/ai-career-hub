@@ -2,7 +2,7 @@ name: CI — Lint & Test
 
 on:
   push:
-    branches: ["**"]
+    branches: [main, develop, "feat/**", "fix/**", "chore/**"]
   pull_request:
     branches: [main, develop]
 
@@ -26,15 +26,6 @@ jobs:
         ports:
           - 5432:5432
 
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
 
     steps:
       - name: Checkout code
@@ -62,8 +53,6 @@ jobs:
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
           POSTGRES_PORT: 5432
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
           OLLAMA_BASE_URL: http://localhost:11434
           SECRET_KEY: ci-test-secret-key-at-least-32-characters-long
           TESTING: "true"

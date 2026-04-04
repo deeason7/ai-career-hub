@@ -103,14 +103,12 @@ def parse_resume(raw_text: str) -> ParsedResume:
         raw_output = result.content if hasattr(result, "content") else str(result)
         raw_output = raw_output.strip()
 
-        # Strip markdown code fences if present
-        if raw_output.startswith("```"):
-            raw_output = raw_output.split("```")[1]
-            if raw_output.startswith("json"):
-                raw_output = raw_output[4:]
+        # Strip markdown code fences if present (handles ```json, ```JSON, trailing whitespace)
+        raw_output = re.sub(r"^```(?:json)?\s*\n?", "", raw_output, flags=re.IGNORECASE)
+        raw_output = re.sub(r"\n?```\s*$", "", raw_output)
 
         data = json.loads(raw_output)
         return ParsedResume(**data)
     except Exception as e:
-        logger.warning(f"Resume parsing failed, returning empty structure: {e}")
+        logger.warning("Resume parsing failed, returning empty structure: %s", e)
         return ParsedResume()
