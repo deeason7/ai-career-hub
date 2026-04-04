@@ -24,7 +24,15 @@ async def get_current_user(
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    result = await session.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    result = await session.execute(select(User).where(User.id == user_uuid))
     user = result.scalars().first()
     if not user or not user.is_active:
         raise HTTPException(

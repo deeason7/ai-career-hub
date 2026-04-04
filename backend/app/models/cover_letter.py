@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class CoverLetterBase(SQLModel):
-    job_description: str = Field(sa_column=Column(Text))
+    job_description: str
     ats_score: Optional[float] = Field(default=None)
 
 
@@ -21,9 +21,10 @@ class CoverLetter(CoverLetterBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
     resume_id: uuid.UUID = Field(foreign_key="resumes.id", index=True)
+    job_description: str = Field(sa_column=Column(Text))
     generated_text: Optional[str] = Field(default=None, sa_column=Column(Text))
-    task_id: Optional[str] = Field(default=None, max_length=255)  # Celery task ID
-    status: str = Field(default="pending", max_length=50)  # pending|processing|success|failure
+    task_id: Optional[str] = Field(default=None, max_length=255)
+    status: str = Field(default="pending", max_length=50)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships

@@ -1,7 +1,8 @@
+import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from app.services.cover_letter import generate_interview_questions, generate_ski
 from app.services.job_scraper import JobFetchError, fetch_job_description
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class AIRequest(BaseModel):
@@ -84,7 +86,14 @@ async def skill_gap(
 ):
     """Perform a skill gap analysis. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
-    result = generate_skill_gap_analysis(resume_text, payload.job_description)
+    try:
+        result = generate_skill_gap_analysis(resume_text, payload.job_description)
+    except Exception as exc:
+        logger.error("Skill gap analysis failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI service temporarily unavailable. Please try again.",
+        )
     return result
 
 
@@ -98,7 +107,14 @@ async def interview_questions(
 ):
     """Generate interview questions. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
-    questions = generate_interview_questions(resume_text, payload.job_description)
+    try:
+        questions = generate_interview_questions(resume_text, payload.job_description)
+    except Exception as exc:
+        logger.error("Interview question generation failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI service temporarily unavailable. Please try again.",
+        )
     return {"questions": questions, "count": len(questions)}
 
 
