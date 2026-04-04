@@ -1,17 +1,16 @@
-name: Deploy — Notify Render
+name: Deploy
 
 on:
   push:
     branches: [main]
 
-jobs:
-  deploy:
-    name: Trigger Render Auto-Deploy
-    runs-on: ubuntu-latest
+# CD pipeline is configured separately via GitHub Actions secrets + AWS SSM.
+# See infra/scripts/pull-secrets.sh and docker-compose.prod.yml for the
+# full deployment flow. This file will be expanded in the aws-migration step.
 
+jobs:
+  placeholder:
+    name: Deployment pending AWS migration
+    runs-on: ubuntu-latest
     steps:
-      - name: Notify deploy triggered
-        run: |
-          echo "✅ Push to main detected."
-          echo "Render auto-deploys from GitHub — no manual trigger needed."
-          echo "Monitor at: https://dashboard.render.com"
+      - run: echo "CD via AWS — see feat/aws-migration branch"

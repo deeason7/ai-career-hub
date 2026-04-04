@@ -1,0 +1,61 @@
+
+# Production compose for EC2.
+#
+# Database:  RDS PostgreSQL in private VPC — no db service here.
+# Cache:     Redis running locally on EC2 alongside the containers.
+# Secrets:   Pulled from SSM Parameter Store into .env.prod at deploy time.
+#            Run `bash infra/scripts/pull-secrets.sh` before `docker compose up`.
+#
+# Usage:
+#   export ECR_REGISTRY=REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d --remove-orphans
+#   docker image prune -f
+
+services:
+
+  # ─── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── FastAPI Backend ───────────────────────────────────────────────────────
+  api:
+    image: ${ECR_REGISTRY}/careerhub-backend:latest
+    restart: unless-stopped
+    env_file: .env.prod          # written by infra/scripts/pull-secrets.sh
+    environment:
+      REDIS_HOST: redis          # Docker network — not sensitive, no SSM needed
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /portfolio/careerhub-backend
+        awslogs-region: us-east-1
+        awslogs-stream: api
+
+  # ─── Streamlit Frontend ───────────────────────────────────────────────────
+  frontend:
+    image: ${ECR_REGISTRY}/careerhub-frontend:latest
+    restart: unless-stopped
+    environment:
+      API_URL: https://careerhub.deeason.com.np/api/v1
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /portfolio/careerhub-frontend
+        awslogs-region: us-east-1
+        awslogs-stream: frontend

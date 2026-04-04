@@ -4,7 +4,6 @@ Revision ID: 002_add_deadline_to_jobs
 Revises: 001_enable_rls
 Create Date: 2026-03-27
 """
-import sqlalchemy as sa
 from alembic import op
 
 revision = "002_add_deadline_to_jobs"
@@ -14,11 +13,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "job_applications",
-        sa.Column("deadline", sa.Date(), nullable=True),
+    # IF NOT EXISTS makes this idempotent — safe to re-run on a DB that
+    # already has the column (e.g. created via SQLModel create_all).
+    op.execute(
+        "ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS deadline DATE"
     )
 
 
 def downgrade() -> None:
-    op.drop_column("job_applications", "deadline")
+    op.execute(
+        "ALTER TABLE job_applications DROP COLUMN IF EXISTS deadline"
+    )

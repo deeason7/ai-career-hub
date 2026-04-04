@@ -54,49 +54,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     volumes:
       # Mount only the app source code for hot-reload — NOT the whole backend dir
       # This avoids shadowing /app/site-packages installed inside the container
       - ./backend/app:/app/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-  # ─── Celery Worker ────────────────────────────────────────
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: ./backend/.env
-    environment:
-      POSTGRES_SERVER: db
-      REDIS_HOST: redis
-      OLLAMA_BASE_URL: http://ollama:11434
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./backend/app:/app/app
-    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=info --concurrency=2
-
-  # ─── Flower (Celery Monitor) ──────────────────────────────
-  flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: ./backend/.env
-    environment:
-      REDIS_HOST: redis
-    ports:
-      - "5555:5555"
-    depends_on:
-      - redis
-      - worker
-    command: celery -A app.tasks.celery_app.celery_app flower --port=5555
 
   # ─── Streamlit Frontend ───────────────────────────────────
   frontend:
