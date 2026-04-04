@@ -114,17 +114,19 @@ async def activate_resume(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Set a resume as the active one (deactivates all others)."""
-    result = await session.execute(select(Resume).where(Resume.user_id == current_user.id))
-    all_resumes = result.scalars().all()
+    from sqlalchemy import update  # noqa: PLC0415
 
-    target = next((r for r in all_resumes if r.id == resume_id), None)
-    if not target:
+    target = await session.get(Resume, resume_id)
+    if not target or target.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
 
-    for r in all_resumes:
-        r.is_active = r.id == resume_id
-        session.add(r)
-
+    # Deactivate all, then activate the target — two targeted UPDATEs, no full scan
+    await session.execute(
+        update(Resume).where(Resume.user_id == current_user.id).values(is_active=False)
+    )
+    await session.execute(
+        update(Resume).where(Resume.id == resume_id).values(is_active=True)
+    )
     await session.commit()
     await session.refresh(target)
     return target
