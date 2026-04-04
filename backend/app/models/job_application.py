@@ -14,10 +14,9 @@ class JobApplicationBase(SQLModel):
     role: str = Field(max_length=255)
     job_url: Optional[str] = Field(default=None, max_length=500)
     status: str = Field(default="wishlist", max_length=50)
-    # Status: wishlist | applied | phone_screen | interview | offer | rejected | accepted
-    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
+    notes: Optional[str] = Field(default=None)
     applied_at: Optional[datetime] = Field(default=None)
-    deadline: Optional[date] = Field(default=None)  # Application deadline date
+    deadline: Optional[date] = Field(default=None)
 
 
 class JobApplication(JobApplicationBase, table=True):
@@ -25,6 +24,7 @@ class JobApplication(JobApplicationBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

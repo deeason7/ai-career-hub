@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Career Hub"
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api/v1"
-    PRODUCTION: bool = False  # Set to True via env var on Render to hide /docs
+    PRODUCTION: bool = False  # Set to True via env var in production to hide /docs
 
     # Database
     POSTGRES_SERVER: str
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Redis & Celery
     REDIS_HOST: str
     REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str = ""  # Required for Upstash; empty for local Docker Redis
+    REDIS_PASSWORD: str = ""  # Set when Redis requires auth; empty for local/EC2 Docker Redis
 
     @computed_field
     def CELERY_BROKER_URL(self) -> str:

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user
@@ -33,11 +33,11 @@ async def create_application(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}",
         )
-    app = JobApplication(user_id=current_user.id, **payload.model_dump())
-    session.add(app)
+    job_app = JobApplication(user_id=current_user.id, **payload.model_dump())
+    session.add(job_app)
     await session.commit()
-    await session.refresh(app)
-    return app
+    await session.refresh(job_app)
+    return job_app
 
 
 @router.get("/", response_model=list[JobApplicationRead])
@@ -61,14 +61,21 @@ async def application_stats(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Return a breakdown of job applications by status."""
-    result = await session.execute(
-        select(JobApplication).where(JobApplication.user_id == current_user.id)
+    total_result = await session.execute(
+        select(func.count()).where(JobApplication.user_id == current_user.id)
     )
-    apps = result.scalars().all()
+    total = total_result.scalar_one()
+
+    breakdown_result = await session.execute(
+        select(JobApplication.status, func.count())
+        .where(JobApplication.user_id == current_user.id)
+        .group_by(JobApplication.status)
+    )
     breakdown = {s: 0 for s in VALID_STATUSES}
-    for app in apps:
-        breakdown[app.status] = breakdown.get(app.status, 0) + 1
-    return {"total": len(apps), "by_status": breakdown}
+    for row_status, count in breakdown_result.all():
+        breakdown[row_status] = count
+
+    return {"total": total, "by_status": breakdown}
 
 
 @router.patch("/{app_id}", response_model=JobApplicationRead)
@@ -79,8 +86,8 @@ async def update_application(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Update any field on a job application (partial update)."""
-    app = await session.get(JobApplication, app_id)
-    if not app or app.user_id != current_user.id:
+    job_app = await session.get(JobApplication, app_id)
+    if not job_app or job_app.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found.")
     if payload.status and payload.status not in VALID_STATUSES:
         raise HTTPException(
@@ -89,12 +96,12 @@ async def update_application(
         )
     update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
-        setattr(app, key, value)
-    app.updated_at = datetime.now(timezone.utc)
-    session.add(app)
+        setattr(job_app, key, value)
+    job_app.updated_at = datetime.now(timezone.utc)
+    session.add(job_app)
     await session.commit()
-    await session.refresh(app)
-    return app
+    await session.refresh(job_app)
+    return job_app
 
 
 @router.delete("/{app_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -104,8 +111,8 @@ async def delete_application(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Delete a job application."""
-    app = await session.get(JobApplication, app_id)
-    if not app or app.user_id != current_user.id:
+    job_app = await session.get(JobApplication, app_id)
+    if not job_app or job_app.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found.")
-    await session.delete(app)
+    await session.delete(job_app)
     await session.commit()
