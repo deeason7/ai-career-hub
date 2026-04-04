@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     @computed_field
     def SQLALCHEMY_DATABASE_URI(self) -> str:
-        """Sync URI — Alembic migrations only. Uses direct connection (port 5432)."""
+        """Sync URI — used by Alembic and synchronous background tasks."""
         return (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -25,12 +25,7 @@ class Settings(BaseSettings):
 
     @computed_field
     def SQLALCHEMY_ASYNC_DATABASE_URI(self) -> str:
-        """Async URI — FastAPI endpoints via NullPool + Supabase Supavisor (port 6543).
-
-        Note: prepare_threshold=0 is passed via connect_args in db.py (as int).
-        Do NOT add it here as a URL query param — psycopg would receive it as a
-        string and raise TypeError: '>=' not supported between int and str.
-        """
+        """Async URI — FastAPI request handlers via SQLAlchemy async engine."""
         return (
             f"postgresql+psycopg_async://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -69,7 +64,19 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    SENTRY_DSN: str = ""  # Optional — set on Render to enable error tracking
+    SENTRY_DSN: str = ""  # Optional — set to enable error tracking
+
+    # CORS — comma-separated list of allowed origins.
+    # Locally defaults to Streamlit dev server; in production set via env/SSM.
+    # Example: "https://careerhub.deeason.com.np,http://localhost:8501"
+    ALLOWED_ORIGINS: str = "http://localhost:8501"
+
+    @computed_field
+    def CORS_ORIGINS(self) -> list[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    # Storage
+    S3_BUCKET: str = ""  # Set in production via env/SSM
 
     model_config = SettingsConfigDict(
         env_file="backend/.env",
