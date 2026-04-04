@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -89,7 +90,6 @@ async def update_application(
     update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(app, key, value)
-    from datetime import datetime, timezone
     app.updated_at = datetime.now(timezone.utc)
     session.add(app)
     await session.commit()
