@@ -4,13 +4,6 @@ on:
   push:
     branches: [main]
 
-# CD pipeline is configured separately via GitHub Actions secrets + AWS SSM.
-# See infra/scripts/pull-secrets.sh and docker-compose.prod.yml for the
-# full deployment flow. This file will be expanded in the aws-migration step.
-
-jobs:
-  placeholder:
-    name: Deployment pending AWS migration
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "CD via AWS — see feat/aws-migration branch"
+# CD is manual for now: SSH into EC2, run infra/scripts/pull-secrets.sh,
+# then docker compose -f docker-compose.prod.yml up -d --remove-orphans.
+# This workflow will be expanded when GitHub Actions → EC2 SSH is configured.
