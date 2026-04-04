@@ -19,7 +19,6 @@ router = APIRouter()
 MAX_RESUMES_PER_USER = 10
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB — matches Streamlit frontend cap
 
-# Only accept genuine document MIME types — blocks executables, archives, etc.
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -43,21 +42,19 @@ async def upload_resume(
             detail=f"Maximum of {MAX_RESUMES_PER_USER} resumes per user. Delete one first.",
         )
 
-    # Validate MIME type — only allow PDF, DOCX, TXT
     if file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Unsupported file type. Please upload a PDF, DOCX, or TXT file.",
         )
 
-    # Enforce 5 MB file size limit
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="File too large. Maximum size is 5 MB.",
         )
-    await file.seek(0)  # Reset so extract_text_from_upload can read it
+    await file.seek(0)
 
     try:
         raw_text = await extract_text_from_upload(file)

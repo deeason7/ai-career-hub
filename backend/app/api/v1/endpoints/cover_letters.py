@@ -1,7 +1,5 @@
-"""Cover letter endpoints — uses FastAPI BackgroundTasks instead of Celery.
-
-No separate worker service needed: generation runs as a thread inside the API process.
-"""
+"""Cover letter generation, status polling, and PDF download endpoints."""
+import io
 import logging
 import uuid
 from typing import Annotated
@@ -25,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Map DB status → Celery-compatible names (frontend polls these)
+# DB status values mapped to task-status names the frontend already understands.
 _STATUS_MAP = {
     "processing": "STARTED",
     "pending": "PENDING",
@@ -181,7 +179,6 @@ async def download_cover_letter_pdf(
     user_name = f"{current_user.full_name}" if hasattr(current_user, "full_name") else ""
     pdf_bytes = generate_cover_letter_pdf(cl.generated_text, user_name=user_name)
 
-    import io
     filename = f"cover_letter_{str(cover_letter_id)[:8]}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
