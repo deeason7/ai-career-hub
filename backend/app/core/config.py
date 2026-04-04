@@ -31,8 +31,9 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    # Redis & Celery
-    REDIS_HOST: str
+    # Redis — used for rate limiting and future caching.
+    # Defaults to the Docker Compose service name; override in non-Docker environments.
+    REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: str = ""  # Set when Redis requires auth; empty for local/EC2 Docker Redis
 
