@@ -6,15 +6,15 @@ Upload your resume, score it semantically against job descriptions, generate hon
 [![CI](https://github.com/deeason7/ai-career-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/deeason7/ai-career-hub/actions/workflows/ci.yml)
 [![Deploy](https://github.com/deeason7/ai-career-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/deeason7/ai-career-hub/actions/workflows/deploy.yml)
 
-## 🌐 Live Demo
+## 🌐 Live
 
 | Service | URL |
 |---------|-----|
-| **Frontend** | https://ai-career-hub-frontend.onrender.com |
-| **API (Swagger)** | https://ai-career-hub-api.onrender.com/docs |
-| **Health Check** | https://ai-career-hub-api.onrender.com/health |
+| **Frontend** | https://careerhub.deeason.com.np |
+| **API (Swagger)** | https://careerhub.deeason.com.np/api/v1/docs *(dev only)* |
+| **Health Check** | https://careerhub.deeason.com.np/health |
 
-> **Note:** Free tier services spin down after 15 min of inactivity. First load may take ~30s to wake up.
+> Hosted on AWS EC2 (t3.micro) behind nginx. RDS PostgreSQL (free tier) in private VPC.
 
 ---
 
@@ -23,13 +23,13 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | Feature | Details |
 |---------|---------|
 | 👤 **Multi-Resume Management** | Upload, store, and switch between up to 10 resumes per user (PDF, DOCX, TXT — 5 MB max) |
-| 🧠 **Semantic ATS Score Analyzer** | sentence-transformers dense vector similarity + keyword matching + structure scoring — catches synonym matches that keyword-only ATS misses |
-| 📝 **AI Cover Letter Generator** | RAG-based zero-hallucination generation using FAISS + LangChain — only uses facts from YOUR resume |
-| 📄 **PDF Export** | Download any generated cover letter as a professionally formatted PDF |
-| 🔗 **Job URL Import** | Paste a LinkedIn / Greenhouse / Lever URL to auto-fill the job description field |
+| 🧠 **Semantic ATS Scorer** | `sentence-transformers` dense vector similarity + keyword matching + structure scoring — catches synonym matches keyword-only ATS systems miss |
+| 📝 **AI Cover Letter Generator** | RAG-based generation using FAISS + LangChain — only uses facts from YOUR resume, no hallucinations |
+| 📄 **PDF Export** | Download any generated cover letter as a professionally formatted PDF via `reportlab` |
+| 🔗 **Job URL Import** | Paste a LinkedIn / Greenhouse / Lever / Workday URL to auto-fill the job description |
 | 🔍 **Skill Gap Analysis** | Identify missing skills with AI-powered upskilling recommendations |
 | 🎙️ **Interview Question Generator** | 10 tailored questions generated from your resume + job description |
-| 📊 **Application Tracker** | Full pipeline tracking with optional deadline dates and color-coded urgency badges |
+| 📊 **Application Tracker** | Full pipeline tracking with deadline dates and colour-coded urgency badges (🔴🟡🟠) |
 | ⚖️ **Legal Disclaimer** | Post-login disclaimer modal with "I Understand" + "Never Show Again" options |
 
 ---
@@ -38,27 +38,36 @@ Upload your resume, score it semantically against job descriptions, generate hon
 
 ```
                     GitHub Actions (CI)
-                          │  lint + test on every PR
+                          │  lint + test on push to main/develop
                           ▼
-┌─────────────────────────────────────────────────┐
-│                  Render.com                     │
-│  ┌──────────────┐        ┌──────────────────┐  │
-│  │  Streamlit   │◄──────►│    FastAPI       │  │
-│  │  Frontend    │  HTTP  │    Backend       │  │
-│  └──────────────┘        └────────┬─────────┘  │
-│                                   │             │
-│              ┌────────────────────┤             │
-│              │                    │             │
-│  ┌───────────▼────┐   ┌──────────▼──────────┐  │
-│  │   Supabase     │   │    Groq API (free)  │  │
-│  │   PostgreSQL   │   │  LLaMA 3.1 8B LLM  │  │
-│  │  + RLS Rules   │   └─────────────────────┘  │
-│  └────────────────┘                             │
-└─────────────────────────────────────────────────┘
+              ┌───────────────────────┐
+              │     AWS EC2 (t3.micro)│
+              │                       │
+              │  ┌─────────────────┐  │
+              │  │  nginx (port 80)│  │
+              │  └────────┬────────┘  │
+              │           │           │
+              │    ┌──────┴──────┐    │
+              │    │             │    │
+              │  ┌─▼──────┐  ┌──▼──┐ │
+              │  │FastAPI │  │ ST  │ │
+              │  │:8000   │  │:8501│ │
+              │  └────┬───┘  └─────┘ │
+              │       │ Redis:6379    │
+              └───────┼───────────────┘
+                      │
+          ┌───────────▼────────────┐
+          │  AWS RDS PostgreSQL    │
+          │  (private VPC subnet)  │
+          └────────────────────────┘
+                      │ Groq API (cloud LLM)
+                      ▼
+              LLaMA 3.1 8B Instant
 ```
 
-**Cover letter generation** runs as a FastAPI `BackgroundTask` — no separate Celery worker needed.  
-**Semantic ATS scoring** uses `all-MiniLM-L6-v2` (80 MB, CPU-only, loaded once at startup via `lru_cache`).
+**Cover letter generation** runs as a FastAPI `BackgroundTask` — no separate Celery worker.  
+**ATS scoring** uses sentence-transformers `all-MiniLM-L6-v2` (80 MB, CPU-only, singleton via `lru_cache`).  
+**Secrets** are pulled from AWS SSM Parameter Store at deploy time via `infra/scripts/pull-secrets.sh`.
 
 ---
 
@@ -66,18 +75,18 @@ Upload your resume, score it semantically against job descriptions, generate hon
 
 | Area | Implementation |
 |------|---------------|
-| **Rate Limiting** | `slowapi` — register: 5/min, login: 10/min, AI: 20/min, cover letter: 5/min, job fetch: 10/min |
-| **CORS** | Restricted to known origins only (no wildcard `*`) |
-| **Database RLS** | Row Level Security enabled on all tables (Alembic migration 001) — blocks direct PostgREST access |
-| **JWT Security** | `PyJWT` (migrated from vulnerable `python-jose`); 24h expiry |
-| **Password Policy** | Minimum 8 characters enforced at model level |
-| **File Uploads** | 5 MB size limit, strict MIME type allowlist (PDF/DOCX/TXT), filename sanitization |
-| **Security Headers** | `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `X-XSS-Protection` on every response |
-| **API Docs** | Hidden in production (`PRODUCTION=true` env var) |
-| **Input Validation** | JD ≤ 10,000 chars, resume name ≤ 100 chars enforced by Pydantic |
-| **Error Monitoring** | Sentry SDK integrated — opt-in via `SENTRY_DSN` env var |
-| **Migrations** | `alembic upgrade head` runs on every container start |
-| **Email Enumeration** | Generic conflict message on duplicate registration |
+| **Authentication** | JWT (`PyJWT`, HS256) — 24h expiry, `is_active` check on every request |
+| **Token Validation** | Malformed `sub` claim → 401 (not 500) — `ValueError` caught before UUID parse |
+| **Rate Limiting** | `slowapi` — register: 5/min · login: 10/min · AI: 20/min · cover letter: 5/min · job fetch: 10/min |
+| **Password Policy** | Minimum 8 characters enforced at model level; `bcrypt` hashing |
+| **CORS** | Restricted to known origins only — no wildcard `*` with credentials |
+| **File Uploads** | 5 MB size limit · strict MIME type allowlist (PDF/DOCX/TXT) · filename sanitization |
+| **Security Headers** | `X-Content-Type-Options` · `X-Frame-Options: DENY` · `Referrer-Policy` · `X-XSS-Protection` |
+| **API Docs** | Hidden when `PRODUCTION=true` — no attack surface leakage |
+| **Input Validation** | JD ≤ 10,000 chars · resume name ≤ 100 chars · enforced by Pydantic v2 |
+| **Error Monitoring** | Sentry SDK integrated — opt-in via `SENTRY_DSN` |
+| **LLM Failures** | 502 Bad Gateway returned (not raw 500) when Groq/Ollama are unavailable |
+| **Production Startup** | `create_all()` skipped in production — Alembic owns the schema |
 
 ---
 
@@ -85,17 +94,18 @@ Upload your resume, score it semantically against job descriptions, generate hon
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend API** | FastAPI 0.111, SQLModel, Alembic, Python 3.11 |
-| **Database** | PostgreSQL via Supabase (permanent free tier) + Row Level Security |
-| **AI / LLM** | Groq API (LLaMA 3.1 8B instant) — cloud; Ollama (local dev) |
+| **Backend API** | FastAPI 0.111 · SQLModel · Alembic · Python 3.11 |
+| **Database** | AWS RDS PostgreSQL 16 (private VPC) |
+| **AI / LLM** | Groq API (LLaMA 3.1 8B instant) — cloud; Ollama (local dev fallback) |
 | **Semantic NLP** | `sentence-transformers` — `all-MiniLM-L6-v2` for ATS semantic scoring |
-| **RAG Pipeline** | LangChain · FAISS · nomic-embed-text embeddings |
-| **PDF Generation** | `reportlab` — server-side, no headless browser needed |
-| **Web Scraping** | `httpx` + `beautifulsoup4` — JSON-LD structured data extraction |
+| **RAG Pipeline** | LangChain · FAISS · `nomic-embed-text` embeddings |
+| **PDF Generation** | `reportlab` — server-side, no headless browser |
+| **Web Scraping** | `httpx.AsyncClient` + `beautifulsoup4` — JSON-LD first, meta/HTML fallback |
 | **Frontend** | Streamlit |
-| **Security** | PyJWT, passlib[bcrypt], slowapi, python-magic (MIME validation) |
-| **Infrastructure** | Docker · Docker Compose · nginx |
-| **CI/CD** | GitHub Actions → Render.com auto-deploy |
+| **Security** | PyJWT · passlib[bcrypt] · slowapi · python-magic (MIME validation) |
+| **Infrastructure** | AWS EC2 · RDS · ECR · nginx · Docker Compose |
+| **Observability** | Sentry · AWS CloudWatch (awslogs driver) |
+| **CI** | GitHub Actions — ruff lint + pytest on push to `main`/`develop` |
 
 ---
 
@@ -103,7 +113,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
 
 ### Prerequisites
 - Docker & Docker Compose
-- Git
+- A free [Groq API key](https://console.groq.com)
 
 ### 1. Clone
 ```bash
@@ -114,43 +124,45 @@ cd ai-career-hub
 ### 2. Configure environment
 ```bash
 cp backend/.env.example backend/.env
-# Edit backend/.env — minimum required:
-#   POSTGRES_* (or let Docker use defaults)
-#   GROQ_API_KEY=gsk_... (free at console.groq.com)
+# Minimum required fields in backend/.env:
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+#   GROQ_API_KEY=gsk_...
 #   SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 ```
 
-### 3. Run
+### 3. Start
 ```bash
 docker compose up --build
 ```
 
 ### 4. Open
+
 | Service | URL |
 |---------|-----|
 | Frontend | http://localhost:8501 |
 | API Swagger | http://localhost:8000/docs |
+| Health | http://localhost:8000/health |
 
-> **First run:** `sentence-transformers` downloads `all-MiniLM-L6-v2` (~80 MB) on first ATS score request. Subsequent requests are fast (model cached in memory).
+> **First ATS run:** `sentence-transformers` downloads `all-MiniLM-L6-v2` (~80 MB) on the first request. Subsequent calls use the in-memory singleton.
 
 ---
 
-## 🌿 Branch Strategy (GitFlow-Lite)
+## 🌿 Branch Strategy
 
 | Branch | Purpose | Merges to |
 |--------|---------|-----------|
-| `main` | Production — protected, auto-deploys | — |
-| `develop` | Integration — all PRs merge here first | `main` (via release) |
-| `feature/*` | New feature work | `develop` |
+| `main` | Production — protected | — |
+| `develop` | Integration — all work lands here | `main` (via release PR) |
+| `feat/*` | New features | `develop` |
 | `fix/*` | Bug fixes | `develop` |
 | `hotfix/*` | Critical production fixes | `main` + `develop` |
 
 ```bash
 git checkout develop && git pull origin develop
-git checkout -b feature/my-feature
+git checkout -b feat/my-feature
 # ... work, commit ...
-git push origin feature/my-feature
-# Open PR: feature/my-feature → develop
+git push origin feat/my-feature
+# Open PR: feat/my-feature → develop
 ```
 
 ---
@@ -158,79 +170,102 @@ git push origin feature/my-feature
 ## 🧪 Tests
 
 ```bash
-# Start DB first
-docker compose up db -d
-
-# Run tests
+# Run inside the API container (no local Python needed)
 docker exec -it ai-career-hub-api-1 pytest tests/ -v --tb=short
+
+# Or with a local Python env
+cd backend
+POSTGRES_SERVER=localhost POSTGRES_USER=... pytest tests/ -v --tb=short
 ```
 
-Tests cover: authentication, resume upload, ATS scoring (keyword + semantic), job tracker CRUD.
+Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker CRUD.
 
-> Rate limiting is automatically disabled in CI via `TESTING=true` environment variable.
+> Rate limiting is automatically disabled in CI via `TESTING=true`.
 
 ---
 
-## 📦 Deployment
+## ☁️ Deployment (AWS EC2)
 
-Deployed on [Render.com](https://render.com) with infrastructure-as-code via `render.yaml`.
+### Infrastructure
+| Resource | Details |
+|----------|---------|
+| EC2 | `t3.micro` — Docker Compose stack |
+| RDS | PostgreSQL 16 · `db.t3.micro` · private subnet |
+| ECR | `REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com` |
+| Secrets | AWS SSM Parameter Store → `.env.prod` |
+| Logs | CloudWatch (`/portfolio/careerhub-*`) |
 
-| Service | Type | Plan |
-|---------|------|------|
-| `ai-career-hub-api` | Web Service (Docker) | Free |
-| `ai-career-hub-frontend` | Web Service (Docker) | Free |
-| PostgreSQL | Supabase | Free (permanent) |
+### Deploy workflow
+```bash
+# On your local machine — build & push images
+export ECR_REGISTRY=REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml push
 
-**Required environment variables on Render:**
+# On EC2 — pull secrets & restart stack
+bash infra/scripts/pull-secrets.sh          # writes .env.prod from SSM
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
+docker image prune -f
 ```
-POSTGRES_SERVER, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT
-REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-SECRET_KEY
-GROQ_API_KEY
-PRODUCTION=true
-SENTRY_DSN=      # optional — Sentry project DSN
+
+### Required SSM Parameters
+```
+/careerhub/POSTGRES_SERVER
+/careerhub/POSTGRES_USER
+/careerhub/POSTGRES_PASSWORD
+/careerhub/POSTGRES_DB
+/careerhub/SECRET_KEY
+/careerhub/GROQ_API_KEY
+/careerhub/SENTRY_DSN       # optional
+/careerhub/ALLOWED_ORIGINS
 ```
 
 ---
 
 ## 🗺️ Roadmap
 
-### ✅ v1.1 — Security & Reliability
+### ✅ v1.x — Security & Features
 - [x] File upload: 5 MB limit, MIME type allowlist, filename sanitization
-- [x] Rate limiting on auth + AI endpoints (`slowapi`)
-- [x] CORS restricted to known origins
-- [x] Security headers on every response
+- [x] Rate limiting on auth + AI endpoints
+- [x] CORS restricted, security headers on every response
 - [x] JWT migrated to `PyJWT`
-- [x] Row Level Security enabled on all DB tables
-- [x] API docs hidden in production
-- [x] Sentry error tracking integrated
-
-### ✅ v1.2 — Features
-- [x] Cover letter PDF export (`reportlab`)
-- [x] LinkedIn / Greenhouse / Lever job URL → auto-fill job description
-- [x] Application deadline field with urgency badges (🔴🟡🟠)
-- [x] Legal disclaimer modal with "Never Show Again"
+- [x] Cover letter PDF export
+- [x] LinkedIn / Greenhouse / Lever job URL auto-fill (async httpx)
+- [x] Application deadline field with urgency badges
 - [x] Semantic ATS scoring (`sentence-transformers`)
+- [x] Legal disclaimer modal
 
-### 🔜 v1.3 — ML & Data Science
+### ✅ v2.0 — AWS Migration
+- [x] Migrated from Render/Supabase → AWS EC2 + RDS
+- [x] Celery replaced with FastAPI `BackgroundTasks`
+- [x] Alembic migrations hardened with `IF NOT EXISTS`
+- [x] UUID parse security fix (ValueError → 401)
+- [x] LLM failure handling (502 instead of 500)
+- [x] Async httpx replaces blocking sync client
+- [x] O(N) stats + activate queries replaced with SQL COUNT/UPDATE
+- [x] CloudWatch log driver on all containers
+
+### 🔜 v2.1 — ML & Data Science
 - [ ] Resume section classifier (spaCy NER)
 - [ ] Application pipeline funnel chart (Plotly)
 - [ ] Skill gap priority scorer (TF-IDF + co-occurrence ranking)
-- [ ] Resume quality scorer (action verb density, readability score)
+- [ ] Resume quality scorer (action verb density, readability)
 - [ ] Hybrid RAG: BM25 + Dense + Cross-encoder reranker
 
-### 🔜 v2.0 — Scale
-- [ ] Password reset via email (Resend.com)
-- [ ] Cover letter tone selector (formal / casual / creative)
+### 🔜 v3.0 — Scale
 - [ ] Next.js frontend (replace Streamlit)
+- [ ] Password reset via email
+- [ ] Cover letter tone selector (formal / casual / creative)
 - [ ] Resume version history & diff viewer
-- [ ] Stripe subscription tiers
+- [ ] Automated CD via GitHub Actions → EC2 SSH
 
 ---
 
 ## 🤝 Contributing
 
-1. Fork → `git checkout -b feature/your-feature`
+1. Fork → `git checkout -b feat/your-feature`
 2. Commit: `git commit -m 'feat(scope): description'`
 3. Push & open PR to `develop`
 
@@ -246,56 +281,33 @@ MIT © 2026 [deeason7](https://github.com/deeason7)
 
 > **This project is for educational and demonstration purposes only.**
 
-The author makes no warranties — express or implied — about the completeness, reliability, accuracy, or suitability of this software or the AI-generated content it produces. Any action you take based on information or output from this platform is **strictly at your own risk**.
+The author makes no warranties about the completeness, reliability, accuracy, or suitability of this software or the AI-generated content it produces. Any action you take based on output from this platform is **strictly at your own risk**.
 
-The author will **not** be liable for any losses, damages, or negative outcomes — financial, professional, or otherwise — arising from:
-
-- Use or misuse of this software
-- AI-generated cover letters, ATS scores, or interview questions that are inaccurate or unsuitable
-- Reliance on this platform's output as professional career, legal, or financial advice
-- Data loss or security incidents resulting from self-hosted deployments
+The author will **not** be liable for losses, damages, or negative outcomes arising from use of this software, AI-generated content that is inaccurate, or data loss from self-hosted deployments.
 
 **AI-generated content is not professional advice.** Always review and verify AI outputs before using them in real job applications.
 
 ---
 
-## 🤖 AI Content Notice
-
-This platform uses large language models (LLaMA 3.1 via Groq API) to generate content. The AI:
-
-- May produce **inaccurate, incomplete, or hallucinated** information despite RAG safeguards
-- Should **not** be used as a substitute for professional career counselling
-- Generates outputs based on the resume and job description you provide — the author is **not responsible** for the content of your inputs or outputs
-
-Always proofread AI-generated cover letters and questions before submitting to employers.
-
----
-
 ## 🔒 Privacy Notice
 
-**Live Demo Deployment**
-
-The live demo at `ai-career-hub-frontend.onrender.com` is hosted on third-party platforms:
+**Live Deployment**
 
 | Platform | Role | Privacy Policy |
 |----------|------|---------------|
-| [Render.com](https://render.com) | Hosts API and frontend containers | [render.com/privacy](https://render.com/privacy) |
-| [Supabase](https://supabase.com) | Hosts PostgreSQL database | [supabase.com/privacy](https://supabase.com/privacy) |
-| [Groq](https://groq.com) | Processes AI inference requests | [groq.com/privacy-policy](https://groq.com/privacy-policy/) |
+| [AWS EC2](https://aws.amazon.com) | Hosts containers | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
+| [AWS RDS](https://aws.amazon.com/rds/) | PostgreSQL database | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
+| [Groq](https://groq.com) | AI inference | [groq.com/privacy-policy](https://groq.com/privacy-policy/) |
 
 **What is stored:**
 - Account email, hashed password (bcrypt), and full name
-- Resume text content extracted from uploaded files (raw files are NOT stored)
+- Resume text extracted from uploaded files (raw files are **not** stored)
 - Cover letters, ATS scores, and job application records you create
 
 **What is NOT stored:**
-- Raw uploaded files (only extracted text is persisted)
-- Payment information (no payments collected)
+- Raw uploaded files — only extracted text is persisted
+- Payment information — no payments collected
 - Browser fingerprints, cookies beyond session, or tracking data
-
-**Your rights:**
-- Delete resumes and job tracker entries at any time from the UI
-- To request full account deletion, open a GitHub issue
 
 **Recommendations:**
 - Do **not** upload resumes containing passport numbers, government IDs, or financial account details to the public demo
