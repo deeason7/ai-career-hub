@@ -23,8 +23,9 @@ if settings.SENTRY_DSN:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: ensure tables exist (dev only; use Alembic in prod)."""
-    await create_db_and_tables()
+    """Startup: create tables via SQLModel in dev; Alembic owns schema in production."""
+    if not settings.PRODUCTION:
+        await create_db_and_tables()
     yield
 
 
