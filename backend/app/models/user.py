@@ -38,9 +38,3 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     id: uuid.UUID
     created_at: datetime
-
-
-class UserUpdate(SQLModel):
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
