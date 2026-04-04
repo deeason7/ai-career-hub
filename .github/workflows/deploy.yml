@@ -10,7 +10,7 @@ on:
 
 jobs:
   noop:
-    name: CD is manual — see infra/scripts/
+    name: CD is manual — deploy via infra/scripts/
     runs-on: ubuntu-latest
     steps:
-      - run: echo "No automated CD yet. Deploy manually via EC2 SSH."
+      - run: echo "No automated CD configured yet. Deploy manually via EC2 SSH."
