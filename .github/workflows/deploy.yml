@@ -4,13 +4,37 @@ on:
   push:
     branches: [main]
 
-# CD is manual for now: SSH into EC2, run infra/scripts/pull-secrets.sh,
-# then docker compose -f docker-compose.prod.yml up -d --remove-orphans.
-# This workflow will be expanded when GitHub Actions → EC2 SSH is configured.
+# ── Manual Deployment (current) ────────────────────────────────────────────────
+#
+# Automated CD is not yet wired up. To deploy a new version:
+#
+#   1. Build & push images from your local machine:
+#        export ECR_REGISTRY=REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+#        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
+#        docker build -t $ECR_REGISTRY/careerhub-backend:latest ./backend
+#        docker build -t $ECR_REGISTRY/careerhub-frontend:latest ./frontend
+#        docker push $ECR_REGISTRY/careerhub-backend:latest
+#        docker push $ECR_REGISTRY/careerhub-frontend:latest
+#
+#   2. Connect to EC2 via SSM Session Manager:
+#        aws ssm start-session --target REDACTED_INSTANCE_ID --region us-east-1
+#
+#   3. Run the deploy script (handles secrets, image pull, stack restart):
+#        cd /home/ec2-user/ai-career-hub && bash infra/scripts/deploy.sh
+#
+# ── Roadmap: Automated CD ─────────────────────────────────────────────────────
+# TODO (v3.0): Replace this with a real GitHub Actions job that:
+#   - Builds images with docker/build-push-action
+#   - Pushes to ECR
+#   - SSHes into EC2 via appleboy/ssh-action and runs deploy.sh
 
 jobs:
-  noop:
-    name: CD is manual — deploy via infra/scripts/
+  notify-manual-deploy:
+    name: "CD — manual deploy required (see workflow comments)"
     runs-on: ubuntu-latest
     steps:
-      - run: echo "No automated CD configured yet. Deploy manually via EC2 SSH."
+      - name: Remind about manual deploy process
+        run: |
+          echo "A push to main was detected."
+          echo "Automated CD is not yet configured."
+          echo "Follow the steps in .github/workflows/deploy.yml to deploy manually."
