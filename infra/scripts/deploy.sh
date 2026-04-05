@@ -19,9 +19,13 @@
 set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ECR_REGISTRY="REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
 REGION="us-east-1"
 COMPOSE_FILE="docker-compose.prod.yml"
+
+# Derive AWS account ID at runtime — never hardcode it in source control.
+# This also makes the script portable: it works for any AWS account that deploys this repo.
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
 export ECR_REGISTRY   # docker compose reads this for image: ${ECR_REGISTRY}/... substitution
 
