@@ -36,6 +36,9 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
     """Background thread: generates cover letter and persists result to DB."""
     logger.info("Background: generating cover letter %s", cover_letter_id)
     try:
+        # NOTE: _run_cover_letter_bg is a sync function. FastAPI's BackgroundTasks
+        # calls sync functions via run_in_threadpool (thread pool executor), so the
+        # event loop is NOT blocked. Direct call is correct here.
         result = generate_cover_letter(resume_text, job_description)
         cover_letter_text = result["cover_letter"]
 
