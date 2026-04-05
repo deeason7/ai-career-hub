@@ -3,7 +3,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +26,9 @@ class AIRequest(BaseModel):
 
 
 class JobUrlRequest(BaseModel):
-    url: str = Field(..., max_length=2000)
+    # AnyHttpUrl enforces http/https scheme — blocks SSRF via file://, ftp://, or
+    # internal AWS metadata endpoint (169.254.169.254) on EC2.
+    url: AnyHttpUrl = Field(..., max_length=2000)
 
 
 async def _get_resume_text(
@@ -38,7 +40,7 @@ async def _get_resume_text(
     if resume_id:
         resume = await session.get(Resume, resume_id)
         if not resume or resume.user_id != current_user.id:
-            raise HTTPException(status_code=404, detail="Resume not found.")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
         result = await session.execute(
             select(Resume).where(Resume.user_id == current_user.id, Resume.is_active.is_(True))
@@ -46,7 +48,7 @@ async def _get_resume_text(
         resume = result.scalars().first()
         if not resume:
             raise HTTPException(
-                status_code=404,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="No active resume. Upload a resume and activate it first.",
             )
     return resume.raw_text
@@ -129,7 +131,7 @@ async def fetch_job_from_url(
     Rate limited: 10 req/min per IP to avoid hammering external sites.
     """
     try:
-        result = await fetch_job_description(payload.url)
+        result = await fetch_job_description(str(payload.url))
         return result
     except JobFetchError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

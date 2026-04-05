@@ -1,9 +1,9 @@
 """
 Real integration tests for the API (register, login, resume CRUD, ATS score, job tracker).
-Requires: PostgreSQL and Redis to be running (via Docker Compose).
+Requires: PostgreSQL running (Docker Compose).
 
 Run with: pytest tests/test_api.py -v
-Start services first: docker compose up db redis -d
+Start services first: docker compose up db -d
 """
 import pytest
 import pytest_asyncio
@@ -128,8 +128,9 @@ async def test_get_me_authenticated(client: AsyncClient):
 
 @pytest_asyncio.fixture
 async def auth_token(client: AsyncClient):
-    """Create a user and return auth token."""
-    email = "ats_user@example.com"
+    """Create a unique user per test run and return auth token."""
+    import uuid as _uuid
+    email = f"ats_user_{_uuid.uuid4().hex[:8]}@example.com"
     await client.post("/api/v1/auth/register", json={
         "email": email, "full_name": "ATS User", "password": "atspass1",
     })
