@@ -189,37 +189,44 @@ Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker 
 ### Infrastructure
 | Resource | Details |
 |----------|---------|
-| EC2 | `t3.micro` — Docker Compose stack |
+| EC2 | `t3.small` — Docker Compose stack |
 | RDS | PostgreSQL 16 · `db.t3.micro` · private subnet |
-| ECR | `REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com` |
+| ECR | `<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com` (derive: `aws sts get-caller-identity --query Account --output text`) |
 | Secrets | AWS SSM Parameter Store → `.env.prod` |
 | Logs | CloudWatch (`/portfolio/careerhub-*`) |
 
 ### Deploy workflow
 ```bash
 # On your local machine — build & push images
-export ECR_REGISTRY=REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+# Derive your ECR registry URL from your AWS identity (no hardcoded account IDs)
+export ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml push
+docker build -t $ECR_REGISTRY/careerhub-backend:latest ./backend
+docker build -t $ECR_REGISTRY/careerhub-frontend:latest ./frontend
+docker push $ECR_REGISTRY/careerhub-backend:latest
+docker push $ECR_REGISTRY/careerhub-frontend:latest
 
-# On EC2 — pull secrets & restart stack
-bash infra/scripts/pull-secrets.sh          # writes .env.prod from SSM
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
-docker image prune -f
+# On EC2 — run the single deploy entry point (handles secrets + stack restart)
+# Connect: aws ssm start-session --target $EC2_INSTANCE_ID --region us-east-1
+bash infra/scripts/deploy.sh
 ```
 
 ### Required SSM Parameters
+
+All parameters live under the `/portfolio/careerhub` prefix.
+Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads the whole prefix automatically.
+
 ```
-/careerhub/POSTGRES_SERVER
-/careerhub/POSTGRES_USER
-/careerhub/POSTGRES_PASSWORD
-/careerhub/POSTGRES_DB
-/careerhub/SECRET_KEY
-/careerhub/GROQ_API_KEY
-/careerhub/SENTRY_DSN       # optional
-/careerhub/ALLOWED_ORIGINS
+/portfolio/careerhub/POSTGRES_SERVER
+/portfolio/careerhub/POSTGRES_USER
+/portfolio/careerhub/POSTGRES_PASSWORD
+/portfolio/careerhub/POSTGRES_DB
+/portfolio/careerhub/POSTGRES_PORT
+/portfolio/careerhub/SECRET_KEY
+/portfolio/careerhub/GROQ_API_KEY
+/portfolio/careerhub/ALLOWED_ORIGINS
+/portfolio/careerhub/PRODUCTION
+/portfolio/careerhub/SENTRY_DSN        # optional — add for Sentry error tracking
 ```
 
 ---
