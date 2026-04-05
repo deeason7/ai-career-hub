@@ -14,7 +14,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **API (Swagger)** | https://careerhub.deeason.com.np/api/v1/docs *(dev only)* |
 | **Health Check** | https://careerhub.deeason.com.np/health |
 
-> Hosted on AWS EC2 (t3.micro) behind nginx. RDS PostgreSQL (free tier) in private VPC.
+> Hosted on AWS EC2 (t3.small) behind nginx. RDS PostgreSQL (`db.t3.micro`) in a private VPC subnet. TLS via Let's Encrypt — pending `.np` DNS propagation (see [Deployment](DEPLOYMENT.md)).
 
 ---
 
@@ -189,7 +189,7 @@ Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker 
 ### Infrastructure
 | Resource | Details |
 |----------|---------|
-| EC2 | `t3.small` — Docker Compose stack |
+| EC2 | `t3.small` (Ubuntu 24.04) — Docker Compose stack |
 | RDS | PostgreSQL 16 · `db.t3.micro` · private subnet |
 | ECR | `<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com` (derive: `aws sts get-caller-identity --query Account --output text`) |
 | Secrets | AWS SSM Parameter Store → `.env.prod` |
@@ -244,7 +244,7 @@ Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads th
 - [x] Semantic ATS scoring (`sentence-transformers`)
 - [x] Legal disclaimer modal
 
-### ✅ v2.0 — AWS Migration
+### ✅ v2.0 — AWS Production Deployment
 - [x] Migrated from Render/Supabase → AWS EC2 + RDS
 - [x] Celery replaced with FastAPI `BackgroundTasks`
 - [x] Alembic migrations hardened with `IF NOT EXISTS`
@@ -253,6 +253,12 @@ Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads th
 - [x] Async httpx replaces blocking sync client
 - [x] O(N) stats + activate queries replaced with SQL COUNT/UPDATE
 - [x] CloudWatch log driver on all containers
+- [x] Docker images built for `linux/amd64`, pushed to ECR
+- [x] Secrets in SSM Parameter Store — zero secrets in source code
+- [x] Full git history audit + credential rotation (git-filter-repo)
+- [x] AWS Budgets alerts (daily $5 + monthly $40)
+- [x] Stack live on EC2 — all 4 Alembic migrations applied against RDS
+- [ ] TLS — certbot pending `.np` DNS propagation (see [DEPLOYMENT.md](DEPLOYMENT.md))
 
 ### 🔜 v2.1 — ML & Data Science
 - [ ] Resume section classifier (spaCy NER)
