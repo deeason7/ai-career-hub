@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import uuid
@@ -61,7 +62,9 @@ async def upload_resume(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
-    parsed = parse_resume(raw_text)
+    # parse_resume calls Groq/Ollama (sync HTTP, 2-10s) — offload to thread pool
+    # so we don't block the event loop for every upload request.
+    parsed = await asyncio.to_thread(parse_resume, raw_text)
     parsed_json = parsed.model_dump_json()
     is_first = len(existing) == 0
 
