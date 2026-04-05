@@ -4,7 +4,7 @@ set -euo pipefail
 REGION="us-east-1"
 
 INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=careerhub-server" \
+  --filters "Name=tag:Name,Values=portfolio-server" \
             "Name=instance-state-name,Values=running" \
   --query "Reservations[0].Instances[0].InstanceId" \
   --output text --region "$REGION")
