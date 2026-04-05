@@ -8,8 +8,8 @@
 # TLS:       Let's Encrypt certs on the EC2 host, mounted into the nginx container.
 #            Renew with: sudo certbot renew && docker compose -f docker-compose.prod.yml restart nginx
 #
-# Usage:
-#   export ECR_REGISTRY=REDACTED_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+# Usage (ECR_REGISTRY is derived at runtime — see infra/scripts/deploy.sh):
+#   export ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d --remove-orphans
 #   docker image prune -f
