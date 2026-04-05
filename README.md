@@ -211,15 +211,21 @@ docker image prune -f
 ```
 
 ### Required SSM Parameters
+
+All parameters live under the `/portfolio/careerhub` prefix.
+Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads the whole prefix automatically.
+
 ```
-/careerhub/POSTGRES_SERVER
-/careerhub/POSTGRES_USER
-/careerhub/POSTGRES_PASSWORD
-/careerhub/POSTGRES_DB
-/careerhub/SECRET_KEY
-/careerhub/GROQ_API_KEY
-/careerhub/SENTRY_DSN       # optional
-/careerhub/ALLOWED_ORIGINS
+/portfolio/careerhub/POSTGRES_SERVER
+/portfolio/careerhub/POSTGRES_USER
+/portfolio/careerhub/POSTGRES_PASSWORD
+/portfolio/careerhub/POSTGRES_DB
+/portfolio/careerhub/POSTGRES_PORT
+/portfolio/careerhub/SECRET_KEY
+/portfolio/careerhub/GROQ_API_KEY
+/portfolio/careerhub/ALLOWED_ORIGINS
+/portfolio/careerhub/PRODUCTION
+/portfolio/careerhub/SENTRY_DSN        # optional — add for Sentry error tracking
 ```
 
 ---
