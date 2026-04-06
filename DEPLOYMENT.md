@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Production deployment for AI Career Hub on AWS. Last deployed: 2026-04-05.
+Production deployment for AI Career Hub on AWS. Last updated: 2026-04-06.
 
 ---
 
@@ -8,11 +8,11 @@ Production deployment for AI Career Hub on AWS. Last deployed: 2026-04-05.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| EC2 stack | **Live** | All 4 containers running |
-| RDS PostgreSQL | **Live** | 4 migrations applied |
-| Domain | **Pending** | DNS propagating for `.np` — ETA 12-24h |
-| TLS | **Pending** | Waiting on DNS before certbot |
-| HTTP access | **Working** | `http://34.234.125.14` reachable now |
+| EC2 stack | **Stopped** | Start with `start.sh` before deploying |
+| RDS PostgreSQL | **Stopped** | Starts automatically with `start.sh` |
+| Domain | **Pending** | `.np` TLD delegation propagating — check with nslookup |
+| TLS | **Pending** | Waiting on DNS before certbot DNS-01 challenge |
+| HTTP access | **Working** | `http://34.234.125.14` reachable when EC2 is up |
 
 ---
 
@@ -77,6 +77,16 @@ All parameters live under `/portfolio/careerhub/`. The EC2 instance role has rea
 - **Record:** `careerhub.deeason.com.np → 34.234.125.14` (type A, TTL 300)
 - **Nameservers:** Delegated from Mercantile to Route 53
 
+### IAM
+
+- **Developer user:** `deeason-dev`
+- **Policy:** `portfolio-developer` (least-privilege — scoped to `portfolio-*` resources only)
+- **Permissions:** EC2 start/stop, RDS start/stop/modify, SSM `/portfolio/*`, ECR careerhub repos, Route53 deeason.com.np zone, CloudTrail read
+- **MFA:** Required on both root and `deeason-dev`
+- **Root:** MFA enabled, no access keys — never used for daily operations
+
+To update the policy (requires root console): IAM → Policies → `portfolio-developer` → Edit.
+
 ### Monitoring
 
 - **CloudWatch:** All containers log to `/portfolio/careerhub-backend`, `/portfolio/careerhub-frontend`, `/portfolio/careerhub-nginx`
@@ -120,30 +130,96 @@ bash infra/scripts/deploy.sh
 Once `nslookup careerhub.deeason.com.np 8.8.8.8` returns `34.234.125.14`:
 
 ```bash
-# On EC2 — as ubuntu (or with sudo)
-sudo certbot certonly --standalone \
+# On EC2 — as ubuntu
+# Install certbot with Route53 DNS plugin (EC2 role already has Route53 permissions)
+sudo apt-get install -y python3-certbot-dns-route53
+
+# Issue cert via DNS-01 challenge (no port 80 needed, more reliable)
+sudo certbot certonly --dns-route53 \
   --domain careerhub.deeason.com.np \
   --agree-tos \
   --email deeasonsitaula5@gmail.com \
   --non-interactive
 
-# Restore the HTTPS nginx config from git
+# Restore the HTTPS nginx config and docker-compose from git
 cd ~/ai-career-hub
+git pull origin main
 git checkout nginx/nginx.conf
 git checkout docker-compose.prod.yml
 
-# Also update API_URL back to https in docker-compose.prod.yml
-# Then restart nginx to load the certs
-docker compose -f docker-compose.prod.yml restart nginx
+# Restart the full stack with HTTPS config
+ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com \
+  docker compose -f docker-compose.prod.yml up -d --force-recreate --pull never
 
 # Verify
 curl -s https://careerhub.deeason.com.np/health
 ```
 
-Certbot auto-renewal is set up by default (systemd timer). After renewal, restart nginx:
+Certbot auto-renewal runs via systemd timer. After each renewal, nginx must reload:
 ```bash
 sudo certbot renew && docker compose -f docker-compose.prod.yml restart nginx
 ```
+
+---
+
+## Credential Rotation
+
+Rotate all secrets when a leak is suspected or on a scheduled basis (every 90 days recommended).
+
+### Rotate RDS password + SSM
+
+```bash
+# Generate new password (alphanumeric, 32 chars)
+NEW_PASS=$(python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32)))")
+
+# Apply to RDS (takes ~2 min to propagate)
+aws rds modify-db-instance \
+  --db-instance-identifier portfolio-db \
+  --master-user-password "$NEW_PASS" \
+  --apply-immediately --region us-east-1
+
+# Update SSM immediately
+aws ssm put-parameter \
+  --name "/portfolio/careerhub/POSTGRES_PASSWORD" \
+  --value "$NEW_PASS" --type SecureString --overwrite --region us-east-1
+
+# Wait 3 min for RDS to fully apply, then pull secrets and FORCE-RECREATE the container
+# WARNING: `docker compose restart` does NOT re-read env_file.
+# You MUST use --force-recreate to apply new credentials.
+sleep 180
+bash infra/scripts/pull-secrets.sh
+ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com \
+  docker compose -f docker-compose.prod.yml up -d --force-recreate --pull never api
+```
+
+### Rotate JWT secret key
+
+```bash
+NEW_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+aws ssm put-parameter \
+  --name "/portfolio/careerhub/SECRET_KEY" \
+  --value "$NEW_SECRET" --type SecureString --overwrite --region us-east-1
+# Note: rotating SECRET_KEY invalidates all active user sessions.
+# Force-recreate api container after updating SSM.
+```
+
+### Rotate Groq API key
+
+1. Go to console.groq.com → API Keys → create new → delete old
+2. Update SSM: `aws ssm put-parameter --name "/portfolio/careerhub/GROQ_API_KEY" --value "NEW_KEY" --type SecureString --overwrite --region us-east-1`
+3. Force-recreate api container
+
+### Rotate IAM access keys
+
+```bash
+# Create new key, update ~/.aws/credentials, then delete old key
+aws iam create-access-key --user-name deeason-dev
+aws configure set aws_access_key_id NEW_KEY_ID
+aws configure set aws_secret_access_key NEW_SECRET
+aws iam delete-access-key --user-name deeason-dev --access-key-id OLD_KEY_ID
+```
+
+Do this rotation in a terminal session NOT connected to any AI assistant to avoid credential exposure.
 
 ---
 
