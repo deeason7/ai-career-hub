@@ -10,11 +10,11 @@ Upload your resume, score it semantically against job descriptions, generate hon
 
 | Service | URL |
 |---------|-----|
-| **Frontend** | https://careerhub.deeason.com.np |
-| **API (Swagger)** | https://careerhub.deeason.com.np/api/v1/docs *(dev only)* |
-| **Health Check** | https://careerhub.deeason.com.np/health |
+| **Frontend** | http://34.234.125.14 |
+| **Health Check** | http://34.234.125.14/health |
 
-> Hosted on AWS EC2 (t3.small) behind nginx. RDS PostgreSQL (`db.t3.micro`) in a private VPC subnet. TLS via Let's Encrypt — pending `.np` DNS propagation (see [Deployment](DEPLOYMENT.md)).
+> Hosted on AWS EC2 (t3.small) behind nginx. RDS PostgreSQL (`db.t3.micro`) in a private VPC subnet.  
+> ⏳ Custom domain `careerhub.deeason.com.np` pending `.np` DNS propagation — HTTPS via Let's Encrypt will be enabled once DNS resolves (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 ---
 
@@ -41,7 +41,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
                           │  lint + test on push to main/develop
                           ▼
               ┌───────────────────────┐
-              │     AWS EC2 (t3.micro)│
+              │     AWS EC2 (t3.small) │
               │                       │
               │  ┌─────────────────┐  │
               │  │  nginx (port 80)│  │
@@ -87,6 +87,14 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Error Monitoring** | Sentry SDK integrated — opt-in via `SENTRY_DSN` |
 | **LLM Failures** | 502 Bad Gateway returned (not raw 500) when Groq/Ollama are unavailable |
 | **Production Startup** | `create_all()` skipped in production — Alembic owns the schema |
+| **IAM Least Privilege** | Custom least-privilege IAM policy — scoped to project resources only; no `RunInstances`, no wildcard permissions |
+| **MFA** | Enforced on root account (no access keys) and all developer IAM users |
+| **EC2 IMDS** | IMDSv2 required — SSRF attacks cannot steal EC2 instance role credentials |
+| **EC2 Role** | Read-only SSM parameter access; ECR pull-only; no S3, no KMS, no write permissions |
+| **Secrets Rotation** | All secrets (DB, JWT, Groq, IAM keys) rotated and managed via AWS SSM Parameter Store |
+| **Budget Kill Switch** | Lambda auto-stops EC2 + RDS when daily AWS spend exceeds $5 — zero run-away billing risk |
+| **Audit Logs** | CloudTrail logging to private S3 bucket; CloudWatch 30-day retention on all container logs |
+| **Cost Anomaly Detection** | AWS ML-based anomaly detector fires on statistically unusual spend patterns |
 
 ---
 
@@ -252,13 +260,20 @@ Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads th
 - [x] LLM failure handling (502 instead of 500)
 - [x] Async httpx replaces blocking sync client
 - [x] O(N) stats + activate queries replaced with SQL COUNT/UPDATE
-- [x] CloudWatch log driver on all containers
-- [x] Docker images built for `linux/amd64`, pushed to ECR
-- [x] Secrets in SSM Parameter Store — zero secrets in source code
-- [x] Full git history audit + credential rotation (git-filter-repo)
-- [x] AWS Budgets alerts (daily $5 + monthly $40)
+- [x] CloudWatch log driver on all containers + 30-day retention policy
+- [x] Docker images built for `linux/amd64`, pushed to ECR (lifecycle: 3 images max)
+- [x] Secrets in SSM Parameter Store — zero secrets in source code or git history
+- [x] Full git history audit + credential rotation via `git-filter-repo`
+- [x] AWS Budgets alerts (daily $5 + monthly $40) + ML cost anomaly detection
 - [x] Stack live on EC2 — all 4 Alembic migrations applied against RDS
-- [ ] TLS — certbot pending `.np` DNS propagation (see [DEPLOYMENT.md](DEPLOYMENT.md))
+- [x] Full credential rotation — RDS master password, JWT secret, Groq API key, IAM access keys
+- [x] Hardened IAM — least-privilege custom policy, MFA on root + developer user
+- [x] IMDSv2 enforced on EC2 — eliminates SSRF-based credential theft vector
+- [x] EC2 IAM role tightened — read-only SSM, no S3/KMS/write access
+- [x] Budget kill switch — Lambda auto-stops EC2 + RDS at $5/day spend threshold
+- [x] Stale Elastic IPs released — eliminated $7.30/month in silent billing
+- [x] CloudTrail audit confirmed clean — no unauthorized API usage detected
+- [ ] TLS — certbot DNS-01 pending `.np` DNS propagation (see [DEPLOYMENT.md](DEPLOYMENT.md))
 
 ### 🔜 v2.1 — ML & Data Science
 - [ ] Resume section classifier (spaCy NER)
