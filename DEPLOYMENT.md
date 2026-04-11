@@ -8,11 +8,11 @@ Production deployment for AI Career Hub on AWS. Last updated: 2026-04-06.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| EC2 stack | **Stopped** | Start with `start.sh` before deploying |
-| RDS PostgreSQL | **Stopped** | Starts automatically with `start.sh` |
-| Domain | **Pending** | `.np` TLD delegation propagating — check with nslookup |
-| TLS | **Pending** | Waiting on DNS before certbot DNS-01 challenge |
-| HTTP access | **Working** | `http://34.234.125.14` reachable when EC2 is up |
+| EC2 stack | **On-demand** | Sleeps when idle. Starts automatically when someone visits the domain (Wake on Visit) |
+| RDS PostgreSQL | **On-demand** | Starts with EC2 via Lambda wake controller |
+| Domain | **Live** | `careerhub.deeason.com.np` resolves correctly |
+| TLS | **Live** | HTTPS via Let's Encrypt certbot DNS-01 |
+| Wake on Visit | **Live** | Route 53 failover → CloudFront → S3 splash page → Lambda boots EC2+RDS |
 
 ---
 
@@ -234,11 +234,33 @@ bash infra/scripts/start.sh
 # Then SSM in and run deploy.sh
 ```
 
-Expected costs at rest:
-- EC2 t3.small: ~$0.50/day
-- RDS db.t3.micro: ~$0.41/day
-- Storage + misc: ~$0.10/day
-- **Total: ~$1/day, ~$30/month**
+Expected costs:
+- **On-demand** (Wake on Visit active, ~5 hrs/month actual use): **~$1–2/month**
+  - Lambda + API GW + S3 + CloudFront: ~$0 (free tier)
+  - Route 53 health check: ~$0.50
+  - EC2/RDS only when running: ~$0.10–0.50
+- Always-on (for reference): EC2 t3.small ~$15/mo + RDS db.t3.micro ~$12/mo
+
+---
+
+## Wake on Visit Setup
+
+Run once to deploy the full Wake on Visit infrastructure:
+
+```bash
+# Ensure EC2 is running before setup (health check needs a live target)
+bash infra/scripts/start.sh --no-wait
+
+# Full setup (~15 min, mostly waiting for CloudFront deployment)
+bash infra/scripts/setup-wake-on-visit.sh
+
+# After setup, stop EC2/RDS — visitors will wake it automatically
+bash infra/scripts/stop.sh
+```
+
+The setup script is **idempotent** — re-run it safely if anything fails. State is saved in `infra/wake-page/.state`.
+
+To remove everything: `bash infra/scripts/setup-wake-on-visit.sh --teardown`
 
 ---
 

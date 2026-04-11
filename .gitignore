@@ -1,3 +1,10 @@
+# Wake on Visit — generated at deploy time
+infra/wake-page/.state
+infra/wake-page/wake_controller.zip
+
+# Security scan output (gitleaks)
+report.json
+
 # Python
 __pycache__/
 *.py[cod]
