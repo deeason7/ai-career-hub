@@ -1,32 +1,42 @@
 """
 wake_controller.py  —  Lambda for the "Wake on Visit" feature.
 
-Fixes vs v1:
+Changes vs v1:
 - Supports both HTTP API v2 (requestContext.http) and REST API (httpMethod) event shapes
 - Health check hits EC2 by PUBLIC IP (not domain) so it works even when
   Route 53 is still routing to CloudFront during the failover window
 - Handles all intermediate RDS states gracefully (starting, backing-up, etc.)
 - Returns EC2 public IP so the frontend can show it in the status bar
+- AUTO-SLEEP: on every /wake call, schedules a one-time EventBridge Scheduler
+  rule to stop EC2+RDS after AUTO_STOP_MINUTES (default 90 min). Each new
+  wake call resets the timer. Zero manual action required.
 
 Endpoints:
   GET  /status  →  { ec2, rds, app, ip }
   POST /wake    →  { message, ec2, rds }
+  (internal)    →  invoked by EventBridge Scheduler with { "action": "stop" }
 """
 
 import json
 import os
 import urllib.request
+from datetime import datetime, timezone, timedelta
 
 import boto3
 
 # ── Config (from Lambda env vars) ────────────────────────────────────────────
-REGION       = os.environ.get("AWS_REGION_", "us-east-1")
-EC2_TAG_NAME = os.environ.get("EC2_TAG_NAME", "portfolio-server")
-RDS_ID       = os.environ.get("RDS_ID", "portfolio-db")
-HEALTH_PORT  = os.environ.get("HEALTH_PORT", "80")   # hit EC2 directly on port 80
+REGION          = os.environ.get("AWS_REGION_", "us-east-1")
+EC2_TAG_NAME    = os.environ.get("EC2_TAG_NAME", "portfolio-server")
+RDS_ID          = os.environ.get("RDS_ID", "portfolio-db")
+HEALTH_PORT     = os.environ.get("HEALTH_PORT", "80")
+AUTO_STOP_MIN   = int(os.environ.get("AUTO_STOP_MINUTES", "90"))
+LAMBDA_ARN      = os.environ.get("LAMBDA_ARN", "")          # own ARN for scheduler target
+SCHEDULER_ROLE  = os.environ.get("SCHEDULER_ROLE_ARN", "")  # role that lets scheduler invoke us
+SCHEDULE_NAME   = "portfolio-auto-stop"
 
-ec2 = boto3.client("ec2", region_name=REGION)
-rds = boto3.client("rds", region_name=REGION)
+ec2       = boto3.client("ec2",       region_name=REGION)
+rds       = boto3.client("rds",       region_name=REGION)
+scheduler = boto3.client("scheduler", region_name=REGION)
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",
@@ -42,9 +52,13 @@ RDS_TRANSITIONAL = {"starting", "stopping", "backing-up", "rebooting",
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 def lambda_handler(event, context):
+    # Internal call from EventBridge Scheduler (auto-stop timer)
+    if event.get("action") == "stop":
+        return handle_auto_stop()
+
     # Support both HTTP API v2 (requestContext.http) and REST API (httpMethod)
-    rc   = event.get("requestContext", {})
-    http = rc.get("http", {})
+    rc     = event.get("requestContext", {})
+    http   = rc.get("http", {})
     method = (http.get("method") or event.get("httpMethod", "GET")).upper()
     path   = (http.get("path")   or event.get("rawPath") or event.get("path", "/status"))
 
@@ -58,7 +72,7 @@ def lambda_handler(event, context):
 
 # ── GET /status ───────────────────────────────────────────────────────────────
 def handle_status():
-    instance = _get_instance()
+    instance  = _get_instance()
     ec2_state = instance["state"] if instance else "unknown"
     ec2_ip    = instance["ip"]    if instance else None
 
@@ -105,7 +119,85 @@ def handle_wake():
     except Exception as exc:
         results["rds"] = f"error: {exc}"
 
+    # ── Schedule auto-stop (reset timer on every wake call) ──
+    _schedule_auto_stop()
+
     return _resp(202, results)
+
+
+# ── AUTO-STOP (invoked by EventBridge Scheduler) ──────────────────────────────
+def handle_auto_stop():
+    """Stop EC2 + RDS. Called automatically after AUTO_STOP_MINUTES of uptime."""
+    results = {}
+
+    try:
+        instance = _get_instance()
+        if instance and instance["state"] == "running":
+            ec2.stop_instances(InstanceIds=[instance["id"]])
+            results["ec2"] = "stopping"
+            print(f"[auto-stop] EC2 {instance['id']} stop signal sent")
+        else:
+            results["ec2"] = instance["state"] if instance else "unknown"
+    except Exception as exc:
+        results["ec2"] = f"error: {exc}"
+        print(f"[auto-stop] EC2 error: {exc}")
+
+    try:
+        rds_state = _get_rds_state()
+        if rds_state == "available":
+            rds.stop_db_instance(DBInstanceIdentifier=RDS_ID)
+            results["rds"] = "stopping"
+            print(f"[auto-stop] RDS {RDS_ID} stop signal sent")
+        else:
+            results["rds"] = rds_state
+    except Exception as exc:
+        results["rds"] = f"error: {exc}"
+        print(f"[auto-stop] RDS error: {exc}")
+
+    return {"statusCode": 200, "body": json.dumps(results)}
+
+
+# ── SCHEDULE AUTO-STOP ────────────────────────────────────────────────────────
+def _schedule_auto_stop():
+    """
+    Create (or reset) a one-time EventBridge Scheduler rule that calls this
+    Lambda with {"action": "stop"} after AUTO_STOP_MINUTES.
+
+    Requires env vars: LAMBDA_ARN, SCHEDULER_ROLE_ARN
+    """
+    if not LAMBDA_ARN or not SCHEDULER_ROLE:
+        print("[auto-stop] LAMBDA_ARN or SCHEDULER_ROLE_ARN not set — skipping")
+        return
+
+    stop_at  = datetime.now(timezone.utc) + timedelta(minutes=AUTO_STOP_MIN)
+    at_expr  = f"at({stop_at.strftime('%Y-%m-%dT%H:%M:%S')})"
+
+    # Delete existing schedule first (to reset the timer)
+    try:
+        scheduler.delete_schedule(Name=SCHEDULE_NAME)
+        print(f"[auto-stop] previous schedule deleted")
+    except scheduler.exceptions.ResourceNotFoundException:
+        pass
+    except Exception as exc:
+        print(f"[auto-stop] delete schedule error: {exc}")
+
+    # Create new one-time schedule
+    try:
+        scheduler.create_schedule(
+            Name=SCHEDULE_NAME,
+            ScheduleExpression=at_expr,
+            ScheduleExpressionTimezone="UTC",
+            Target={
+                "Arn":    LAMBDA_ARN,
+                "RoleArn": SCHEDULER_ROLE,
+                "Input":  json.dumps({"action": "stop"}),
+            },
+            FlexibleTimeWindow={"Mode": "OFF"},
+            ActionAfterCompletion="DELETE",   # self-deletes after firing
+        )
+        print(f"[auto-stop] scheduled at {stop_at.isoformat()} (in {AUTO_STOP_MIN} min)")
+    except Exception as exc:
+        print(f"[auto-stop] create schedule error: {exc}")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
