@@ -325,15 +325,13 @@
           showSuccess();
           return;
         }
-        if (data.ec2 === 'running' || data.ec2 === 'pending') {
-          // Already starting — jump straight into polling
-          wakeStarted = true;
-          updateUI(data);
-          startPolling();
-          startTimer();
-        }
+        // App not healthy yet — always send /wake (Lambda is idempotent:
+        // starting an already-running EC2/RDS is a safe no-op on AWS).
+        // This handles: EC2 running but RDS asleep, or partial boot states.
+        updateUI(data);
+        await wakeUp();   // sends /wake, enables polling, starts timer
       } catch (e) {
-        // App is definitely offline — show the normal wake button
+        // Offline — show the normal wake button
       }
     });
 
