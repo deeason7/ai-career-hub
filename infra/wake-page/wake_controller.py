@@ -53,9 +53,13 @@ RDS_TRANSITIONAL = {"starting", "stopping", "backing-up", "rebooting",
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 def lambda_handler(event, context):
-    # Internal call from EventBridge Scheduler (auto-stop timer)
+    # Internal EventBridge Scheduler calls
+    #   action:stop  — one-time 90-min idle timer OR 6 PM ET recurring stop
+    #   action:wake  — 9 AM ET Mon–Fri recurring business-hours start
     if event.get("action") == "stop":
         return handle_auto_stop()
+    if event.get("action") == "wake":
+        return handle_scheduled_wake()  # business-hours start, no auto-stop timer
 
     # Support both HTTP API v2 (requestContext.http) and REST API (httpMethod)
     rc     = event.get("requestContext", {})
@@ -98,9 +102,14 @@ def handle_status():
     })
 
 
-# ── POST /wake ────────────────────────────────────────────────────────────────
-def handle_wake():
-    results = {"message": "Wake signal sent"}
+# ── Shared start helper ───────────────────────────────────────────────────────────────
+def _start_all() -> dict:
+    """Start EC2 and RDS. Returns a results dict.
+
+    Shared by the HTTP /wake endpoint (Wake-on-Visit) and the scheduled
+    business-hours wake (EventBridge action:"wake") to avoid duplication.
+    """
+    results: dict = {}
 
     # ── EC2 ──
     try:
@@ -120,21 +129,49 @@ def handle_wake():
             rds.start_db_instance(DBInstanceIdentifier=RDS_ID)
             results["rds"] = "starting"
         elif rds_state in RDS_TRANSITIONAL:
-            results["rds"] = rds_state   # already waking, don't double-start
+            results["rds"] = rds_state   # already waking, don’t double-start
         else:
             results["rds"] = rds_state
     except Exception as exc:
         results["rds"] = f"error: {exc}"
 
-    # ── Schedule auto-stop (reset timer on every wake call) ──
-    _schedule_auto_stop()
+    return results
 
+
+# ── POST /wake ───────────────────────────────────────────────────────────────
+def handle_wake():
+    """HTTP /wake — starts EC2+RDS and resets the 90-min idle auto-stop timer."""
+    results = _start_all()
+    results["message"] = "Wake signal sent"
+    _schedule_auto_stop()   # reset 90-min idle timer on every Wake-on-Visit call
     return _resp(202, results)
+
+
+# ── SCHEDULED BUSINESS-HOURS WAKE (EventBridge action:"wake") ──────────────────
+def handle_scheduled_wake():
+    """Invoked by EventBridge Scheduler at 9 AM ET Mon–Fri.
+
+    Starts EC2 + RDS for business hours.  Does NOT set an auto-stop timer —
+    the 6 PM ET recurring stop schedule handles shutdown cleanly.
+    The Wake-on-Visit 90-min idle timer still applies to off-hours visits.
+    """
+    results = _start_all()
+    results["message"] = "Business-hours wake"
+    print(json.dumps({
+        "event": "scheduled_wake",
+        "ec2":   results.get("ec2"),
+        "rds":   results.get("rds"),
+    }))
+    return {"statusCode": 200, "body": json.dumps(results)}
 
 
 # ── AUTO-STOP (invoked by EventBridge Scheduler) ──────────────────────────────
 def handle_auto_stop():
-    """Stop EC2 + RDS. Called automatically after AUTO_STOP_MINUTES of uptime."""
+    """Stop EC2 + RDS. Called by two sources:
+
+    - Wake-on-Visit: one-time EventBridge Schedule fired 90 min after last /wake
+    - Business hours: recurring EventBridge Schedule at 6 PM ET Mon–Fri
+    """
     results = {}
 
     try:
