@@ -83,8 +83,12 @@ echo ""
 # ── Upsert helper: update if exists, create if not ────────────────────────────
 upsert_schedule() {
   local name=$1 cron=$2 action=$3
-  # Build target JSON safely without shell quoting issues
-  local target="Arn=${LAMBDA_ARN},RoleArn=${SCHEDULER_ROLE_ARN},Input={\"action\":\"${action}\"}"
+  # --target must be full JSON (not shorthand) because the Input field contains
+  # nested JSON with double quotes, which the AWS CLI shorthand parser rejects.
+  # Input itself must be a JSON-encoded string (double-escaped), not an object.
+  local target
+  target=$(printf '{"Arn":"%s","RoleArn":"%s","Input":"{\"action\":\"%s\"}"}' \
+    "$LAMBDA_ARN" "$SCHEDULER_ROLE_ARN" "$action")
 
   if aws scheduler get-schedule --name "$name" --region "$REGION" &>/dev/null; then
     info "Updating existing schedule: $name ..."
@@ -107,7 +111,7 @@ upsert_schedule() {
       --state                         ENABLED \
       --region                        "$REGION" > /dev/null
   fi
-  success "$name  →  action:${action}  at  cron($cron) ET"
+  success "$name  ->  action:${action}  at  cron($cron) ET"
 }
 
 # ── Install schedules ──────────────────────────────────────────────────────────
