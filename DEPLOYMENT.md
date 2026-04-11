@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Production deployment for AI Career Hub on AWS. Last updated: 2026-04-06.
+Production deployment for AI Career Hub on AWS. Last updated: 2026-04-11.
 
 ---
 
@@ -8,11 +8,13 @@ Production deployment for AI Career Hub on AWS. Last updated: 2026-04-06.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| EC2 stack | **On-demand** | Sleeps when idle. Starts automatically when someone visits the domain (Wake on Visit) |
-| RDS PostgreSQL | **On-demand** | Starts with EC2 via Lambda wake controller |
-| Domain | **Live** | `careerhub.deeason.com.np` resolves correctly |
-| TLS | **Live** | HTTPS via Let's Encrypt certbot DNS-01 |
+| EC2 stack | **On-demand** | Sleeps when idle. Auto-starts when someone visits (Wake on Visit). Auto-stops after 90 min |
+| RDS PostgreSQL | **On-demand** | Starts alongside EC2 via Lambda wake controller. Auto-stopped with EC2 |
+| Domain | **Live** | `careerhub.deeason.com.np` |
+| TLS | **Live** | HTTPS via Let's Encrypt certbot DNS-01, Docker Nginx SSL termination |
 | Wake on Visit | **Live** | Route 53 failover → CloudFront → S3 splash page → Lambda boots EC2+RDS |
+| Auto-Sleep | **Live** | EventBridge Scheduler stops EC2+RDS 90 min after each wake — zero manual intervention |
+| Boot Deploy | **Live** | systemd service: `git pull + docker compose up` runs on every EC2 boot |
 
 ---
 
@@ -81,16 +83,21 @@ All parameters live under `/portfolio/careerhub/`. The EC2 instance role has rea
 
 - **Developer user:** `deeason-dev`
 - **Policy:** `portfolio-developer` (least-privilege — scoped to `portfolio-*` resources only)
-- **Permissions:** EC2 start/stop, RDS start/stop/modify, SSM `/portfolio/*`, ECR careerhub repos, Route53 deeason.com.np zone, CloudTrail read
+- **Permissions:** EC2 start/stop, RDS start/stop/modify, SSM `/portfolio/*`, ECR careerhub repos, Route53 deeason.com.np zone, CloudTrail read, Lambda code update
 - **MFA:** Required on both root and `deeason-dev`
 - **Root:** MFA enabled, no access keys — never used for daily operations
 
-To update the policy (requires root console): IAM → Policies → `portfolio-developer` → Edit.
+Additional roles (created via root console):
+- `portfolio-wake-lambda-role` — Lambda execution role. Inline policies: EC2/RDS start/stop, scheduler create/delete
+- `portfolio-wake-scheduler-role` — EventBridge Scheduler role. Inline policy: invoke `portfolio-wake-controller`
+
+To update policies: IAM → Roles → select role → Add permissions → Create inline policy.
 
 ### Monitoring
 
 - **CloudWatch:** All containers log to `/portfolio/careerhub-backend`, `/portfolio/careerhub-frontend`, `/portfolio/careerhub-nginx`
-- **Billing:** Daily budget alert at $5/day + monthly alert at $40/month → `deeasonsitaula5@gmail.com`
+- **Billing:** Daily budget alert at $2/day → `deeasonsitaula5@gmail.com` (configured in AWS Budgets console)
+- **Auto-sleep logs:** Lambda CloudWatch log group `/aws/lambda/portfolio-wake-controller`
 
 ---
 
@@ -125,39 +132,21 @@ bash infra/scripts/deploy.sh
 
 ---
 
-## Pending: TLS Setup
+## TLS / HTTPS ✅ Live
 
-Once `nslookup careerhub.deeason.com.np 8.8.8.8` returns `34.234.125.14`:
+Let's Encrypt certificate issued via DNS-01 challenge (certbot + Route 53 plugin). Nginx inside Docker handles SSL termination.
+
+- **Certificate path (on EC2):** `/etc/letsencrypt/live/careerhub.deeason.com.np/`
+- **Nginx config:** `infra/nginx/nginx.conf` (mounted read-only into the nginx container)
+- **Auto-renewal:** certbot systemd timer renews the cert. After renewal, run:
 
 ```bash
-# On EC2 — as ubuntu
-# Install certbot with Route53 DNS plugin (EC2 role already has Route53 permissions)
-sudo apt-get install -y python3-certbot-dns-route53
-
-# Issue cert via DNS-01 challenge (no port 80 needed, more reliable)
-sudo certbot certonly --dns-route53 \
-  --domain careerhub.deeason.com.np \
-  --agree-tos \
-  --email deeasonsitaula5@gmail.com \
-  --non-interactive
-
-# Restore the HTTPS nginx config and docker-compose from git
-cd ~/ai-career-hub
-git pull origin main
-git checkout nginx/nginx.conf
-git checkout docker-compose.prod.yml
-
-# Restart the full stack with HTTPS config
-ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com \
-  docker compose -f docker-compose.prod.yml up -d --force-recreate --pull never
-
-# Verify
-curl -s https://careerhub.deeason.com.np/health
-```
-
-Certbot auto-renewal runs via systemd timer. After each renewal, nginx must reload:
-```bash
-sudo certbot renew && docker compose -f docker-compose.prod.yml restart nginx
+aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
+sudo su - ubuntu
+sudo certbot renew
+export ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
+docker compose -f docker-compose.prod.yml restart nginx
+curl -sk https://localhost/health
 ```
 
 ---
@@ -225,134 +214,107 @@ Do this rotation in a terminal session NOT connected to any AI assistant to avoi
 
 ## Billing Controls
 
+The stack is **fully self-managing**:
+- A visitor hitting `https://careerhub.deeason.com.np` triggers the wake flow automatically.
+- After **90 minutes** of uptime, EventBridge Scheduler auto-stops EC2+RDS with no manual intervention.
+- The nightly cron (EventBridge rule, 11 PM–8 AM UTC) provides an additional safety net.
+
+Manual overrides if ever needed:
+
 ```bash
-# Stop all compute (run from local machine)
+# Force stop immediately
 bash infra/scripts/stop.sh
 
-# Start it back up
-bash infra/scripts/start.sh
-# Then SSM in and run deploy.sh
+# Force start (for maintenance/SSM access)
+bash infra/scripts/start.sh --no-wait
+aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
 ```
 
 Expected costs:
-- **On-demand** (Wake on Visit active, ~5 hrs/month actual use): **~$1–2/month**
+- **Normal operation** (Wake on Visit + auto-sleep): **~$1–2/month**
   - Lambda + API GW + S3 + CloudFront: ~$0 (free tier)
-  - Route 53 health check: ~$0.50
-  - EC2/RDS only when running: ~$0.10–0.50
+  - Route 53 health check: ~$0.50/month
+  - EC2/RDS only when running: ~$0.05–0.20/day of actual use
 - Always-on (for reference): EC2 t3.small ~$15/mo + RDS db.t3.micro ~$12/mo
 
 ---
 
-## Wake on Visit Setup
+## Wake on Visit — Architecture ✅ Live
 
-Run once to deploy the full Wake on Visit infrastructure:
+```
+Visitor → careerhub.deeason.com.np
+       → Route 53 health check
+       ├─ EC2 healthy  → nginx → app (HTTPS)
+       └─ EC2 sleeping → CloudFront → S3 wake page
+                                   ↓
+                         API Gateway → Lambda
+                         (starts EC2 + RDS, schedules 90-min auto-stop)
+                                   ↓
+                         ~90s boot time → redirect to live app
+                                   ↓
+                         90 min later → EventBridge auto-stops EC2+RDS
+```
 
+**Key files:**
+| File | Purpose |
+|------|---------|
+| `infra/wake-page/index.html` | S3 splash page served by CloudFront |
+| `infra/wake-page/wake_controller.py` | Lambda: start EC2+RDS, schedule auto-stop, poll health |
+| `infra/scripts/setup-wake-on-visit.sh` | One-time provisioning (S3, Lambda, API GW, CF, R53) |
+| `infra/scripts/schedule-sleep.sh` | Night-time EventBridge cron (11 PM–8 AM) |
+| `infra/scripts/install-boot-deploy.sh` | Installs systemd service on EC2 for auto git pull + compose up |
+| `infra/nginx/nginx.conf` | Docker nginx config with SSL termination |
+
+**To re-provision from scratch:**
 ```bash
-# Ensure EC2 is running before setup (health check needs a live target)
 bash infra/scripts/start.sh --no-wait
-
-# Full setup (~15 min, mostly waiting for CloudFront deployment)
 bash infra/scripts/setup-wake-on-visit.sh
-
-# After setup, stop EC2/RDS — visitors will wake it automatically
 bash infra/scripts/stop.sh
 ```
 
-The setup script is **idempotent** — re-run it safely if anything fails. State is saved in `infra/wake-page/.state`.
+The setup script is **idempotent** — safe to re-run. State saved in `infra/wake-page/.state`.
 
-To remove everything: `bash infra/scripts/setup-wake-on-visit.sh --teardown`
+**To teardown:** `bash infra/scripts/setup-wake-on-visit.sh --teardown`
+
+### Auto-Sleep (EventBridge Scheduler)
+
+Every `/wake` API call schedules a one-time EventBridge Scheduler rule:
+- **Timer:** 90 minutes from last wake call
+- **Action:** Lambda stops EC2 + RDS (`action: stop` payload)
+- **Reset:** each new `/wake` resets the timer (recruiter re-visits = 90 more minutes)
+- **Self-deletes:** the schedule is removed after it fires (`ActionAfterCompletion: DELETE`)
+
+Required Lambda env vars (set in AWS Console → Lambda → Configuration → Environment variables):
+```
+LAMBDA_ARN         = arn:aws:lambda:us-east-1:346657261080:function:portfolio-wake-controller
+SCHEDULER_ROLE_ARN = arn:aws:iam::346657261080:role/portfolio-wake-scheduler-role
+AUTO_STOP_MINUTES  = 90
+```
+
+### Boot Deploy Service
+
+Installed on EC2 as `app-boot-deploy.service` (systemd oneshot). On every EC2 start:
+1. `git pull origin main` — picks up latest config/code changes
+2. `docker compose -f docker-compose.prod.yml up -d --remove-orphans` — recreates containers with new config
+
+To install/re-install on a new EC2:
+```bash
+aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
+sudo su - ubuntu && cd ~/ai-career-hub
+bash infra/scripts/install-boot-deploy.sh
+```
 
 ---
 
-## Post-Setup Security Hardening
+## Post-Setup Security Hardening — ✅ Completed (2026-04-11)
 
-Run these **after** `setup-wake-on-visit.sh` completes successfully.
-
-### Step 1 — Shrink IAM policy (console, root login)
-
-The `WakeOnVisitSetup` permissions were only needed for provisioning.
-Replace the entire `WakeOnVisitSetup` block with this minimal operate-only version:
-
-```json
-,{
-  "Sid": "WakeOnVisitOperate",
-  "Effect": "Allow",
-  "Action": [
-    "s3:PutObject",
-    "s3:GetObject",
-    "lambda:UpdateFunctionCode",
-    "lambda:GetFunction"
-  ],
-  "Resource": [
-    "arn:aws:s3:::careerhub-wake-page/*",
-    "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:portfolio-wake-controller"
-  ]
-}
-```
-
-**IAM → Policies → portfolio-developer → Edit → replace `WakeOnVisitSetup` → Save**
-
-### Step 2 — Tighten daily budget to $2/day
-
-Normal daily spend after Wake on Visit ≈ $0.05. Alert at $2 catches any abuse early:
-
-```bash
-aws budgets create-budget \
-  --account-id $(aws sts get-caller-identity --query Account --output text) \
-  --budget '{
-    "BudgetName": "daily-tight-cap",
-    "BudgetLimit": {"Amount": "2", "Unit": "USD"},
-    "TimeUnit": "DAILY",
-    "BudgetType": "COST"
-  }' \
-  --notifications-with-subscribers '[{
-    "Notification": {
-      "NotificationType": "ACTUAL",
-      "ComparisonOperator": "GREATER_THAN",
-      "Threshold": 80
-    },
-    "Subscribers": [{"SubscriptionType":"EMAIL","Address":"deeasonsitaula5@gmail.com"}]
-  }]'
-```
-
-### Step 3 — Set up HTTPS (certbot) on EC2
-
-DNS now resolves. Run this once while EC2 is running:
-
-```bash
-# SSM into EC2
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=portfolio-server" \
-  --query "Reservations[0].Instances[0].InstanceId" \
-  --output text --region us-east-1)
-aws ssm start-session --target $INSTANCE_ID --region us-east-1
-
-# Inside EC2 (as ubuntu)
-sudo su - ubuntu
-sudo apt-get install -y python3-certbot-dns-route53
-sudo certbot certonly --dns-route53 \
-  --domain careerhub.deeason.com.np \
-  --agree-tos --email deeasonsitaula5@gmail.com --non-interactive
-cd ~/ai-career-hub
-docker compose -f docker-compose.prod.yml restart nginx
-curl -s https://careerhub.deeason.com.np/health  # should return {"status":"ok"}
-```
-
-### Step 4 — Stop EC2/RDS (let wake-on-visit take over)
-
-```bash
-bash infra/scripts/stop.sh
-```
-
-Visitors to `https://careerhub.deeason.com.np` will now see the wake page and boot the app automatically.
-
-### Step 5 — Commit and push final state
-
-```bash
-git add -A
-git commit -m "docs: post-setup security hardening notes"
-git push origin main
-```
+| Step | Status | Details |
+|------|--------|---------|
+| IAM least-privilege | ✅ | `WakeOnVisitSetup` replaced with minimal `WakeOnVisitOperate` policy |
+| Daily budget | ✅ | $2/day alert → `deeasonsitaula5@gmail.com` (AWS Budgets console) |
+| HTTPS / TLS | ✅ | Certbot DNS-01, Docker nginx SSL, `infra/nginx/nginx.conf` |
+| Boot deploy service | ✅ | `app-boot-deploy.service` installed on EC2 |
+| Auto-sleep | ✅ | EventBridge Scheduler stops EC2+RDS 90 min after wake |
 
 ---
 
