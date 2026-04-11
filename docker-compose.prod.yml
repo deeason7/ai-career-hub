@@ -70,10 +70,10 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # Let's Encrypt certs issued on the EC2 host (via: sudo certbot certonly --standalone)
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Let's Encrypt certs issued on the EC2 host (sudo certbot certonly --dns-route53)
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      # ACME challenge dir for automated renewal (certbot --webroot)
+      # ACME challenge dir for automated renewal
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - api

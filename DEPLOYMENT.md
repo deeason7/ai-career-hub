@@ -264,6 +264,98 @@ To remove everything: `bash infra/scripts/setup-wake-on-visit.sh --teardown`
 
 ---
 
+## Post-Setup Security Hardening
+
+Run these **after** `setup-wake-on-visit.sh` completes successfully.
+
+### Step 1 — Shrink IAM policy (console, root login)
+
+The `WakeOnVisitSetup` permissions were only needed for provisioning.
+Replace the entire `WakeOnVisitSetup` block with this minimal operate-only version:
+
+```json
+,{
+  "Sid": "WakeOnVisitOperate",
+  "Effect": "Allow",
+  "Action": [
+    "s3:PutObject",
+    "s3:GetObject",
+    "lambda:UpdateFunctionCode",
+    "lambda:GetFunction"
+  ],
+  "Resource": [
+    "arn:aws:s3:::careerhub-wake-page/*",
+    "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:portfolio-wake-controller"
+  ]
+}
+```
+
+**IAM → Policies → portfolio-developer → Edit → replace `WakeOnVisitSetup` → Save**
+
+### Step 2 — Tighten daily budget to $2/day
+
+Normal daily spend after Wake on Visit ≈ $0.05. Alert at $2 catches any abuse early:
+
+```bash
+aws budgets create-budget \
+  --account-id $(aws sts get-caller-identity --query Account --output text) \
+  --budget '{
+    "BudgetName": "daily-tight-cap",
+    "BudgetLimit": {"Amount": "2", "Unit": "USD"},
+    "TimeUnit": "DAILY",
+    "BudgetType": "COST"
+  }' \
+  --notifications-with-subscribers '[{
+    "Notification": {
+      "NotificationType": "ACTUAL",
+      "ComparisonOperator": "GREATER_THAN",
+      "Threshold": 80
+    },
+    "Subscribers": [{"SubscriptionType":"EMAIL","Address":"deeasonsitaula5@gmail.com"}]
+  }]'
+```
+
+### Step 3 — Set up HTTPS (certbot) on EC2
+
+DNS now resolves. Run this once while EC2 is running:
+
+```bash
+# SSM into EC2
+INSTANCE_ID=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=portfolio-server" \
+  --query "Reservations[0].Instances[0].InstanceId" \
+  --output text --region us-east-1)
+aws ssm start-session --target $INSTANCE_ID --region us-east-1
+
+# Inside EC2 (as ubuntu)
+sudo su - ubuntu
+sudo apt-get install -y python3-certbot-dns-route53
+sudo certbot certonly --dns-route53 \
+  --domain careerhub.deeason.com.np \
+  --agree-tos --email deeasonsitaula5@gmail.com --non-interactive
+cd ~/ai-career-hub
+docker compose -f docker-compose.prod.yml restart nginx
+curl -s https://careerhub.deeason.com.np/health  # should return {"status":"ok"}
+```
+
+### Step 4 — Stop EC2/RDS (let wake-on-visit take over)
+
+```bash
+bash infra/scripts/stop.sh
+```
+
+Visitors to `https://careerhub.deeason.com.np` will now see the wake page and boot the app automatically.
+
+### Step 5 — Commit and push final state
+
+```bash
+git add -A
+git commit -m "docs: post-setup security hardening notes"
+git push origin main
+```
+
+---
+
 ## Smoke Tests
 
 ```bash
