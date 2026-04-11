@@ -46,7 +46,7 @@ services:
       interval: 5s       # check every 5s (default was 30s)
       timeout: 6s
       retries: 3
-      start_period: 25s  # grace period before health checks start
+      start_period: 10s  # uvicorn starts in <5s (no alembic wait) — 10s is generous headroom
     logging:
       driver: awslogs
       options:
