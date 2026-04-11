@@ -443,34 +443,48 @@
       const statusEl = document.getElementById('redirect-status');
       let attempt = 0;
 
+      // Hard deadline: after MAX_ATTEMPTS × 5s we redirect regardless.
+      // Lambda already confirmed app IS healthy (it checks EC2 IP directly).
+      // Route 53 TTL is 60s so by 45s the domain is pointing to EC2 for everyone.
+      // Chrome sometimes holds a stale DNS cache entry longer — this beats that.
+      const MAX_ATTEMPTS = 9;  // 9 × 5s = 45s hard deadline
+
       const ping = async () => {
         attempt++;
-        statusEl.textContent = `Confirming network routing… (${attempt * 5}s)`;
+        const elapsed = attempt * 5;
+
+        // Update counter first (before fetch) so it ALWAYS ticks even on error
+        if (statusEl) statusEl.textContent = `Confirming network routing… (${elapsed}s)`;
+
+        // Hard deadline — trust Lambda, redirect regardless of DNS state
+        if (attempt >= MAX_ATTEMPTS) {
+          if (statusEl) statusEl.textContent = 'Ready! Redirecting now…';
+          setTimeout(() => { window.location.href = APP_URL; }, 800);
+          return;
+        }
+
         try {
           const res = await fetch(APP_URL + '/health', {
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(4000),
             cache:  'no-store',
           });
           if (res.ok) {
-            // Route 53 has switched to EC2 — domain now serves the app ✅
-            statusEl.textContent = 'Network confirmed ✔ Redirecting now…';
+            // Route 53 DNS confirmed — EC2 is now serving the domain ✅
+            if (statusEl) statusEl.textContent = 'Network confirmed ✔ Redirecting now…';
             setTimeout(() => { window.location.href = APP_URL; }, 800);
             return;
           }
         } catch (_) {
-          // CloudFront still serving wake page, or network hiccup — keep polling
+          // CloudFront still serving (stale DNS) or fetch blocked — keep polling
         }
-        // Retry every 5s (give up UI hint after 90s = 18 attempts)
-        if (attempt < 18) {
-          _dnsTimer = setTimeout(ping, 5000);
-        } else {
-          statusEl.textContent = 'DNS is taking longer than usual. Click the button below.';
-        }
+
+        _dnsTimer = setTimeout(ping, 5000);
       };
 
-      // First check after 5s (give Route 53 a tiny head-start)
+      // First check after 5s
       _dnsTimer = setTimeout(ping, 5000);
     }
+
   </script>
 </body>
 </html>

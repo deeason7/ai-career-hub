@@ -64,7 +64,11 @@ services:
       - "8501"                   # internal only — nginx proxies externally
     depends_on:
       api:
-        condition: service_healthy  # don't start Streamlit until FastAPI is ready
+        # service_started (not service_healthy): Streamlit calls API_URL which is the
+        # external public domain — it never connects directly to api:8000 at startup.
+        # Starting on service_started saves ~10-15s, ensuring Streamlit is warm
+        # before users arrive via the wake page redirect.
+        condition: service_started
     # Override the Dockerfile HEALTHCHECK with faster intervals.
     # Streamlit built-in health endpoint: /_stcore/health (returns 200 when ready).
     healthcheck:
