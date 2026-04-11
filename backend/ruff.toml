@@ -2,5 +2,15 @@ line-length = 100
 target-version = "py311"
 
 [lint]
-select = ["E", "F", "W", "I"]
-ignore = ["E501"]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes (unused imports, undefined names)
+  "W",    # pycodestyle warnings
+  "I",    # isort
+  "B",    # flake8-bugbear (likely bugs + design smells)
+  "UP",   # pyupgrade (modernise Python syntax to 3.11+)
+]
+ignore = [
+  "E501",  # line too long — handled by ruff-format
+  "B008",  # do not perform function call in default arg (FastAPI Depends pattern)
+]
