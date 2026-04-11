@@ -1,0 +1,31 @@
+# Pre-commit hooks for AI Career Hub.
+# Install: pip install -r backend/requirements.dev.txt && pre-commit install
+# Run all: pre-commit run --all-files
+# Update:  pre-commit autoupdate
+
+repos:
+
+  # ── Python linting + formatting (backend only) ─────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.5
+    hooks:
+      - id: ruff            # lint + auto-fix (isort, unused imports, etc.)
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format     # black-compatible formatter
+        files: ^backend/
+
+  # ── General file hygiene ───────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^infra/wake-page/  # HTML minification may intentionally trail
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']       # blocks accidental model/data file commits
+      - id: mixed-line-ending
+        args: ['--fix=lf']
