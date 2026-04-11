@@ -1,6 +1,6 @@
 """Central rate-limiter instance shared across all routers."""
 import os
-from typing import Callable
+from collections.abc import Callable
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address

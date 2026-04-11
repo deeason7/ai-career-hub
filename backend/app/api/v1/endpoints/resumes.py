@@ -60,7 +60,7 @@ async def upload_resume(
     try:
         raw_text = await extract_text_from_upload(file)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
     # parse_resume calls Groq/Ollama (sync HTTP, 2-10s) — offload to thread pool
     # so we don't block the event loop for every upload request.
