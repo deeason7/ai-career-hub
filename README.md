@@ -10,11 +10,11 @@ Upload your resume, score it semantically against job descriptions, generate hon
 
 | Service | URL |
 |---------|-----|
-| **Frontend** | http://34.234.125.14 |
-| **Health Check** | http://34.234.125.14/health |
+| **App** | https://careerhub.deeason.com.np |
+| **Health Check** | https://careerhub.deeason.com.np/health |
 
-> Hosted on AWS EC2 (t3.small) behind nginx. RDS PostgreSQL (`db.t3.micro`) in a private VPC subnet.  
-> ⏳ Custom domain `careerhub.deeason.com.np` pending `.np` DNS propagation — HTTPS via Let's Encrypt will be enabled once DNS resolves (see [DEPLOYMENT.md](DEPLOYMENT.md)).
+> Hosted on AWS (EC2 t3.small + RDS PostgreSQL db.t3.micro, private VPC).  
+> **Cost-optimised:** The app runs on-demand via a *Wake on Visit* system — when it's sleeping, visitors see a live status page that boots the server in ~90 seconds. [See how it works ↓](#️-cost-optimised-deployment)
 
 ---
 
@@ -37,32 +37,39 @@ Upload your resume, score it semantically against job descriptions, generate hon
 ## 🏗️ Architecture
 
 ```
-                    GitHub Actions (CI)
-                          │  lint + test on push to main/develop
-                          ▼
-              ┌───────────────────────┐
-              │     AWS EC2 (t3.small) │
-              │                       │
-              │  ┌─────────────────┐  │
-              │  │  nginx (port 80)│  │
-              │  └────────┬────────┘  │
-              │           │           │
-              │    ┌──────┴──────┐    │
-              │    │             │    │
-              │  ┌─▼──────┐  ┌──▼──┐ │
-              │  │FastAPI │  │ ST  │ │
-              │  │:8000   │  │:8501│ │
-              │  └────┬───┘  └─────┘ │
-              │       │ Redis:6379    │
-              └───────┼───────────────┘
-                      │
-          ┌───────────▼────────────┐
-          │  AWS RDS PostgreSQL    │
-          │  (private VPC subnet)  │
-          └────────────────────────┘
-                      │ Groq API (cloud LLM)
-                      ▼
-              LLaMA 3.1 8B Instant
+  Recruiter visits careerhub.deeason.com.np
+             │
+             │  Route 53 health check
+             ├─ EC2 healthy ──────────────────────────────────────────┐
+             │                                                         │
+             └─ EC2 sleeping → CloudFront → S3 wake page              │
+                    │  (Lambda boots EC2 + RDS in ~90s, auto-redirects)│
+                    │                                                  │
+                    └──────────────────────────────────────────────────┘
+                                                                       │
+                                         GitHub Actions (CI)           │
+                                         lint + test on push           │
+                                               │                       ▼
+                                   ┌───────────────────────┐
+                                   │   AWS EC2 (t3.small)  │
+                                   │  ┌─────────────────┐  │
+                                   │  │  nginx (HTTPS)  │  │
+                                   │  └────────┬────────┘  │
+                                   │    ┌──────┴──────┐    │
+                                   │  ┌─▼──────┐  ┌──▼──┐ │
+                                   │  │FastAPI │  │ ST  │ │
+                                   │  │:8000   │  │:8501│ │
+                                   │  └────┬───┘  └─────┘ │
+                                   │       │ Redis:6379    │
+                                   └───────┼───────────────┘
+                                           │
+                               ┌───────────▼────────────┐
+                               │  AWS RDS PostgreSQL    │
+                               │  (private VPC subnet)  │
+                               └────────────────────────┘
+                                           │ Groq API
+                                           ▼
+                                   LLaMA 3.1 8B Instant
 ```
 
 **Cover letter generation** runs as a FastAPI `BackgroundTask` — no separate Celery worker.  
@@ -192,9 +199,28 @@ Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker 
 
 ---
 
-## ☁️ Deployment (AWS EC2)
+## ☁️ Cost-Optimised Deployment
 
-### Infrastructure
+The app uses **Wake on Visit** — EC2 and RDS sleep when idle and auto-start when someone visits the domain (~90 second cold start). A beautiful animated status page handles the wait. Cost: **~$1–2/month** instead of $30/month.
+
+```
+  careerhub.deeason.com.np
+         │
+         ├─ [EC2 up]   → Route 53 PRIMARY  → real app (no wait)
+         └─ [EC2 down] → Route 53 FAILOVER → CloudFront → S3 wake page
+                              └──→ Lambda starts EC2 + RDS
+                                         └──→ auto-redirect in ~90s
+```
+
+```bash
+# Stop everything when done (saves ~$0.029/hr)
+bash infra/scripts/stop.sh
+
+# Deploy the Wake on Visit infrastructure (run once)
+bash infra/scripts/setup-wake-on-visit.sh
+```
+
+### AWS Infrastructure
 | Resource | Details |
 |----------|---------|
 | EC2 | `t3.small` (Ubuntu 24.04) — Docker Compose stack |
@@ -202,6 +228,9 @@ Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker 
 | ECR | `<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com` (derive: `aws sts get-caller-identity --query Account --output text`) |
 | Secrets | AWS SSM Parameter Store → `.env.prod` |
 | Logs | CloudWatch (`/portfolio/careerhub-*`) |
+| Wake page | S3 static site → CloudFront (HTTPS) — always-on, ~$0/month |
+| Wake API | API Gateway HTTP API + Lambda (`portfolio-wake-controller`) |
+| Failover | Route 53 health check → failover routing (EC2 → CloudFront) |
 
 ### Deploy workflow
 ```bash
@@ -273,7 +302,8 @@ Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads th
 - [x] Budget kill switch — Lambda auto-stops EC2 + RDS at $5/day spend threshold
 - [x] Stale Elastic IPs released — eliminated $7.30/month in silent billing
 - [x] CloudTrail audit confirmed clean — no unauthorized API usage detected
-- [ ] TLS — certbot DNS-01 pending `.np` DNS propagation (see [DEPLOYMENT.md](DEPLOYMENT.md))
+- [x] TLS — HTTPS live via Let's Encrypt + certbot DNS-01
+- [x] Wake on Visit — on-demand infrastructure (Route 53 failover → CloudFront → Lambda → EC2/RDS boot); cost reduced from ~$30/month → ~$1–2/month
 
 ### 🔜 v2.1 — ML & Data Science
 - [ ] Resume section classifier (spaCy NER)
