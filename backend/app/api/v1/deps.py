@@ -31,7 +31,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
     result = await session.execute(select(User).where(User.id == user_uuid))
     user = result.scalars().first()
     if not user or not user.is_active:

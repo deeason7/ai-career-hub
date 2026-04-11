@@ -124,9 +124,9 @@ async def fetch_job_description(url: str) -> dict:
         async with httpx.AsyncClient(headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True) as client:
             resp = await client.get(url)
     except httpx.TimeoutException:
-        raise JobFetchError("Request timed out. The job site may be slow or unavailable.")
+        raise JobFetchError("Request timed out. The job site may be slow or unavailable.") from None
     except httpx.RequestError as exc:
-        raise JobFetchError(f"Network error: {exc}")
+        raise JobFetchError(f"Network error: {exc}") from exc
 
     if resp.status_code == 999:
         # LinkedIn's bot-detection rejection code

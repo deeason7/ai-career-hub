@@ -8,7 +8,6 @@ All heavy imports are lazy so this module is importable without langchain instal
 import json
 import logging
 import re
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -17,13 +16,13 @@ logger = logging.getLogger(__name__)
 
 class ParsedResume(BaseModel):
     """Structured output of a parsed resume."""
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    location: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    github_url: Optional[str] = None
-    summary: Optional[str] = None
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    linkedin_url: str | None = None
+    github_url: str | None = None
+    summary: str | None = None
     skills: list[str] = []
     programming_languages: list[str] = []
     frameworks: list[str] = []

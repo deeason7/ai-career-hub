@@ -91,7 +91,7 @@ upsert_schedule() {
   #   "Input":"{\"action\":\"wake\"}"
   # AWS CLI reads it via file:// and parses it as a JSON-encoded string.
   local tmpfile
-  tmpfile=$(mktemp /tmp/sched_target.XXXXXX.json)
+  tmpfile=$(mktemp)   # no template — works on both macOS and Linux
   # shellcheck disable=SC2064
   trap "rm -f $tmpfile" RETURN
 

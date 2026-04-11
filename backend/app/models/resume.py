@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Text
@@ -22,9 +22,9 @@ class Resume(ResumeBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
     raw_text: str = Field(sa_column=Column(Text))          # Full plain text extracted
-    parsed_json: Optional[str] = Field(default=None, sa_column=Column(Text))  # JSON string of structured data
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    parsed_json: str | None = Field(default=None, sa_column=Column(Text))  # JSON string of structured data
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
     user: Optional["User"] = Relationship(back_populates="resumes")
@@ -39,7 +39,7 @@ class ResumeRead(ResumeBase):
     id: uuid.UUID
     user_id: uuid.UUID
     created_at: datetime
-    parsed_json: Optional[str] = None
+    parsed_json: str | None = None
 
 
 class ResumeReadWithText(ResumeRead):

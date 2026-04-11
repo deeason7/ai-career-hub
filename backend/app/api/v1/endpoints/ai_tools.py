@@ -95,7 +95,7 @@ async def skill_gap(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI service temporarily unavailable. Please try again.",
-        )
+        ) from exc
     return result
 
 
@@ -116,7 +116,7 @@ async def interview_questions(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI service temporarily unavailable. Please try again.",
-        )
+        ) from exc
     return {"questions": questions, "count": len(questions)}
 
 
@@ -134,4 +134,4 @@ async def fetch_job_from_url(
         result = await fetch_job_description(str(payload.url))
         return result
     except JobFetchError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
