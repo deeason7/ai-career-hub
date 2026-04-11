@@ -14,7 +14,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Health Check** | https://careerhub.deeason.com.np/health |
 
 > Hosted on AWS (EC2 t3.small + RDS PostgreSQL db.t3.micro, private VPC).  
-> **Cost-optimised:** The app runs on-demand via a *Wake on Visit* system — when it's sleeping, visitors see a live status page that boots the server in ~90 seconds. [See how it works ↓](#️-cost-optimised-deployment)
+> **Cost-optimised:** The app runs on-demand via a *Wake on Visit* system — when sleeping, visitors see a live status page that boots the server in ~90 seconds, then auto-sleeps after 90 minutes of inactivity. [See how it works ↓](#️-cost-optimised-deployment)
 
 ---
 
@@ -44,6 +44,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
              │                                                         │
              └─ EC2 sleeping → CloudFront → S3 wake page              │
                     │  (Lambda boots EC2 + RDS in ~90s, auto-redirects)│
+                    │  (EventBridge auto-stops after 90 min of uptime) │
                     │                                                  │
                     └──────────────────────────────────────────────────┘
                                                                        │
@@ -110,7 +111,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | Layer | Technology |
 |-------|-----------|
 | **Backend API** | FastAPI 0.111 · SQLModel · Alembic · Python 3.11 |
-| **Database** | AWS RDS PostgreSQL 16 (private VPC) |
+| **Database** | AWS RDS PostgreSQL 16 (private VPC, on-demand) |
 | **AI / LLM** | Groq API (LLaMA 3.1 8B instant) — cloud; Ollama (local dev fallback) |
 | **Semantic NLP** | `sentence-transformers` — `all-MiniLM-L6-v2` for ATS semantic scoring |
 | **RAG Pipeline** | LangChain · FAISS · `nomic-embed-text` embeddings |
@@ -118,7 +119,9 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Web Scraping** | `httpx.AsyncClient` + `beautifulsoup4` — JSON-LD first, meta/HTML fallback |
 | **Frontend** | Streamlit |
 | **Security** | PyJWT · passlib[bcrypt] · slowapi · python-magic (MIME validation) |
-| **Infrastructure** | AWS EC2 · RDS · ECR · nginx · Docker Compose |
+| **Infrastructure** | AWS EC2 · RDS · ECR · nginx (Docker SSL) · Docker Compose |
+| **Serverless** | AWS Lambda · API Gateway · S3 · CloudFront · Route 53 failover |
+| **Auto-Sleep** | EventBridge Scheduler — one-time rule stops EC2+RDS 90 min after wake |
 | **Observability** | Sentry · AWS CloudWatch (awslogs driver) |
 | **CI** | GitHub Actions — ruff lint + pytest on push to `main`/`develop` |
 
