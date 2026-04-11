@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s        # was 10s — detect Redis faster
       timeout: 5s
       retries: 5
 
@@ -38,6 +38,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # Fast health check — nginx waits for THIS before starting (service_healthy below).
+    # Uses Python urllib because curl is not installed in python:3.11-slim.
+    # start_period covers: alembic upgrade head (~5-10s) + uvicorn startup (~5s) = safe at 25s.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\", timeout=5)' || exit 1"]
+      interval: 5s       # check every 5s (default was 30s)
+      timeout: 6s
+      retries: 3
+      start_period: 25s  # grace period before health checks start
     logging:
       driver: awslogs
       options:
@@ -54,7 +63,16 @@ services:
     expose:
       - "8501"                   # internal only — nginx proxies externally
     depends_on:
-      - api
+      api:
+        condition: service_healthy  # don't start Streamlit until FastAPI is ready
+    # Override the Dockerfile HEALTHCHECK with faster intervals.
+    # Streamlit built-in health endpoint: /_stcore/health (returns 200 when ready).
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8501/_stcore/health\", timeout=5)' || exit 1"]
+      interval: 8s       # check every 8s
+      timeout: 6s
+      retries: 3
+      start_period: 35s  # Streamlit takes 20-30s to fully initialise
     logging:
       driver: awslogs
       options:
@@ -76,8 +94,10 @@ services:
       # ACME challenge dir for automated renewal
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
-      - api
-      - frontend
+      api:
+        condition: service_healthy  # nginx starts only AFTER FastAPI is truly ready
+      frontend:
+        condition: service_started  # Streamlit can warm up behind nginx (doesn't block /health)
     logging:
       driver: awslogs
       options:
