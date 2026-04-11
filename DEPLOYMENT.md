@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Production deployment for AI Career Hub on AWS. Last updated: 2026-04-11.
+Production deployment for AI Career Hub on AWS. Last updated: 2026-04-11 (v2.6.0).
 
 ---
 
@@ -8,13 +8,16 @@ Production deployment for AI Career Hub on AWS. Last updated: 2026-04-11.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| EC2 stack | **On-demand** | Sleeps when idle. Auto-starts when someone visits (Wake on Visit). Auto-stops after 90 min |
-| RDS PostgreSQL | **On-demand** | Starts alongside EC2 via Lambda wake controller. Auto-stopped with EC2 |
+| EC2 stack | **On-demand** | Sleeps when idle. Boots automatically when someone visits (Wake-on-Visit, ~90s). Auto-stops after 90 min of inactivity |
+| RDS PostgreSQL | **On-demand** | Starts/stops alongside EC2 via Lambda wake controller |
+| Business Hours | **Live** | EC2 + RDS auto-start at 9 AM ET Mon–Fri; auto-stop at 6 PM ET (instant load for recruiters) |
 | Domain | **Live** | `careerhub.deeason.com.np` |
 | TLS | **Live** | HTTPS via Let's Encrypt certbot DNS-01, Docker Nginx SSL termination |
 | Wake on Visit | **Live** | Route 53 failover → CloudFront → S3 splash page → Lambda boots EC2+RDS |
-| Auto-Sleep | **Live** | EventBridge Scheduler stops EC2+RDS 90 min after each wake — zero manual intervention |
+| Auto-Sleep | **Live** | EventBridge Scheduler stops EC2+RDS 90 min after each wake (off-hours) |
 | Boot Deploy | **Live** | systemd service: `git pull + docker compose up` runs on every EC2 boot |
+| CI | **Live** | GitHub Actions: ruff lint + pytest on push to `main`/`develop` |
+| Pre-commit | **Live** | ruff lint+format + hygiene hooks — install with `pre-commit install` |
 
 ---
 
@@ -54,7 +57,8 @@ Two repositories in `us-east-1`:
 - `careerhub-backend` — FastAPI + Alembic image (~3 GB uncompressed, `linux/amd64`)
 - `careerhub-frontend` — Streamlit image (~180 MB, `linux/amd64`)
 
-Images are built on the developer's Mac with `--platform linux/amd64` to target the x86_64 EC2.
+Images are built on the developer's Mac with `--platform linux/amd64` to target the x86_64 EC2.  
+**Disk note:** Always run `docker image prune -f` after pulling new images on EC2 to prevent disk exhaustion.
 
 ### Secrets (SSM Parameter Store)
 
@@ -70,6 +74,7 @@ All parameters live under `/portfolio/careerhub/`. The EC2 instance role has rea
 /portfolio/careerhub/GROQ_API_KEY
 /portfolio/careerhub/ALLOWED_ORIGINS
 /portfolio/careerhub/PRODUCTION
+/portfolio/careerhub/SENTRY_DSN        # optional — add for Sentry error tracking
 ```
 
 ### DNS
@@ -84,20 +89,27 @@ All parameters live under `/portfolio/careerhub/`. The EC2 instance role has rea
 - **Developer user:** `deeason-dev`
 - **Policy:** `portfolio-developer` (least-privilege — scoped to `portfolio-*` resources only)
 - **Permissions:** EC2 start/stop, RDS start/stop/modify, SSM `/portfolio/*`, ECR careerhub repos, Route53 deeason.com.np zone, CloudTrail read, Lambda code update
+- **Additional policy:** `portfolio-scheduler-management` — `scheduler:CreateSchedule / UpdateSchedule / DeleteSchedule / GetSchedule` on the two named business-hours schedules + `iam:PassRole` on `portfolio-wake-scheduler-role`
 - **MFA:** Required on both root and `deeason-dev`
 - **Root:** MFA enabled, no access keys — never used for daily operations
 
 Additional roles (created via root console):
-- `portfolio-wake-lambda-role` — Lambda execution role. Inline policies: EC2/RDS start/stop, scheduler create/delete
+- `portfolio-wake-lambda-role` — Lambda execution role. Inline policies: EC2/RDS start/stop, scheduler create/delete/describe
 - `portfolio-wake-scheduler-role` — EventBridge Scheduler role. Inline policy: invoke `portfolio-wake-controller`
 
-To update policies: IAM → Roles → select role → Add permissions → Create inline policy.
+To add `portfolio-scheduler-management` to `deeason-dev` (run as root/admin):
+```bash
+aws iam put-user-policy \
+  --user-name deeason-dev \
+  --policy-name portfolio-scheduler-management \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Sid":"ManageBusinessHoursSchedules","Effect":"Allow","Action":["scheduler:CreateSchedule","scheduler:UpdateSchedule","scheduler:DeleteSchedule","scheduler:GetSchedule"],"Resource":["arn:aws:scheduler:us-east-1:346657261080:schedule/default/portfolio-business-hours-start","arn:aws:scheduler:us-east-1:346657261080:schedule/default/portfolio-business-hours-stop"]},{"Sid":"PassSchedulerRole","Effect":"Allow","Action":"iam:PassRole","Resource":"arn:aws:iam::346657261080:role/portfolio-wake-scheduler-role","Condition":{"StringEquals":{"iam:PassedToService":"scheduler.amazonaws.com"}}}]}'
+```
 
 ### Monitoring
 
 - **CloudWatch:** All containers log to `/portfolio/careerhub-backend`, `/portfolio/careerhub-frontend`, `/portfolio/careerhub-nginx`
 - **Billing:** Daily budget alert at $2/day → `deeasonsitaula5@gmail.com` (configured in AWS Budgets console)
-- **Auto-sleep logs:** Lambda CloudWatch log group `/aws/lambda/portfolio-wake-controller`
+- **Lambda logs:** `/aws/lambda/portfolio-wake-controller`
 
 ---
 
@@ -130,6 +142,28 @@ cd ~/ai-career-hub && git pull origin main
 bash infra/scripts/deploy.sh
 ```
 
+### Deploy the wake-page Lambda + S3 (when wake_controller.py or index.html change)
+
+```bash
+# Lambda
+cd infra/wake-page
+zip -q wake_controller.zip wake_controller.py
+aws lambda update-function-code \
+  --function-name portfolio-wake-controller \
+  --zip-file fileb://wake_controller.zip \
+  --region us-east-1
+rm wake_controller.zip
+cd ../..
+
+# S3 + CloudFront invalidation
+aws s3 cp infra/wake-page/index.html \
+  s3://careerhub-wake-page/index.html \
+  --content-type "text/html" --cache-control "no-cache, max-age=0" \
+  --region us-east-1
+aws cloudfront create-invalidation \
+  --distribution-id E31DN2OV7E4KZ5 --paths "/*" --region us-east-1
+```
+
 ---
 
 ## TLS / HTTPS ✅ Live
@@ -144,9 +178,184 @@ Let's Encrypt certificate issued via DNS-01 challenge (certbot + Route 53 plugin
 aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
 sudo su - ubuntu
 sudo certbot renew
-export ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
 docker compose -f docker-compose.prod.yml restart nginx
 curl -sk https://localhost/health
+```
+
+---
+
+## Business Hours Scheduler
+
+EC2 + RDS automatically start at 9 AM ET and stop at 6 PM ET, Mon–Fri.  
+This ensures instant page loads (no wake-page wait) during core recruiter hours.
+
+**Schedule (America/New_York):**
+| Rule | Cron | Action |
+|------|------|--------|
+| `portfolio-business-hours-start` | `cron(0 9 ? * MON-FRI *)` | `action:wake` → `handle_scheduled_wake()` |
+| `portfolio-business-hours-stop` | `cron(0 18 ? * MON-FRI *)` | `action:stop` → `handle_auto_stop()` |
+
+**IAM prerequisite:** Add `portfolio-scheduler-management` policy to `deeason-dev` (see IAM section above).
+
+**Install / update schedules:**
+```bash
+bash infra/scripts/setup-business-hours.sh
+```
+
+**Verify:**
+```bash
+aws scheduler get-schedule --name portfolio-business-hours-start --region us-east-1
+aws scheduler get-schedule --name portfolio-business-hours-stop  --region us-east-1
+```
+
+**Remove:**
+```bash
+bash infra/scripts/setup-business-hours.sh --remove
+```
+
+**Cost impact:** ~$7.50/month (9 hrs × 5 days × $0.021/hr EC2 + $0.016/hr RDS × ~4.3 weeks).  
+Off-hours Wake-on-Visit adds ~$0 (free-tier Lambda/CF) + ~$0.05–0.20/day of actual off-hours use.
+
+---
+
+## Wake on Visit — Architecture ✅ Live
+
+```
+Visitor → careerhub.deeason.com.np
+       → Route 53 health check
+       ├─ EC2 healthy  → nginx → app (HTTPS)
+       └─ EC2 sleeping → CloudFront → S3 wake page
+                                   ↓
+                         API Gateway → Lambda (portfolio-wake-controller)
+                         (starts EC2 + RDS, schedules 90-min auto-stop)
+                                   ↓
+                         ~90s boot time → redirect to live app
+                                   ↓
+                         90 min later → EventBridge auto-stops EC2+RDS
+```
+
+**Key files:**
+| File | Purpose |
+|------|---------|
+| `infra/wake-page/index.html` | S3 splash page — animated status, RDS auto-rewake, DNS confirmation without blind redirect |
+| `infra/wake-page/wake_controller.py` | Lambda: handles `/wake`, `/status`, `action:stop`, `action:wake` |
+| `infra/scripts/setup-wake-on-visit.sh` | One-time provisioning (S3, Lambda, API GW, CF, R53) |
+| `infra/scripts/setup-business-hours.sh` | Install/update business-hours recurring EventBridge Scheduler rules |
+| `infra/scripts/install-boot-deploy.sh` | Installs systemd service on EC2 for auto git pull + compose up |
+| `infra/nginx/nginx.conf` | Docker nginx: SSL termination, gzip compression, 300s proxy timeout |
+
+### Lambda routing
+
+`portfolio-wake-controller` dispatches based on the event shape:
+
+| Event | Handler | Notes |
+|-------|---------|-------|
+| HTTP POST `/wake` | `handle_wake()` | Starts EC2+RDS, resets 90-min idle auto-stop timer |
+| HTTP GET `/status` | `handle_status()` | Returns `{ec2, rds, app}` — EC2+RDS checked in parallel |
+| `{action: "stop"}` | `handle_auto_stop()` | Stops EC2+RDS. Fired by idle timer OR 6 PM ET EventBridge cron |
+| `{action: "wake"}` | `handle_scheduled_wake()` | Starts EC2+RDS. Fired by 9 AM ET EventBridge cron. Does NOT set idle timer |
+
+### Auto-Sleep (EventBridge Scheduler)
+
+Every HTTP `/wake` call schedules a one-time EventBridge Scheduler rule:
+- **Timer:** 90 minutes from last wake call
+- **Action:** Lambda stops EC2 + RDS (`action: stop` payload)
+- **Reset:** each new `/wake` resets the timer (recruiter re-visits = 90 more minutes)
+- **Self-deletes:** the schedule is removed after it fires (`ActionAfterCompletion: DELETE`)
+
+Required Lambda env vars:
+```
+LAMBDA_ARN         = arn:aws:lambda:us-east-1:346657261080:function:portfolio-wake-controller
+SCHEDULER_ROLE_ARN = arn:aws:iam::346657261080:role/portfolio-wake-scheduler-role
+AUTO_STOP_MINUTES  = 90
+```
+
+### Boot Deploy Service
+
+Installed on EC2 as `app-boot-deploy.service` (systemd oneshot). On every EC2 start:
+1. `git pull origin main` — picks up latest config/code changes
+2. `docker compose -f docker-compose.prod.yml up -d --remove-orphans` — recreates containers
+3. `docker image prune -f` — prevents disk exhaustion on the 30 GB EC2 root volume
+
+To install/re-install on a new EC2:
+```bash
+aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
+sudo su - ubuntu && cd ~/ai-career-hub
+bash infra/scripts/install-boot-deploy.sh
+```
+
+---
+
+## Developer Tooling
+
+### ruff (lint + format)
+
+`ruff.toml` is in `backend/`. Rules: E, F, W, I (isort), B (bugbear), UP (pyupgrade).
+
+```bash
+# Check
+ruff check backend/
+
+# Auto-fix (UP007=Optional→X|None, UP017=timezone.utc→datetime.UTC, UP035=typing→collections.abc, I=isort)
+ruff check --fix backend/
+
+# Format (black-compatible)
+ruff format backend/
+```
+
+CI runs `ruff check backend/` on every push. Failing ruff = failing CI.
+
+### pre-commit
+
+`.pre-commit-config.yaml` at repo root. Hooks:
+- `ruff` (lint + auto-fix) and `ruff-format` — backend Python only
+- `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-json`
+- `check-merge-conflict`, `check-added-large-files` (500 KB limit)
+- `mixed-line-ending` (enforces LF)
+
+```bash
+# Install once
+pip install -r backend/requirements.dev.txt
+pre-commit install
+
+# Run manually against all files
+pre-commit run --all-files
+
+# Update hook versions
+pre-commit autoupdate
+```
+
+---
+
+## Billing Controls
+
+Expected costs with current setup:
+
+| Mode | Monthly estimate |
+|------|-----------------|
+| Business hours (9 AM–6 PM ET, Mon–Fri) | ~$7.00 |
+| Off-hours Wake-on-Visit overhead | ~$0.50 |
+| Lambda + API GW + S3 + CloudFront | ~$0 (free tier) |
+| Route 53 health check | ~$0.50 |
+| **Total** | **~$8/month** |
+
+Manual overrides when needed:
+
+```bash
+# Force stop immediately
+bash infra/scripts/stop.sh
+
+# Force start (for maintenance/SSM access)
+bash infra/scripts/start.sh
+aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
+
+# Test business-hours Lambda (wake)
+aws lambda invoke --function-name portfolio-wake-controller \
+  --payload '{"action":"wake"}' --region us-east-1 /dev/stdout
+
+# Test business-hours Lambda (stop)
+aws lambda invoke --function-name portfolio-wake-controller \
+  --payload '{"action":"stop"}' --region us-east-1 /dev/stdout
 ```
 
 ---
@@ -158,23 +367,18 @@ Rotate all secrets when a leak is suspected or on a scheduled basis (every 90 da
 ### Rotate RDS password + SSM
 
 ```bash
-# Generate new password (alphanumeric, 32 chars)
 NEW_PASS=$(python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32)))")
 
-# Apply to RDS (takes ~2 min to propagate)
 aws rds modify-db-instance \
   --db-instance-identifier portfolio-db \
   --master-user-password "$NEW_PASS" \
   --apply-immediately --region us-east-1
 
-# Update SSM immediately
 aws ssm put-parameter \
   --name "/portfolio/careerhub/POSTGRES_PASSWORD" \
   --value "$NEW_PASS" --type SecureString --overwrite --region us-east-1
 
-# Wait 3 min for RDS to fully apply, then pull secrets and FORCE-RECREATE the container
-# WARNING: `docker compose restart` does NOT re-read env_file.
-# You MUST use --force-recreate to apply new credentials.
+# Wait 3 min for RDS to fully apply, then force-recreate (restart does NOT re-read env_file)
 sleep 180
 bash infra/scripts/pull-secrets.sh
 ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com \
@@ -195,126 +399,34 @@ aws ssm put-parameter \
 ### Rotate Groq API key
 
 1. Go to console.groq.com → API Keys → create new → delete old
-2. Update SSM: `aws ssm put-parameter --name "/portfolio/careerhub/GROQ_API_KEY" --value "NEW_KEY" --type SecureString --overwrite --region us-east-1`
+2. `aws ssm put-parameter --name "/portfolio/careerhub/GROQ_API_KEY" --value "NEW_KEY" --type SecureString --overwrite --region us-east-1`
 3. Force-recreate api container
 
 ### Rotate IAM access keys
 
 ```bash
-# Create new key, update ~/.aws/credentials, then delete old key
 aws iam create-access-key --user-name deeason-dev
 aws configure set aws_access_key_id NEW_KEY_ID
 aws configure set aws_secret_access_key NEW_SECRET
 aws iam delete-access-key --user-name deeason-dev --access-key-id OLD_KEY_ID
 ```
 
-Do this rotation in a terminal session NOT connected to any AI assistant to avoid credential exposure.
+Do this in a terminal session NOT connected to any AI assistant to avoid credential exposure.
 
 ---
 
-## Billing Controls
-
-The stack is **fully self-managing**:
-- A visitor hitting `https://careerhub.deeason.com.np` triggers the wake flow automatically.
-- After **90 minutes** of uptime, EventBridge Scheduler auto-stops EC2+RDS with no manual intervention.
-- The nightly cron (EventBridge rule, 11 PM–8 AM UTC) provides an additional safety net.
-
-Manual overrides if ever needed:
-
-```bash
-# Force stop immediately
-bash infra/scripts/stop.sh
-
-# Force start (for maintenance/SSM access)
-bash infra/scripts/start.sh --no-wait
-aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
-```
-
-Expected costs:
-- **Normal operation** (Wake on Visit + auto-sleep): **~$1–2/month**
-  - Lambda + API GW + S3 + CloudFront: ~$0 (free tier)
-  - Route 53 health check: ~$0.50/month
-  - EC2/RDS only when running: ~$0.05–0.20/day of actual use
-- Always-on (for reference): EC2 t3.small ~$15/mo + RDS db.t3.micro ~$12/mo
-
----
-
-## Wake on Visit — Architecture ✅ Live
-
-```
-Visitor → careerhub.deeason.com.np
-       → Route 53 health check
-       ├─ EC2 healthy  → nginx → app (HTTPS)
-       └─ EC2 sleeping → CloudFront → S3 wake page
-                                   ↓
-                         API Gateway → Lambda
-                         (starts EC2 + RDS, schedules 90-min auto-stop)
-                                   ↓
-                         ~90s boot time → redirect to live app
-                                   ↓
-                         90 min later → EventBridge auto-stops EC2+RDS
-```
-
-**Key files:**
-| File | Purpose |
-|------|---------|
-| `infra/wake-page/index.html` | S3 splash page served by CloudFront |
-| `infra/wake-page/wake_controller.py` | Lambda: start EC2+RDS, schedule auto-stop, poll health |
-| `infra/scripts/setup-wake-on-visit.sh` | One-time provisioning (S3, Lambda, API GW, CF, R53) |
-| `infra/scripts/schedule-sleep.sh` | Night-time EventBridge cron (11 PM–8 AM) |
-| `infra/scripts/install-boot-deploy.sh` | Installs systemd service on EC2 for auto git pull + compose up |
-| `infra/nginx/nginx.conf` | Docker nginx config with SSL termination |
-
-**To re-provision from scratch:**
-```bash
-bash infra/scripts/start.sh --no-wait
-bash infra/scripts/setup-wake-on-visit.sh
-bash infra/scripts/stop.sh
-```
-
-The setup script is **idempotent** — safe to re-run. State saved in `infra/wake-page/.state`.
-
-**To teardown:** `bash infra/scripts/setup-wake-on-visit.sh --teardown`
-
-### Auto-Sleep (EventBridge Scheduler)
-
-Every `/wake` API call schedules a one-time EventBridge Scheduler rule:
-- **Timer:** 90 minutes from last wake call
-- **Action:** Lambda stops EC2 + RDS (`action: stop` payload)
-- **Reset:** each new `/wake` resets the timer (recruiter re-visits = 90 more minutes)
-- **Self-deletes:** the schedule is removed after it fires (`ActionAfterCompletion: DELETE`)
-
-Required Lambda env vars (set in AWS Console → Lambda → Configuration → Environment variables):
-```
-LAMBDA_ARN         = arn:aws:lambda:us-east-1:346657261080:function:portfolio-wake-controller
-SCHEDULER_ROLE_ARN = arn:aws:iam::346657261080:role/portfolio-wake-scheduler-role
-AUTO_STOP_MINUTES  = 90
-```
-
-### Boot Deploy Service
-
-Installed on EC2 as `app-boot-deploy.service` (systemd oneshot). On every EC2 start:
-1. `git pull origin main` — picks up latest config/code changes
-2. `docker compose -f docker-compose.prod.yml up -d --remove-orphans` — recreates containers with new config
-
-To install/re-install on a new EC2:
-```bash
-aws ssm start-session --target i-07709e34044f62ef4 --region us-east-1
-sudo su - ubuntu && cd ~/ai-career-hub
-bash infra/scripts/install-boot-deploy.sh
-```
-
----
-
-## Post-Setup Security Hardening — ✅ Completed (2026-04-11)
+## Post-Setup Security Hardening — ✅ Completed
 
 | Step | Status | Details |
 |------|--------|---------|
-| IAM least-privilege | ✅ | `WakeOnVisitSetup` replaced with minimal `WakeOnVisitOperate` policy |
+| IAM least-privilege | ✅ | `portfolio-developer` + `portfolio-scheduler-management` — scoped to named resources |
 | Daily budget | ✅ | $2/day alert → `deeasonsitaula5@gmail.com` (AWS Budgets console) |
 | HTTPS / TLS | ✅ | Certbot DNS-01, Docker nginx SSL, `infra/nginx/nginx.conf` |
 | Boot deploy service | ✅ | `app-boot-deploy.service` installed on EC2 |
-| Auto-sleep | ✅ | EventBridge Scheduler stops EC2+RDS 90 min after wake |
+| Auto-sleep (idle) | ✅ | EventBridge Scheduler stops EC2+RDS 90 min after wake |
+| Business hours | ✅ | EventBridge Scheduler start 9 AM / stop 6 PM ET, Mon–Fri |
+| Ruff CI | ✅ | GitHub Actions runs `ruff check backend/` on every push |
+| Pre-commit | ✅ | `.pre-commit-config.yaml` — ruff + hygiene hooks |
 
 ---
 
@@ -322,14 +434,18 @@ bash infra/scripts/install-boot-deploy.sh
 
 ```bash
 # Health check (through nginx)
-curl -s http://localhost/health
+curl -sk https://careerhub.deeason.com.np/health
 
-# API docs reachable (should return 200 in dev, 404 in prod when PRODUCTION=true)
-curl -s -o /dev/null -w "%{http_code}" http://localhost/api/v1/docs
+# Health check (direct EC2 IP, bypasses Route 53 DNS)
+curl -sk http://34.234.125.14/health
 
 # Container status
 docker compose -f docker-compose.prod.yml ps
 
 # Tail logs
 docker compose -f docker-compose.prod.yml logs -f --tail 50
+
+# Lambda status check
+curl -s https://$(aws apigatewayv2 get-apis --region us-east-1 \
+  --query 'Items[?Name==`portfolio-wake-api`].ApiEndpoint' --output text)/status
 ```

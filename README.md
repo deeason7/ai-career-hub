@@ -14,7 +14,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Health Check** | https://careerhub.deeason.com.np/health |
 
 > Hosted on AWS (EC2 t3.small + RDS PostgreSQL db.t3.micro, private VPC).  
-> **Cost-optimised:** The app runs on-demand via a *Wake on Visit* system — when sleeping, visitors see a live status page that boots the server in ~90 seconds, then auto-sleeps after 90 minutes of inactivity. [See how it works ↓](#️-cost-optimised-deployment)
+> **Cost-optimised:** Runs on a hybrid schedule — instant access Mon–Fri 9 AM–6 PM ET (always-on for recruiters), Wake-on-Visit (90s cold boot on demand) outside business hours. [See how it works ↓](#️-cost-optimised-deployment)
 
 ---
 
@@ -49,7 +49,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
                     └──────────────────────────────────────────────────┘
                                                                        │
                                          GitHub Actions (CI)           │
-                                         lint + test on push           │
+                                         ruff lint + pytest on push    │
                                                │                       ▼
                                    ┌───────────────────────┐
                                    │   AWS EC2 (t3.small)  │
@@ -95,7 +95,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Error Monitoring** | Sentry SDK integrated — opt-in via `SENTRY_DSN` |
 | **LLM Failures** | 502 Bad Gateway returned (not raw 500) when Groq/Ollama are unavailable |
 | **Production Startup** | `create_all()` skipped in production — Alembic owns the schema |
-| **IAM Least Privilege** | Custom least-privilege IAM policy — scoped to project resources only; no `RunInstances`, no wildcard permissions |
+| **IAM Least Privilege** | Custom least-privilege IAM policies — scoped to named project resources; no `RunInstances`, no wildcards |
 | **MFA** | Enforced on root account (no access keys) and all developer IAM users |
 | **EC2 IMDS** | IMDSv2 required — SSRF attacks cannot steal EC2 instance role credentials |
 | **EC2 Role** | Read-only SSM parameter access; ECR pull-only; no S3, no KMS, no write permissions |
@@ -112,6 +112,7 @@ Upload your resume, score it semantically against job descriptions, generate hon
 |-------|-----------|
 | **Backend API** | FastAPI 0.111 · SQLModel · Alembic · Python 3.11 |
 | **Database** | AWS RDS PostgreSQL 16 (private VPC, on-demand) |
+| **Cache** | Redis 7 (Docker, local to EC2) |
 | **AI / LLM** | Groq API (LLaMA 3.1 8B instant) — cloud; Ollama (local dev fallback) |
 | **Semantic NLP** | `sentence-transformers` — `all-MiniLM-L6-v2` for ATS semantic scoring |
 | **RAG Pipeline** | LangChain · FAISS · `nomic-embed-text` embeddings |
@@ -121,9 +122,10 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Security** | PyJWT · passlib[bcrypt] · slowapi · python-magic (MIME validation) |
 | **Infrastructure** | AWS EC2 · RDS · ECR · nginx (Docker SSL) · Docker Compose |
 | **Serverless** | AWS Lambda · API Gateway · S3 · CloudFront · Route 53 failover |
-| **Auto-Sleep** | EventBridge Scheduler — one-time rule stops EC2+RDS 90 min after wake |
+| **Scheduling** | EventBridge Scheduler — 90-min idle auto-stop + Mon–Fri 9 AM/6 PM ET business-hours start/stop |
 | **Observability** | Sentry · AWS CloudWatch (awslogs driver) |
-| **CI** | GitHub Actions — ruff lint + pytest on push to `main`/`develop` |
+| **CI** | GitHub Actions — ruff lint (B, UP, F, E, I rules) + pytest on push to `main`/`develop` |
+| **Code Quality** | ruff (lint + format) · pre-commit hooks (trailing whitespace, YAML/JSON check, large-file guard) |
 
 ---
 
@@ -162,6 +164,24 @@ docker compose up --build
 | Health | http://localhost:8000/health |
 
 > **First ATS run:** `sentence-transformers` downloads `all-MiniLM-L6-v2` (~80 MB) on the first request. Subsequent calls use the in-memory singleton.
+
+### 5. Developer tooling (optional but recommended)
+
+```bash
+# Install dev dependencies (includes ruff, pytest, mypy, pre-commit)
+pip install -r backend/requirements.dev.txt
+
+# Install pre-commit hooks (runs ruff + hygiene checks before every commit)
+pre-commit install
+
+# Run linter manually
+ruff check backend/        # check
+ruff check --fix backend/  # auto-fix UP007, UP017, UP035
+ruff format backend/       # format
+
+# Run tests
+cd backend && pytest tests/ -v --tb=short
+```
 
 ---
 
@@ -204,23 +224,28 @@ Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker 
 
 ## ☁️ Cost-Optimised Deployment
 
-The app uses **Wake on Visit** — EC2 and RDS sleep when idle and auto-start when someone visits the domain (~90 second cold start). A beautiful animated status page handles the wait. Cost: **~$1–2/month** instead of $30/month.
+The app uses a **hybrid scheduling model** to balance cost and recruiter experience:
+
+| Mode | Schedule | Cost | UX |
+|------|----------|------|----|
+| **Always-On** | Mon–Fri 9 AM – 6 PM ET | ~$7.50/mo | Instant load — no wait |
+| **Wake-on-Visit** | All other times | ~$0.50/mo extra | ~90s cold boot on demand |
+| **Always-On (baseline)** | 24/7 | ~$27/mo | — |
 
 ```
-  careerhub.deeason.com.np
+careerhub.deeason.com.np
          │
          ├─ [EC2 up]   → Route 53 PRIMARY  → real app (no wait)
          └─ [EC2 down] → Route 53 FAILOVER → CloudFront → S3 wake page
                               └──→ Lambda starts EC2 + RDS
                                          └──→ auto-redirect in ~90s
-```
 
-```bash
-# Stop everything when done (saves ~$0.029/hr)
-bash infra/scripts/stop.sh
+Business Hours (EventBridge Scheduler, America/New_York):
+  cron(0 9  ? * MON-FRI *)  →  action:wake  →  start EC2 + RDS
+  cron(0 18 ? * MON-FRI *)  →  action:stop  →  stop  EC2 + RDS
 
-# Deploy the Wake on Visit infrastructure (run once)
-bash infra/scripts/setup-wake-on-visit.sh
+Off-Hours:
+  Visitor hits S3 wake page → Lambda /wake → EC2+RDS start → 90-min idle timer
 ```
 
 ### AWS Infrastructure
@@ -228,46 +253,37 @@ bash infra/scripts/setup-wake-on-visit.sh
 |----------|---------|
 | EC2 | `t3.small` (Ubuntu 24.04) — Docker Compose stack |
 | RDS | PostgreSQL 16 · `db.t3.micro` · private subnet |
-| ECR | `<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com` (derive: `aws sts get-caller-identity --query Account --output text`) |
+| ECR | `<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com` |
 | Secrets | AWS SSM Parameter Store → `.env.prod` |
 | Logs | CloudWatch (`/portfolio/careerhub-*`) |
 | Wake page | S3 static site → CloudFront (HTTPS) — always-on, ~$0/month |
 | Wake API | API Gateway HTTP API + Lambda (`portfolio-wake-controller`) |
-| Failover | Route 53 health check → failover routing (EC2 → CloudFront) |
+| Failover | Route 53 health check → failover routing (EC2 ↔ CloudFront) |
+| Scheduler | EventBridge Scheduler: business-hours start/stop + 90-min idle auto-stop |
 
 ### Deploy workflow
 ```bash
 # On your local machine — build & push images
-# Derive your ECR registry URL from your AWS identity (no hardcoded account IDs)
 export ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
-docker build -t $ECR_REGISTRY/careerhub-backend:latest ./backend
-docker build -t $ECR_REGISTRY/careerhub-frontend:latest ./frontend
+docker build --platform linux/amd64 -t $ECR_REGISTRY/careerhub-backend:latest ./backend
 docker push $ECR_REGISTRY/careerhub-backend:latest
-docker push $ECR_REGISTRY/careerhub-frontend:latest
 
-# On EC2 — run the single deploy entry point (handles secrets + stack restart)
-# Connect: aws ssm start-session --target $EC2_INSTANCE_ID --region us-east-1
+# On EC2 — connect then deploy
+aws ssm start-session --target $INSTANCE_ID --region us-east-1
+sudo su - ubuntu && cd ~/ai-career-hub
 bash infra/scripts/deploy.sh
 ```
 
-### Required SSM Parameters
-
-All parameters live under the `/portfolio/careerhub` prefix.
-Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads the whole prefix automatically.
-
-```
-/portfolio/careerhub/POSTGRES_SERVER
-/portfolio/careerhub/POSTGRES_USER
-/portfolio/careerhub/POSTGRES_PASSWORD
-/portfolio/careerhub/POSTGRES_DB
-/portfolio/careerhub/POSTGRES_PORT
-/portfolio/careerhub/SECRET_KEY
-/portfolio/careerhub/GROQ_API_KEY
-/portfolio/careerhub/ALLOWED_ORIGINS
-/portfolio/careerhub/PRODUCTION
-/portfolio/careerhub/SENTRY_DSN        # optional — add for Sentry error tracking
-```
+### Key infrastructure scripts
+| Script | Purpose |
+|--------|---------|
+| `infra/scripts/start.sh` | Manually start EC2 + RDS + wait for health |
+| `infra/scripts/stop.sh` | Manually stop EC2 + RDS |
+| `infra/scripts/deploy.sh` | On-EC2 deploy: pull secrets + images + restart stack |
+| `infra/scripts/setup-wake-on-visit.sh` | One-time Wake-on-Visit provisioning |
+| `infra/scripts/setup-business-hours.sh` | Install/update business-hours recurring schedules |
+| `infra/wake-page/wake_controller.py` | Lambda: routes `/wake`, `/status`, `action:stop`, `action:wake` |
 
 ---
 
@@ -288,7 +304,7 @@ Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads th
 - [x] Migrated from Render/Supabase → AWS EC2 + RDS
 - [x] Celery replaced with FastAPI `BackgroundTasks`
 - [x] Alembic migrations hardened with `IF NOT EXISTS`
-- [x] UUID parse security fix (ValueError → 401)
+- [x] UUID parse security fix (ValueError → 401 from None)
 - [x] LLM failure handling (502 instead of 500)
 - [x] Async httpx replaces blocking sync client
 - [x] O(N) stats + activate queries replaced with SQL COUNT/UPDATE
@@ -297,18 +313,34 @@ Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads th
 - [x] Secrets in SSM Parameter Store — zero secrets in source code or git history
 - [x] Full git history audit + credential rotation via `git-filter-repo`
 - [x] AWS Budgets alerts (daily $5 + monthly $40) + ML cost anomaly detection
-- [x] Stack live on EC2 — all 4 Alembic migrations applied against RDS
-- [x] Full credential rotation — RDS master password, JWT secret, Groq API key, IAM access keys
-- [x] Hardened IAM — least-privilege custom policy, MFA on root + developer user
+- [x] Stack live on EC2 — all Alembic migrations applied against RDS
+- [x] Hardened IAM — least-privilege custom policies, MFA on root + developer user
 - [x] IMDSv2 enforced on EC2 — eliminates SSRF-based credential theft vector
 - [x] EC2 IAM role tightened — read-only SSM, no S3/KMS/write access
 - [x] Budget kill switch — Lambda auto-stops EC2 + RDS at $5/day spend threshold
-- [x] Stale Elastic IPs released — eliminated $7.30/month in silent billing
-- [x] CloudTrail audit confirmed clean — no unauthorized API usage detected
-- [x] TLS — HTTPS live via Let's Encrypt + certbot DNS-01
-- [x] Wake on Visit — on-demand infrastructure (Route 53 failover → CloudFront → Lambda → EC2/RDS boot); cost reduced from ~$30/month → ~$1–2/month
+- [x] Wake on Visit — on-demand infrastructure (Route 53 failover → CloudFront → Lambda → EC2/RDS boot)
 
-### 🔜 v2.1 — ML & Data Science
+### ✅ v2.5 — Performance & Reliability
+- [x] Lambda parallelized EC2+RDS status checks via `ThreadPoolExecutor` (~400ms vs ~1.3s)
+- [x] gzip compression on nginx for JS/CSS/JSON assets (~50% smaller payloads)
+- [x] `proxy_read_timeout` 300s — supports long-running Groq cover letter requests
+- [x] Split `requirements.txt` / `requirements.dev.txt` — dev tools out of production image (~300MB saved)
+- [x] Streamlit starts on `service_started` — ~10s earlier warm-up
+- [x] Wake page: 45s DNS hard-redirect replaced with 90s poll + manual button fallback
+- [x] Wake page: RDS `stopping → stopped` auto-rewake (re-triggers `/wake` automatically)
+- [x] Wake page: `btn-pulse` CSS animation for DNS-stall CTA
+
+### ✅ v2.6 — Business Hours Scheduler + Housekeeping
+- [x] EventBridge Scheduler recurring rules: start 9 AM ET / stop 6 PM ET, Mon–Fri
+- [x] `wake_controller.py` — `action:wake` routed to `handle_scheduled_wake()` (no idle timer set — 6 PM stop handles it)
+- [x] `_start_all()` extracted — shared EC2+RDS start logic for HTTP /wake and scheduled wake
+- [x] `setup-business-hours.sh` — idempotent install/update/remove of business-hours schedules
+- [x] `.pre-commit-config.yaml` — ruff (lint + format) + trailing whitespace + YAML/JSON check + large-file guard
+- [x] `backend/ruff.toml` — expanded to B (bugbear) + UP (pyupgrade) rules
+- [x] CI: `ci.yml` installs `requirements.dev.txt` — ruff and pytest now available in GitHub Actions
+- [x] All 59 ruff errors resolved (52 auto-fixed UP007/UP017/UP035, 7 B904 manually fixed)
+
+### 🔜 v2.7 — ML & Data Science
 - [ ] Resume section classifier (spaCy NER)
 - [ ] Application pipeline funnel chart (Plotly)
 - [ ] Skill gap priority scorer (TF-IDF + co-occurrence ranking)
@@ -327,8 +359,9 @@ Populate them once with `aws ssm put-parameter`, then `pull-secrets.sh` reads th
 ## 🤝 Contributing
 
 1. Fork → `git checkout -b feat/your-feature`
-2. Commit: `git commit -m 'feat(scope): description'`
-3. Push & open PR to `develop`
+2. Install hooks: `pre-commit install`
+3. Commit: `git commit -m 'feat(scope): description'`
+4. Push & open PR to `develop`
 
 ---
 
