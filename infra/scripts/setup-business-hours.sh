@@ -83,33 +83,42 @@ echo ""
 # ── Upsert helper: update if exists, create if not ────────────────────────────
 upsert_schedule() {
   local name=$1 cron=$2 action=$3
-  # --target must be full JSON (not shorthand) because the Input field contains
-  # nested JSON with double quotes, which the AWS CLI shorthand parser rejects.
-  # Input itself must be a JSON-encoded string (double-escaped), not an object.
-  local target
-  target=$(printf '{"Arn":"%s","RoleArn":"%s","Input":"{\"action\":\"%s\"}"}' \
-    "$LAMBDA_ARN" "$SCHEDULER_ROLE_ARN" "$action")
+
+  # Build target JSON via a heredoc → temp file.
+  # WHY: printf in bash converts \" → " (strips backslashes), producing invalid
+  # JSON when the Input field contains nested JSON.  A heredoc writes \" literally
+  # so the file contains the properly-escaped JSON the AWS CLI expects:
+  #   "Input":"{\"action\":\"wake\"}"
+  # AWS CLI reads it via file:// and parses it as a JSON-encoded string.
+  local tmpfile
+  tmpfile=$(mktemp /tmp/sched_target.XXXXXX.json)
+  # shellcheck disable=SC2064
+  trap "rm -f $tmpfile" RETURN
+
+  cat > "$tmpfile" << TARGETJSON
+{"Arn":"${LAMBDA_ARN}","RoleArn":"${SCHEDULER_ROLE_ARN}","Input":"{\"action\":\"${action}\"}"}
+TARGETJSON
 
   if aws scheduler get-schedule --name "$name" --region "$REGION" &>/dev/null; then
     info "Updating existing schedule: $name ..."
     aws scheduler update-schedule \
-      --name                          "$name" \
-      --schedule-expression           "cron($cron)" \
-      --schedule-expression-timezone  "America/New_York" \
-      --target                        "$target" \
-      --flexible-time-window          '{"Mode":"OFF"}' \
-      --state                         ENABLED \
-      --region                        "$REGION" > /dev/null
+      --name                         "$name" \
+      --schedule-expression          "cron($cron)" \
+      --schedule-expression-timezone "America/New_York" \
+      --target                       "file://$tmpfile" \
+      --flexible-time-window         '{"Mode":"OFF"}' \
+      --state                        ENABLED \
+      --region                       "$REGION" > /dev/null
   else
     info "Creating schedule: $name ..."
     aws scheduler create-schedule \
-      --name                          "$name" \
-      --schedule-expression           "cron($cron)" \
-      --schedule-expression-timezone  "America/New_York" \
-      --target                        "$target" \
-      --flexible-time-window          '{"Mode":"OFF"}' \
-      --state                         ENABLED \
-      --region                        "$REGION" > /dev/null
+      --name                         "$name" \
+      --schedule-expression          "cron($cron)" \
+      --schedule-expression-timezone "America/New_York" \
+      --target                       "file://$tmpfile" \
+      --flexible-time-window         '{"Mode":"OFF"}' \
+      --state                        ENABLED \
+      --region                       "$REGION" > /dev/null
   fi
   success "$name  ->  action:${action}  at  cron($cron) ET"
 }
