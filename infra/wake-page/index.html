@@ -64,6 +64,11 @@
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.4; transform: scale(0.7); }
     }
+    /* Pulsing CTA shown after 90s DNS wait */
+    @keyframes btn-pulse {
+      0%, 100% { transform: translateY(0);   box-shadow: 0 4px 24px var(--green-glow); }
+      50%       { transform: translateY(-3px); box-shadow: 0 8px 36px rgba(16,185,129,0.5); }
+    }
 
     /* ── Card ── */
     .card {
@@ -301,6 +306,9 @@
     <a href="https://careerhub.deeason.com.np" class="redirect-btn" id="redirect-btn">
       🚀 Open AI Career Hub →
     </a>
+    <p id="redirect-note" style="display:none; font-size:0.78rem; color:var(--muted); margin-top:1rem; line-height:1.6;">
+      If clicking reloads this page, DNS is still propagating —<br>wait 60s then click again.
+    </p>
   </div>
 
   <script>
@@ -310,10 +318,11 @@
     const APP_URL  = 'https://careerhub.deeason.com.np';
 
     // ─── STATE ─────────────────────────────────────────────────────────────
-    let wakeStarted = false;
-    let pollInterval = null;
-    let startTime = null;
+    let wakeStarted  = false;
+    let pollInterval  = null;
+    let startTime     = null;
     let timerInterval = null;
+    let lastRdsState  = null;   // tracks RDS transitions for auto-rewake
     const EXPECTED_SECONDS = 90;
 
     // ─── CHECK IF ALREADY UP (on page load) ────────────────────────────────
@@ -355,19 +364,35 @@
       startPolling();
     }
 
-    // ─── POLLING ───────────────────────────────────────────────────────────
+    // ─── POLLING ────────────────────────────────────────────────────────────────
     function startPolling() {
       pollInterval = setInterval(async () => {
         try {
-          const res = await fetch(WAKE_API + '/status', { signal: AbortSignal.timeout(5000) });
+          const res  = await fetch(WAKE_API + '/status', { signal: AbortSignal.timeout(5000) });
           const data = await res.json();
+
+          // RDS auto-rewake: if /wake was sent while RDS was still stopping,
+          // Lambda skipped starting it (can't restart a stopping DB).
+          // When polling detects RDS reached 'stopped', reset and re-send /wake.
+          if (lastRdsState !== null
+              && lastRdsState !== 'stopped'
+              && data.rds === 'stopped') {
+            console.log('[wake] RDS transitioned to stopped — re-sending wake.');
+            wakeStarted = false;
+            clearInterval(pollInterval);
+            clearInterval(timerInterval);
+            await wakeUp();
+            return;
+          }
+          lastRdsState = data.rds;
+
           updateUI(data);
           if (data.app === 'healthy') {
             clearInterval(pollInterval);
             clearInterval(timerInterval);
             showSuccess();
           }
-        } catch (e) { /* still booting */ }
+        } catch (e) { /* still booting — ignore transient errors */ }
       }, 8000);
     }
 
@@ -443,24 +468,39 @@
       const statusEl = document.getElementById('redirect-status');
       let attempt = 0;
 
-      // Hard deadline: after MAX_ATTEMPTS × 5s we redirect regardless.
-      // Lambda already confirmed app IS healthy (it checks EC2 IP directly).
-      // Route 53 TTL is 60s so by 45s the domain is pointing to EC2 for everyone.
-      // Chrome sometimes holds a stale DNS cache entry longer — this beats that.
-      const MAX_ATTEMPTS = 9;  // 9 × 5s = 45s hard deadline
+      // Poll the DOMAIN /health to confirm Route 53 has switched to EC2.
+      // CloudFront/S3 returns 4xx for /health; EC2 returns 200 -> redirect.
+      //
+      // Timing budget:
+      //   Route 53 health-check: up to 30s
+      //   DNS TTL expiry:        60s
+      //   Browser DNS cache:     variable (Chrome can hold longer than TTL)
+      //   Total max:             ~90s -> MAX_ATTEMPTS = 18 x 5s
+      //
+      // We do NOT blind-redirect on timeout: if Route 53 hasn't switched yet,
+      // the redirect hits CloudFront -> loads wake page -> loop.
+      // Instead we pulse the manual button and show a helpful hint.
+      const MAX_ATTEMPTS = 18;  // 18 x 5s = 90s
 
       const ping = async () => {
         attempt++;
         const elapsed = attempt * 5;
 
-        // Update counter first (before fetch) so it ALWAYS ticks even on error
-        if (statusEl) statusEl.textContent = `Confirming network routing… (${elapsed}s)`;
+        // Update counter BEFORE fetch so it always ticks even on error
+        if (statusEl) statusEl.textContent = `Confirming network routing... (${elapsed}s)`;
 
-        // Hard deadline — trust Lambda, redirect regardless of DNS state
         if (attempt >= MAX_ATTEMPTS) {
-          if (statusEl) statusEl.textContent = 'Ready! Redirecting now…';
-          setTimeout(() => { window.location.href = APP_URL; }, 800);
-          return;
+          // DNS has not propagated to this browser after 90s.
+          // Show the manual button prominently -- do NOT auto-redirect.
+          if (statusEl) statusEl.textContent = 'App is ready -- click below to enter';
+          const btn = document.getElementById('redirect-btn');
+          if (btn) {
+            btn.style.animation = 'btn-pulse 1.5s ease-in-out infinite';
+            btn.textContent = '\uD83D\uDE80 Enter AI Career Hub \u2192';
+          }
+          const note = document.getElementById('redirect-note');
+          if (note) note.style.display = 'block';
+          return;   // stop polling -- user clicks at their own pace
         }
 
         try {
@@ -469,19 +509,18 @@
             cache:  'no-store',
           });
           if (res.ok) {
-            // Route 53 DNS confirmed — EC2 is now serving the domain ✅
-            if (statusEl) statusEl.textContent = 'Network confirmed ✔ Redirecting now…';
+            // Route 53 confirmed -- domain now serves EC2
+            if (statusEl) statusEl.textContent = 'Network confirmed Redirecting...';
             setTimeout(() => { window.location.href = APP_URL; }, 800);
             return;
           }
         } catch (_) {
-          // CloudFront still serving (stale DNS) or fetch blocked — keep polling
+          // CloudFront still routing to S3 (stale browser DNS) -- keep polling
         }
 
         _dnsTimer = setTimeout(ping, 5000);
       };
 
-      // First check after 5s
       _dnsTimer = setTimeout(ping, 5000);
     }
 
