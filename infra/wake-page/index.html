@@ -295,8 +295,8 @@
   <div class="card success-card" id="success-card">
     <div class="success-icon">✅</div>
     <h1>App is Live!</h1>
-    <p class="subtitle" style="margin-bottom: 1.5rem;">
-      AI Career Hub is up and running. Redirecting you now...
+    <p class="subtitle" id="redirect-status" style="margin-bottom: 1.5rem;">
+      Confirming network routing… almost there!
     </p>
     <a href="https://careerhub.deeason.com.np" class="redirect-btn" id="redirect-btn">
       🚀 Open AI Career Hub →
@@ -429,9 +429,47 @@
       setTimeout(() => {
         document.getElementById('loading-card').style.display = 'none';
         document.getElementById('success-card').style.display = 'block';
-        // Auto-redirect after 3 seconds
-        setTimeout(() => { window.location.href = APP_URL; }, 3000);
+        // Don't redirect immediately — Route 53 DNS failover takes 30-60s AFTER
+        // EC2 health check passes before the domain stops pointing to CloudFront.
+        // Poll /health on the actual domain: S3/CloudFront returns 404, EC2 returns 200.
+        // Only redirect once we confirm EC2 is serving the domain.
+        confirmDnsThenRedirect();
       }, 600);
+    }
+
+    let _dnsTimer = null;
+
+    async function confirmDnsThenRedirect() {
+      const statusEl = document.getElementById('redirect-status');
+      let attempt = 0;
+
+      const ping = async () => {
+        attempt++;
+        statusEl.textContent = `Confirming network routing… (${attempt * 5}s)`;
+        try {
+          const res = await fetch(APP_URL + '/health', {
+            signal: AbortSignal.timeout(5000),
+            cache:  'no-store',
+          });
+          if (res.ok) {
+            // Route 53 has switched to EC2 — domain now serves the app ✅
+            statusEl.textContent = 'Network confirmed ✔ Redirecting now…';
+            setTimeout(() => { window.location.href = APP_URL; }, 800);
+            return;
+          }
+        } catch (_) {
+          // CloudFront still serving wake page, or network hiccup — keep polling
+        }
+        // Retry every 5s (give up UI hint after 90s = 18 attempts)
+        if (attempt < 18) {
+          _dnsTimer = setTimeout(ping, 5000);
+        } else {
+          statusEl.textContent = 'DNS is taking longer than usual. Click the button below.';
+        }
+      };
+
+      // First check after 5s (give Route 53 a tiny head-start)
+      _dnsTimer = setTimeout(ping, 5000);
     }
   </script>
 </body>
