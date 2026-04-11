@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Career Hub — Waking Up...</title>
+  <meta name="description" content="AI Career Hub is starting up. Please wait a moment." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0f1e;
+      --surface: #111827;
+      --border: #1f2a3d;
+      --accent: #6366f1;
+      --accent-glow: rgba(99,102,241,0.3);
+      --green: #10b981;
+      --green-glow: rgba(16,185,129,0.25);
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.15) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(16,185,129,0.08) 0%, transparent 50%);
+    }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.3);
+      color: #a5b4fc;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 0.35rem 0.85rem;
+      border-radius: 99px;
+      margin-bottom: 2rem;
+    }
+    .badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #6366f1;
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      padding: 3rem 2.5rem;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 0 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    /* ── Orbits animation ── */
+    .orbit-wrapper {
+      width: 100px; height: 100px;
+      position: relative;
+      margin: 0 auto 2rem;
+    }
+    .orbit-core {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 50%;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 20px var(--accent-glow), 0 0 40px var(--accent-glow);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+    }
+    .orbit-ring {
+      position: absolute;
+      border: 1.5px solid rgba(99,102,241,0.25);
+      border-radius: 50%;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .orbit-ring-1 { width: 64px; height: 64px; animation: spin 3s linear infinite; }
+    .orbit-ring-2 { width: 90px; height: 90px; animation: spin 5s linear infinite reverse; border-color: rgba(16,185,129,0.2); }
+    .orbit-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      position: absolute;
+    }
+    .orbit-ring-1 .orbit-dot { background: #6366f1; top: -3px; left: 50%; transform: translateX(-50%); box-shadow: 0 0 6px #6366f1; }
+    .orbit-ring-2 .orbit-dot { background: #10b981; bottom: -3px; left: 50%; transform: translateX(-50%); box-shadow: 0 0 6px #10b981; }
+    @keyframes spin { from { transform: translate(-50%,-50%) rotate(0deg); } to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+    h1 { font-size: 1.6rem; font-weight: 600; margin-bottom: 0.6rem; letter-spacing: -0.02em; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; line-height: 1.6; margin-bottom: 2rem; }
+
+    /* ── Status bar ── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.82rem;
+    }
+    .status-label { color: var(--muted); }
+    .status-value { font-weight: 500; display: flex; align-items: center; gap: 0.4rem; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-waiting  { background: #f59e0b; animation: pulse-dot 1.2s ease-in-out infinite; }
+    .dot-running  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot-starting { background: #6366f1; animation: pulse-dot 0.8s ease-in-out infinite; }
+
+    /* ── Progress bar ── */
+    .progress-wrap {
+      margin: 1.5rem 0;
+      background: rgba(255,255,255,0.05);
+      border-radius: 99px;
+      height: 6px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #10b981);
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.5s ease;
+      box-shadow: 0 0 8px rgba(99,102,241,0.5);
+    }
+
+    /* ── Timer ── */
+    .timer-text {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 1.5rem;
+    }
+    .timer-text span { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 500; }
+
+    /* ── Wake button ── */
+    .wake-btn {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      border: none;
+      border-radius: 0.75rem;
+      padding: 0.85rem 2rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.35);
+      width: 100%;
+      justify-content: center;
+    }
+    .wake-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(99,102,241,0.5);
+    }
+    .wake-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .footer-note {
+      margin-top: 2rem;
+      color: var(--muted);
+      font-size: 0.75rem;
+      line-height: 1.6;
+    }
+    .footer-note a { color: #a5b4fc; text-decoration: none; }
+    .footer-note a:hover { text-decoration: underline; }
+
+    /* ── Success state ── */
+    .success-card {
+      display: none;
+      animation: fade-in 0.5s ease;
+    }
+    .success-icon {
+      width: 64px; height: 64px;
+      background: radial-gradient(circle, rgba(16,185,129,0.2), transparent);
+      border: 1.5px solid var(--green);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem;
+      margin: 0 auto 1.5rem;
+      box-shadow: 0 0 30px var(--green-glow);
+    }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .redirect-btn {
+      display: inline-flex; align-items: center; gap: 0.6rem;
+      background: linear-gradient(135deg, var(--green), #059669);
+      color: #fff;
+      border: none;
+      border-radius: 0.75rem;
+      padding: 0.85rem 2rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      text-decoration: none;
+      width: 100%;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 20px var(--green-glow);
+    }
+    .redirect-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(16,185,129,0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="badge">Portfolio Project</div>
+
+  <div class="card" id="loading-card">
+    <div class="orbit-wrapper">
+      <div class="orbit-ring orbit-ring-2"><div class="orbit-dot"></div></div>
+      <div class="orbit-ring orbit-ring-1"><div class="orbit-dot"></div></div>
+      <div class="orbit-core">🤖</div>
+    </div>
+
+    <h1>AI Career Hub</h1>
+    <p class="subtitle">
+      This portfolio project runs on-demand to save costs.<br/>
+      Click below to wake the server — it'll be ready in ~90 seconds.
+    </p>
+
+    <!-- Service status rows -->
+    <div class="status-row">
+      <span class="status-label">EC2 Server</span>
+      <span class="status-value" id="ec2-status">
+        <span class="dot dot-waiting"></span>
+        <span id="ec2-text">Sleeping</span>
+      </span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Database (RDS)</span>
+      <span class="status-value" id="rds-status">
+        <span class="dot dot-waiting"></span>
+        <span id="rds-text">Sleeping</span>
+      </span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Application</span>
+      <span class="status-value" id="app-status">
+        <span class="dot dot-waiting"></span>
+        <span id="app-text">Waiting</span>
+      </span>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+
+    <p class="timer-text" id="timer-text">Ready to start</p>
+
+    <button class="wake-btn" id="wake-btn" onclick="wakeUp()">
+      ⚡ Wake Up the App
+    </button>
+
+    <p class="footer-note">
+      Cost-optimized portfolio deployment on AWS.<br/>
+      <a href="https://github.com/deeason7/ai-career-hub" target="_blank">View source on GitHub ↗</a>
+    </p>
+  </div>
+
+  <!-- Success state -->
+  <div class="card success-card" id="success-card">
+    <div class="success-icon">✅</div>
+    <h1>App is Live!</h1>
+    <p class="subtitle" style="margin-bottom: 1.5rem;">
+      AI Career Hub is up and running. Redirecting you now...
+    </p>
+    <a href="https://careerhub.deeason.com.np" class="redirect-btn" id="redirect-btn">
+      🚀 Open AI Career Hub →
+    </a>
+  </div>
+
+  <script>
+    // ─── CONFIG ────────────────────────────────────────────────────────────
+    // Replace this URL with your API Gateway endpoint after deploying Lambda
+    const WAKE_API = 'https://YOUR_API_GATEWAY_ID.execute-api.us-east-1.amazonaws.com/prod';
+    const APP_URL  = 'https://careerhub.deeason.com.np';
+
+    // ─── STATE ─────────────────────────────────────────────────────────────
+    let wakeStarted = false;
+    let pollInterval = null;
+    let startTime = null;
+    let timerInterval = null;
+    const EXPECTED_SECONDS = 90;
+
+    // ─── CHECK IF ALREADY UP (on page load) ────────────────────────────────
+    window.addEventListener('load', async () => {
+      try {
+        const res = await fetch(WAKE_API + '/status', { signal: AbortSignal.timeout(5000) });
+        const data = await res.json();
+        if (data.app === 'healthy') {
+          showSuccess();
+          return;
+        }
+        if (data.ec2 === 'running' || data.ec2 === 'pending') {
+          // Already starting — jump straight into polling
+          wakeStarted = true;
+          updateUI(data);
+          startPolling();
+          startTimer();
+        }
+      } catch (e) {
+        // App is definitely offline — show the normal wake button
+      }
+    });
+
+    // ─── WAKE UP ───────────────────────────────────────────────────────────
+    async function wakeUp() {
+      if (wakeStarted) return;
+      wakeStarted = true;
+
+      const btn = document.getElementById('wake-btn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Sending wake signal...';
+
+      try {
+        await fetch(WAKE_API + '/wake', { method: 'POST', signal: AbortSignal.timeout(10000) });
+      } catch (e) {
+        // Timeout is expected — Lambda starts EC2/RDS and the request may drop
+      }
+
+      btn.textContent = '🔄 Booting up... (~90s)';
+      startTimer();
+      startPolling();
+    }
+
+    // ─── POLLING ───────────────────────────────────────────────────────────
+    function startPolling() {
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(WAKE_API + '/status', { signal: AbortSignal.timeout(5000) });
+          const data = await res.json();
+          updateUI(data);
+          if (data.app === 'healthy') {
+            clearInterval(pollInterval);
+            clearInterval(timerInterval);
+            showSuccess();
+          }
+        } catch (e) { /* still booting */ }
+      }, 8000);
+    }
+
+    // ─── UI UPDATES ────────────────────────────────────────────────────────
+    function updateUI({ ec2, rds, app }) {
+      setStatus('ec2', ec2);
+      setStatus('rds', rds);
+      setStatus('app', app);
+
+      // Progress bar heuristic
+      const step = (ec2 === 'running' ? 40 : ec2 === 'pending' ? 20 : 5)
+                 + (rds === 'available' ? 30 : rds === 'starting' ? 10 : 0)
+                 + (app === 'healthy' ? 30 : 0);
+      document.getElementById('progress-bar').style.width = step + '%';
+    }
+
+    function setStatus(service, state) {
+      const textEl = document.getElementById(service + '-text');
+      const rowEl  = document.getElementById(service + '-status');
+      const dot    = rowEl.querySelector('.dot');
+
+      const labels = {
+        running: 'Running',   available: 'Available',  healthy: 'Healthy',
+        pending: 'Starting…', starting:  'Starting…',
+        stopped: 'Sleeping',  unknown:   'Checking…',  undefined: 'Checking…'
+      };
+      textEl.textContent = labels[state] ?? state ?? 'Checking…';
+
+      dot.className = 'dot';
+      if (['running', 'available', 'healthy'].includes(state)) dot.classList.add('dot-running');
+      else if (['pending', 'starting'].includes(state))         dot.classList.add('dot-starting');
+      else                                                       dot.classList.add('dot-waiting');
+    }
+
+    // ─── COUNTDOWN TIMER ──────────────────────────────────────────────────
+    function startTimer() {
+      startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const remaining = Math.max(0, EXPECTED_SECONDS - elapsed);
+        const pct = Math.min(100, Math.round(elapsed / EXPECTED_SECONDS * 100));
+
+        document.getElementById('timer-text').innerHTML =
+          remaining > 0
+            ? `Est. ready in <span>~${remaining}s</span>`
+            : `Taking a bit longer — almost there…`;
+
+        // Advance progress bar even before API confirms
+        const bar = document.getElementById('progress-bar');
+        const currentWidth = parseFloat(bar.style.width) || 0;
+        // Don't let heuristic override actual status progress
+        bar.style.width = Math.max(currentWidth, Math.min(85, pct)) + '%';
+      }, 1000);
+    }
+
+    // ─── SUCCESS ──────────────────────────────────────────────────────────
+    function showSuccess() {
+      document.getElementById('progress-bar').style.width = '100%';
+      setTimeout(() => {
+        document.getElementById('loading-card').style.display = 'none';
+        document.getElementById('success-card').style.display = 'block';
+        // Auto-redirect after 3 seconds
+        setTimeout(() => { window.location.href = APP_URL; }, 3000);
+      }, 600);
+    }
+  </script>
+</body>
+</html>
