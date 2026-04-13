@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # AI — Ollama (local dev default)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
-    OLLAMA_LLM_MODEL: str = "llama3.2:1b"
+    OLLAMA_LLM_MODEL: str = "llama3.2:3b"
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
 
     # AI — Groq (free cloud alternative; takes priority over Ollama when set)
