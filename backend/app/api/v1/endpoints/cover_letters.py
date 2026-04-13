@@ -33,23 +33,90 @@ _STATUS_MAP = {
 
 
 def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
-    """Background thread: generates cover letter and persists result to DB."""
+    """Background thread: generates cover letter, runs QA review, persists result.
+
+    Pipeline:
+      1. Generate cover letter via instructor (Groq) or LangChain (Ollama)
+      2. Run AI-as-a-Judge QA review → get honesty/tone scores
+      3. If honesty < threshold, auto-regenerate (up to MAX_QA_RETRIES times)
+      4. Persist the best result with QA scores to DB
+      5. If still below threshold after retries, save anyway but status reflects it
+    """
+    from app.services.qa_service import (  # noqa: PLC0415
+        HALLUCINATION_THRESHOLD,
+        MAX_QA_RETRIES,
+        passes_qa,
+        review_cover_letter,
+    )
+
     logger.info("Background: generating cover letter %s", cover_letter_id)
     try:
-        # NOTE: _run_cover_letter_bg is a sync function. FastAPI's BackgroundTasks
-        # calls sync functions via run_in_threadpool (thread pool executor), so the
-        # event loop is NOT blocked. Direct call is correct here.
-        result = generate_cover_letter(resume_text, job_description)
-        cover_letter_text = result["cover_letter"]
+        cover_letter_text = None
+        verdict = None
+        retries = 0
 
+        for attempt in range(1 + MAX_QA_RETRIES):
+            # Step 1: Generate
+            result = generate_cover_letter(resume_text, job_description)
+            cover_letter_text = result["cover_letter"]
+
+            # Step 2: QA Review
+            try:
+                verdict = review_cover_letter(
+                    cover_letter=cover_letter_text,
+                    resume_text=resume_text,
+                    job_description=job_description,
+                )
+            except Exception as qa_exc:
+                # QA review failed (LLM error, validation error, etc.)
+                # Save the letter without QA scores rather than losing it.
+                logger.warning(
+                    "QA review failed for %s (attempt %d): %s",
+                    cover_letter_id, attempt + 1, qa_exc,
+                )
+                verdict = None
+                break
+
+            # Step 3: Check threshold
+            if passes_qa(verdict):
+                logger.info(
+                    "QA passed for %s on attempt %d (honesty=%d)",
+                    cover_letter_id, attempt + 1, verdict.honesty_score,
+                )
+                break
+
+            retries = attempt + 1
+            if retries <= MAX_QA_RETRIES:
+                logger.info(
+                    "QA below threshold for %s (honesty=%d < %d), regenerating (attempt %d/%d)",
+                    cover_letter_id,
+                    verdict.honesty_score,
+                    HALLUCINATION_THRESHOLD,
+                    retries,
+                    MAX_QA_RETRIES,
+                )
+
+        # Step 4: Persist result with QA scores
         with Session(sync_engine) as session:
             cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
             if cl:
                 cl.generated_text = cover_letter_text
                 cl.status = "success"
+                cl.qa_retries = retries
+
+                if verdict:
+                    cl.qa_score_honesty = verdict.honesty_score
+                    cl.qa_score_tone = verdict.tone_score
+                    cl.set_qa_flags(verdict.flags)
+
                 session.add(cl)
                 session.commit()
-                logger.info("Cover letter saved: %s", cover_letter_id)
+                logger.info(
+                    "Cover letter saved: %s (honesty=%s, retries=%d)",
+                    cover_letter_id,
+                    verdict.honesty_score if verdict else "N/A",
+                    retries,
+                )
 
     except Exception as exc:
         logger.error("Cover letter background task failed: %s", exc, exc_info=True)
@@ -143,11 +210,23 @@ async def poll_task_status(
     if not cl:
         return {"task_id": task_id, "status": "PENDING", "result": None}
 
-    return {
+    response = {
         "task_id": task_id,
         "status": _STATUS_MAP.get(cl.status, "PENDING"),
         "result": cl.generated_text if cl.status == "success" else None,
     }
+
+    # Include QA data when available — frontend can display scores and warnings
+    if cl.status == "success" and cl.qa_score_honesty is not None:
+        response["qa"] = {
+            "honesty_score": cl.qa_score_honesty,
+            "tone_score": cl.qa_score_tone,
+            "flags": cl.get_qa_flags(),
+            "retries": cl.qa_retries,
+            "passed": cl.qa_score_honesty >= 6,
+        }
+
+    return response
 
 
 @router.get("/{cover_letter_id}", response_model=CoverLetterRead)
