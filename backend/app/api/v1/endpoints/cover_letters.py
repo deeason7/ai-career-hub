@@ -4,6 +4,7 @@ import logging
 import uuid
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Session
 
 from app.api.v1.deps import get_current_user
+from app.core.config import settings
 from app.core.db import get_async_session, sync_engine
 from app.core.limiter import rate_limit
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
@@ -30,6 +32,41 @@ _STATUS_MAP = {
     "success": "SUCCESS",
     "failure": "FAILURE",
 }
+
+
+async def _dispatch_to_n8n(
+    cover_letter_id: str, resume_text: str, job_description: str
+) -> bool:
+    """POST to n8n Cloud webhook to trigger the cover letter workflow.
+
+    Returns True if n8n accepted the request, False if unreachable
+    (caller will fall back to local BackgroundTasks).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                settings.N8N_WEBHOOK_URL,
+                json={
+                    "cover_letter_id": cover_letter_id,
+                    "resume_text": resume_text[:8000],  # Limit payload size
+                    "job_description": job_description[:4000],
+                    "callback_url": f"{settings.API_V1_STR}/webhooks/n8n/cover-letters/{cover_letter_id}/callback",
+                },
+                headers={"X-Webhook-Secret": settings.N8N_WEBHOOK_SECRET},
+            )
+            if response.status_code < 300:
+                logger.info("Dispatched to n8n: %s", cover_letter_id)
+                return True
+            logger.warning(
+                "n8n returned %d for %s — falling back to local",
+                response.status_code, cover_letter_id,
+            )
+    except (httpx.RequestError, httpx.TimeoutException) as exc:
+        logger.warning(
+            "n8n unreachable for %s (%s) — falling back to local",
+            cover_letter_id, type(exc).__name__,
+        )
+    return False
 
 
 def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
@@ -140,7 +177,12 @@ async def generate_cover_letter_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Dispatch a background task to generate a cover letter. Rate limited: 5 req/min per IP."""
+    """Dispatch cover letter generation. Rate limited: 5 req/min per IP.
+
+    Dispatch strategy:
+      - If N8N_ENABLED: POST to n8n Cloud webhook (event-driven)
+      - Fallback: in-process BackgroundTasks (local dev / n8n unreachable)
+    """
     if payload.resume_id:
         resume = await session.get(Resume, payload.resume_id)
         if not resume or resume.user_id != current_user.id:
@@ -170,12 +212,22 @@ async def generate_cover_letter_endpoint(
     await session.commit()
     await session.refresh(cover_letter)
 
-    background_tasks.add_task(
-        _run_cover_letter_bg,
-        str(cover_letter.id),
-        resume.raw_text,
-        payload.job_description,
-    )
+    dispatched = False
+    if settings.N8N_ENABLED:
+        dispatched = await _dispatch_to_n8n(
+            cover_letter_id=str(cover_letter.id),
+            resume_text=resume.raw_text,
+            job_description=payload.job_description,
+        )
+
+    if not dispatched:
+        background_tasks.add_task(
+            _run_cover_letter_bg,
+            str(cover_letter.id),
+            resume.raw_text,
+            payload.job_description,
+        )
+
     return cover_letter
 
 

@@ -1,0 +1,111 @@
+{
+  "name": "Cover Letter Generation + QA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cover-letter-generate",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert cover letter writer. Write a professional, honest cover letter based ONLY on the resume provided. Never fabricate skills, experience, or metrics.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"RESUME:\\n{{ $json.resume_text }}\\n\\nJOB DESCRIPTION:\\n{{ $json.job_description }}\\n\\nWrite a cover letter tailored to this job. Base it strictly on the resume.\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 2048\n}",
+        "options": {}
+      },
+      "id": "groq-generate",
+      "name": "Groq: Generate Letter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a rigorous QA reviewer. Compare the cover letter against the resume and score it. Respond with JSON: {\\\"honesty_score\\\": 1-10, \\\"tone_score\\\": 1-10, \\\"flags\\\": [], \\\"reasoning\\\": \\\"...\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"RESUME:\\n{{ $node['Webhook Trigger'].json.resume_text }}\\n\\nCOVER LETTER:\\n{{ $node['Groq: Generate Letter'].json.choices[0].message.content }}\\n\\nScore this cover letter.\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 1024,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {}
+      },
+      "id": "groq-qa-review",
+      "name": "Groq: QA Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $node['Webhook Trigger'].json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Webhook-Secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"generated_text\": {{ JSON.stringify($node['Groq: Generate Letter'].json.choices[0].message.content) }},\n  \"status\": \"success\",\n  \"qa_score_honesty\": {{ JSON.parse($node['Groq: QA Review'].json.choices[0].message.content).honesty_score }},\n  \"qa_score_tone\": {{ JSON.parse($node['Groq: QA Review'].json.choices[0].message.content).tone_score }},\n  \"qa_flags\": {{ JSON.stringify(JSON.parse($node['Groq: QA Review'].json.choices[0].message.content).flags || []) }},\n  \"qa_retries\": 0\n}",
+        "options": {},
+        "method": "PUT"
+      },
+      "id": "callback-to-fastapi",
+      "name": "Callback to FastAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [{"node": "Groq: Generate Letter", "type": "main", "index": 0}]
+      ]
+    },
+    "Groq: Generate Letter": {
+      "main": [
+        [{"node": "Groq: QA Review", "type": "main", "index": 0}]
+      ]
+    },
+    "Groq: QA Review": {
+      "main": [
+        [{"node": "Callback to FastAPI", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "Cover letter generation pipeline: Webhook → Groq Generate → Groq QA Review → PUT callback to FastAPI. Import into n8n Cloud and set GROQ_API_KEY + N8N_WEBHOOK_SECRET as environment variables."
+  }
+}
