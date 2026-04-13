@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Career Hub"
-    VERSION: str = "2.0.0"
+    VERSION: str = "3.0.0"
     API_V1_STR: str = "/api/v1"
     PRODUCTION: bool = False  # Set to True via env var in production to hide /docs
 
