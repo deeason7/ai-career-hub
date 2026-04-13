@@ -53,6 +53,17 @@ class Settings(BaseSettings):
         """True when GROQ_API_KEY is configured — used in cloud deployments."""
         return bool(self.GROQ_API_KEY)
 
+    # n8n Workflow Orchestration — replaces in-process BackgroundTasks with
+    # event-driven webhooks when configured. Falls back to local background
+    # tasks when n8n is not available or misconfigured.
+    N8N_WEBHOOK_URL: str = ""  # n8n Cloud webhook trigger URL
+    N8N_WEBHOOK_SECRET: str = ""  # Shared secret for callback auth
+
+    @computed_field
+    def N8N_ENABLED(self) -> bool:
+        """True when both n8n URL and secret are configured."""
+        return bool(self.N8N_WEBHOOK_URL and self.N8N_WEBHOOK_SECRET)
+
     # Security
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
