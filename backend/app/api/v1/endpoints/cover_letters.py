@@ -4,6 +4,7 @@ import logging
 import uuid
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Session
 
 from app.api.v1.deps import get_current_user
+from app.core.config import settings
 from app.core.db import get_async_session, sync_engine
 from app.core.limiter import rate_limit
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
@@ -32,24 +34,126 @@ _STATUS_MAP = {
 }
 
 
+async def _dispatch_to_n8n(
+    cover_letter_id: str, resume_text: str, job_description: str
+) -> bool:
+    """POST to n8n Cloud webhook to trigger the cover letter workflow.
+
+    Returns True if n8n accepted the request, False if unreachable
+    (caller will fall back to local BackgroundTasks).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                settings.N8N_WEBHOOK_URL,
+                json={
+                    "cover_letter_id": cover_letter_id,
+                    "resume_text": resume_text[:8000],  # Limit payload size
+                    "job_description": job_description[:4000],
+                    "callback_url": f"{settings.API_V1_STR}/webhooks/n8n/cover-letters/{cover_letter_id}/callback",
+                },
+                headers={"X-Webhook-Secret": settings.N8N_WEBHOOK_SECRET},
+            )
+            if response.status_code < 300:
+                logger.info("Dispatched to n8n: %s", cover_letter_id)
+                return True
+            logger.warning(
+                "n8n returned %d for %s — falling back to local",
+                response.status_code, cover_letter_id,
+            )
+    except (httpx.RequestError, httpx.TimeoutException) as exc:
+        logger.warning(
+            "n8n unreachable for %s (%s) — falling back to local",
+            cover_letter_id, type(exc).__name__,
+        )
+    return False
+
+
 def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
-    """Background thread: generates cover letter and persists result to DB."""
+    """Background thread: generates cover letter, runs QA review, persists result.
+
+    Pipeline:
+      1. Generate cover letter via instructor (Groq) or LangChain (Ollama)
+      2. Run AI-as-a-Judge QA review → get honesty/tone scores
+      3. If honesty < threshold, auto-regenerate (up to MAX_QA_RETRIES times)
+      4. Persist the best result with QA scores to DB
+      5. If still below threshold after retries, save anyway but status reflects it
+    """
+    from app.services.qa_service import (  # noqa: PLC0415
+        HALLUCINATION_THRESHOLD,
+        MAX_QA_RETRIES,
+        passes_qa,
+        review_cover_letter,
+    )
+
     logger.info("Background: generating cover letter %s", cover_letter_id)
     try:
-        # NOTE: _run_cover_letter_bg is a sync function. FastAPI's BackgroundTasks
-        # calls sync functions via run_in_threadpool (thread pool executor), so the
-        # event loop is NOT blocked. Direct call is correct here.
-        result = generate_cover_letter(resume_text, job_description)
-        cover_letter_text = result["cover_letter"]
+        cover_letter_text = None
+        verdict = None
+        retries = 0
 
+        for attempt in range(1 + MAX_QA_RETRIES):
+            # Step 1: Generate
+            result = generate_cover_letter(resume_text, job_description)
+            cover_letter_text = result["cover_letter"]
+
+            # Step 2: QA Review
+            try:
+                verdict = review_cover_letter(
+                    cover_letter=cover_letter_text,
+                    resume_text=resume_text,
+                    job_description=job_description,
+                )
+            except Exception as qa_exc:
+                # QA review failed (LLM error, validation error, etc.)
+                # Save the letter without QA scores rather than losing it.
+                logger.warning(
+                    "QA review failed for %s (attempt %d): %s",
+                    cover_letter_id, attempt + 1, qa_exc,
+                )
+                verdict = None
+                break
+
+            # Step 3: Check threshold
+            if passes_qa(verdict):
+                logger.info(
+                    "QA passed for %s on attempt %d (honesty=%d)",
+                    cover_letter_id, attempt + 1, verdict.honesty_score,
+                )
+                break
+
+            retries = attempt + 1
+            if retries <= MAX_QA_RETRIES:
+                logger.info(
+                    "QA below threshold for %s (honesty=%d < %d), regenerating (attempt %d/%d)",
+                    cover_letter_id,
+                    verdict.honesty_score,
+                    HALLUCINATION_THRESHOLD,
+                    retries,
+                    MAX_QA_RETRIES,
+                )
+
+        # Step 4: Persist result with QA scores
         with Session(sync_engine) as session:
             cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
             if cl:
                 cl.generated_text = cover_letter_text
                 cl.status = "success"
+                cl.qa_retries = retries
+
+                if verdict:
+                    cl.qa_score_honesty = verdict.honesty_score
+                    cl.qa_score_tone = verdict.tone_score
+                    cl.set_qa_flags(verdict.flags)
+
                 session.add(cl)
                 session.commit()
-                logger.info("Cover letter saved: %s", cover_letter_id)
+                logger.info(
+                    "Cover letter saved: %s (honesty=%s, retries=%d)",
+                    cover_letter_id,
+                    verdict.honesty_score if verdict else "N/A",
+                    retries,
+                )
 
     except Exception as exc:
         logger.error("Cover letter background task failed: %s", exc, exc_info=True)
@@ -73,7 +177,12 @@ async def generate_cover_letter_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Dispatch a background task to generate a cover letter. Rate limited: 5 req/min per IP."""
+    """Dispatch cover letter generation. Rate limited: 5 req/min per IP.
+
+    Dispatch strategy:
+      - If N8N_ENABLED: POST to n8n Cloud webhook (event-driven)
+      - Fallback: in-process BackgroundTasks (local dev / n8n unreachable)
+    """
     if payload.resume_id:
         resume = await session.get(Resume, payload.resume_id)
         if not resume or resume.user_id != current_user.id:
@@ -103,12 +212,22 @@ async def generate_cover_letter_endpoint(
     await session.commit()
     await session.refresh(cover_letter)
 
-    background_tasks.add_task(
-        _run_cover_letter_bg,
-        str(cover_letter.id),
-        resume.raw_text,
-        payload.job_description,
-    )
+    dispatched = False
+    if settings.N8N_ENABLED:
+        dispatched = await _dispatch_to_n8n(
+            cover_letter_id=str(cover_letter.id),
+            resume_text=resume.raw_text,
+            job_description=payload.job_description,
+        )
+
+    if not dispatched:
+        background_tasks.add_task(
+            _run_cover_letter_bg,
+            str(cover_letter.id),
+            resume.raw_text,
+            payload.job_description,
+        )
+
     return cover_letter
 
 
@@ -143,11 +262,23 @@ async def poll_task_status(
     if not cl:
         return {"task_id": task_id, "status": "PENDING", "result": None}
 
-    return {
+    response = {
         "task_id": task_id,
         "status": _STATUS_MAP.get(cl.status, "PENDING"),
         "result": cl.generated_text if cl.status == "success" else None,
     }
+
+    # Include QA data when available — frontend can display scores and warnings
+    if cl.status == "success" and cl.qa_score_honesty is not None:
+        response["qa"] = {
+            "honesty_score": cl.qa_score_honesty,
+            "tone_score": cl.qa_score_tone,
+            "flags": cl.get_qa_flags(),
+            "retries": cl.qa_retries,
+            "passed": cl.qa_score_honesty >= 6,
+        }
+
+    return response
 
 
 @router.get("/{cover_letter_id}", response_model=CoverLetterRead)

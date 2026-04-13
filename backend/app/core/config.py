@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Career Hub"
-    VERSION: str = "2.0.0"
+    VERSION: str = "3.0.0"
     API_V1_STR: str = "/api/v1"
     PRODUCTION: bool = False  # Set to True via env var in production to hide /docs
 
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # AI — Ollama (local dev default)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
-    OLLAMA_LLM_MODEL: str = "llama3.2:1b"
+    OLLAMA_LLM_MODEL: str = "llama3.2:3b"
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
 
     # AI — Groq (free cloud alternative; takes priority over Ollama when set)
@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     def USE_GROQ(self) -> bool:
         """True when GROQ_API_KEY is configured — used in cloud deployments."""
         return bool(self.GROQ_API_KEY)
+
+    # n8n Workflow Orchestration — replaces in-process BackgroundTasks with
+    # event-driven webhooks when configured. Falls back to local background
+    # tasks when n8n is not available or misconfigured.
+    N8N_WEBHOOK_URL: str = ""  # n8n Cloud webhook trigger URL
+    N8N_WEBHOOK_SECRET: str = ""  # Shared secret for callback auth
+
+    @computed_field
+    def N8N_ENABLED(self) -> bool:
+        """True when both n8n URL and secret are configured."""
+        return bool(self.N8N_WEBHOOK_URL and self.N8N_WEBHOOK_SECRET)
 
     # Security
     SECRET_KEY: str
