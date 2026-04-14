@@ -8,6 +8,7 @@ Supabase-specific: replaces the policy created in 001 with one that grants
 access to PUBLIC (any connecting role) instead of only the 'postgres' role.
 On RDS this is a no-op since the 001 policy already uses PUBLIC.
 """
+
 from alembic import op
 
 revision = "003_fix_rls_policies"

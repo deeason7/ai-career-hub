@@ -11,6 +11,7 @@ no external query interface bypassing the application layer.
 
 The SQL is wrapped in DO blocks so it runs safely on both platforms.
 """
+
 from alembic import op
 
 revision = "001_enable_rls"

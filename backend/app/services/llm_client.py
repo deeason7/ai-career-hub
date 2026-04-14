@@ -10,6 +10,7 @@ Both backends are free:
     endpoint (http://localhost:11434/v1). The openai Python package is just
     a client library — no OpenAI account or API key needed.
 """
+
 import logging
 from typing import TypeVar
 

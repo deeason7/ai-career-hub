@@ -17,6 +17,7 @@ Requires:
   - Ollama running locally with llama3.2:3b pulled (default for dev)
   - Or GROQ_API_KEY set in environment (CI/production)
 """
+
 import os
 
 import pytest
@@ -65,7 +66,6 @@ _SAMPLE_JD = (
 
 
 class TestCoverLetterGeneration:
-
     def test_generates_valid_cover_letter(self):
         """The model should produce a cover letter meeting the min length contract."""
         result = call_structured(
@@ -87,7 +87,6 @@ class TestCoverLetterGeneration:
 
 
 class TestQAVerdict:
-
     def test_reviews_honest_letter(self):
         """A grounded letter should score high on honesty."""
         honest_letter = (
@@ -165,11 +164,10 @@ class TestQAVerdict:
 
 
 class TestInterviewQuestions:
-
     @pytest.mark.xfail(
         not _USING_GROQ,
         reason="llama3.2:3b echoes JSON schema definition for list-constrained models. "
-               "Passes with Groq 8b. Service layer falls back to LangChain.",
+        "Passes with Groq 8b. Service layer falls back to LangChain.",
     )
     def test_generates_valid_questions(self):
         """Should produce between 5 and 15 valid interview questions."""
@@ -194,11 +192,10 @@ class TestInterviewQuestions:
 
 
 class TestSkillGapResult:
-
     @pytest.mark.xfail(
         not _USING_GROQ,
         reason="llama3.2:3b returns empty fields for nested schemas. "
-               "Passes with Groq 8b. Service layer falls back to LangChain.",
+        "Passes with Groq 8b. Service layer falls back to LangChain.",
     )
     def test_generates_recommendations(self):
         """Should produce structured skill gap recommendations."""
@@ -231,7 +228,6 @@ class TestSkillGapResult:
 
 
 class TestFallbackBehavior:
-
     def test_validation_error_raised_on_failure(self):
         """call_structured should raise ValidationError after retries exhaust,
         enabling the service layer to fall back to LangChain."""

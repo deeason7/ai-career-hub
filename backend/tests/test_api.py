@@ -5,6 +5,7 @@ Requires: PostgreSQL running (Docker Compose).
 Run with: pytest tests/test_api.py -v
 Start services first: docker compose up db -d
 """
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -50,13 +51,17 @@ async def client():
 
 # ---------- AUTH TESTS ----------
 
+
 @pytest.mark.asyncio
 async def test_register_new_user(client: AsyncClient):
-    response = await client.post("/api/v1/auth/register", json={
-        "email": "test@example.com",
-        "full_name": "Test User",
-        "password": "testpassword123",
-    })
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "test@example.com",
+            "full_name": "Test User",
+            "password": "testpassword123",
+        },
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["email"] == "test@example.com"
@@ -65,59 +70,83 @@ async def test_register_new_user(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_register_duplicate_email(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={
-        "email": "dup@example.com",
-        "full_name": "Dup User",
-        "password": "pass1234",
-    })
-    response = await client.post("/api/v1/auth/register", json={
-        "email": "dup@example.com",
-        "full_name": "Another",
-        "password": "pass5678",
-    })
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "dup@example.com",
+            "full_name": "Dup User",
+            "password": "pass1234",
+        },
+    )
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "dup@example.com",
+            "full_name": "Another",
+            "password": "pass5678",
+        },
+    )
     assert response.status_code == 409
 
 
 @pytest.mark.asyncio
 async def test_login_success(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={
-        "email": "login_test@example.com",
-        "full_name": "Login Test",
-        "password": "securepass",
-    })
-    response = await client.post("/api/v1/auth/login", data={
-        "username": "login_test@example.com",
-        "password": "securepass",
-    })
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "login_test@example.com",
+            "full_name": "Login Test",
+            "password": "securepass",
+        },
+    )
+    response = await client.post(
+        "/api/v1/auth/login",
+        data={
+            "username": "login_test@example.com",
+            "password": "securepass",
+        },
+    )
     assert response.status_code == 200
     assert "access_token" in response.json()
 
 
 @pytest.mark.asyncio
 async def test_login_wrong_password(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={
-        "email": "badpass@example.com",
-        "full_name": "Bad Pass",
-        "password": "rightpass",
-    })
-    response = await client.post("/api/v1/auth/login", data={
-        "username": "badpass@example.com",
-        "password": "wrongpass",
-    })
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "badpass@example.com",
+            "full_name": "Bad Pass",
+            "password": "rightpass",
+        },
+    )
+    response = await client.post(
+        "/api/v1/auth/login",
+        data={
+            "username": "badpass@example.com",
+            "password": "wrongpass",
+        },
+    )
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_me_authenticated(client: AsyncClient):
-    await client.post("/api/v1/auth/register", json={
-        "email": "me@example.com",
-        "full_name": "Me User",
-        "password": "mepassword",
-    })
-    login = await client.post("/api/v1/auth/login", data={
-        "username": "me@example.com",
-        "password": "mepassword",
-    })
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "me@example.com",
+            "full_name": "Me User",
+            "password": "mepassword",
+        },
+    )
+    login = await client.post(
+        "/api/v1/auth/login",
+        data={
+            "username": "me@example.com",
+            "password": "mepassword",
+        },
+    )
     token = login.json()["access_token"]
     response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
@@ -126,37 +155,51 @@ async def test_get_me_authenticated(client: AsyncClient):
 
 # ---------- ATS SCORE TESTS ----------
 
+
 @pytest_asyncio.fixture
 async def auth_token(client: AsyncClient):
     """Create a unique user per test run and return auth token."""
     import uuid as _uuid
+
     email = f"ats_user_{_uuid.uuid4().hex[:8]}@example.com"
-    await client.post("/api/v1/auth/register", json={
-        "email": email, "full_name": "ATS User", "password": "atspass1",
-    })
-    login = await client.post("/api/v1/auth/login", data={"username": email, "password": "atspass1"})
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "full_name": "ATS User",
+            "password": "atspass1",
+        },
+    )
+    login = await client.post(
+        "/api/v1/auth/login", data={"username": email, "password": "atspass1"}
+    )
     return login.json()["access_token"]
 
 
 @pytest.mark.asyncio
 async def test_ats_score_endpoint_requires_auth(client: AsyncClient):
-    response = await client.post("/api/v1/ai/ats-score", json={
-        "job_description": "Python developer needed"
-    })
+    response = await client.post(
+        "/api/v1/ai/ats-score", json={"job_description": "Python developer needed"}
+    )
     assert response.status_code == 401
 
 
 # ---------- JOB TRACKER TESTS ----------
 
+
 @pytest.mark.asyncio
 async def test_create_job_application(client: AsyncClient, auth_token: str):
     headers = {"Authorization": f"Bearer {auth_token}"}
-    response = await client.post("/api/v1/jobs/", json={
-        "company": "Google",
-        "role": "Software Engineer",
-        "status": "applied",
-        "notes": "Applied via website",
-    }, headers=headers)
+    response = await client.post(
+        "/api/v1/jobs/",
+        json={
+            "company": "Google",
+            "role": "Software Engineer",
+            "status": "applied",
+            "notes": "Applied via website",
+        },
+        headers=headers,
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["company"] == "Google"

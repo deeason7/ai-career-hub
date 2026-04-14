@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Text
 from sqlmodel import Column, Field, Relationship, SQLModel
@@ -29,14 +29,14 @@ class CoverLetter(CoverLetterBase, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # QA review scores (M1: AI-as-a-Judge)
-    qa_score_honesty: Optional[int] = Field(default=None)
-    qa_score_tone: Optional[int] = Field(default=None)
-    qa_flags: Optional[str] = Field(default=None, sa_column=Column(Text))
+    qa_score_honesty: int | None = Field(default=None)
+    qa_score_tone: int | None = Field(default=None)
+    qa_flags: str | None = Field(default=None, sa_column=Column(Text))
     qa_retries: int = Field(default=0)
 
     # Relationships
-    user: Optional["User"] = Relationship(back_populates="cover_letters")
-    resume: Optional["Resume"] = Relationship(back_populates="cover_letters")
+    user: "User | None" = Relationship(back_populates="cover_letters")
+    resume: "Resume | None" = Relationship(back_populates="cover_letters")
 
     def set_qa_flags(self, flags: list[str]) -> None:
         """Serialize QA flags list to JSON for DB storage."""
@@ -62,7 +62,7 @@ class CoverLetterRead(CoverLetterBase):
     task_id: str | None
     status: str
     created_at: datetime
-    qa_score_honesty: Optional[int] = None
-    qa_score_tone: Optional[int] = None
-    qa_flags: Optional[str] = None
+    qa_score_honesty: int | None = None
+    qa_score_tone: int | None = None
+    qa_flags: str | None = None
     qa_retries: int = 0

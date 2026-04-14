@@ -18,7 +18,15 @@ from app.models.user import User
 
 router = APIRouter()
 
-VALID_STATUSES = {"wishlist", "applied", "phone_screen", "interview", "offer", "rejected", "accepted"}
+VALID_STATUSES = {
+    "wishlist",
+    "applied",
+    "phone_screen",
+    "interview",
+    "offer",
+    "rejected",
+    "accepted",
+}
 
 
 @router.post("/", response_model=JobApplicationRead, status_code=status.HTTP_201_CREATED)

@@ -1,4 +1,5 @@
 """Central rate-limiter instance shared across all routers."""
+
 import os
 from collections.abc import Callable
 

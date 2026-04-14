@@ -6,6 +6,7 @@ Tests real LLM calls against Ollama (local) to verify that:
   3. The passes_qa threshold logic works correctly
   4. QA review handles edge cases gracefully
 """
+
 import os
 
 import pytest
@@ -67,7 +68,6 @@ _HALLUCINATED_LETTER = (
 
 
 class TestReviewCoverLetter:
-
     def test_honest_letter_scores_high(self):
         """A cover letter grounded in resume facts should score >= threshold."""
         verdict = review_cover_letter(
@@ -82,8 +82,8 @@ class TestReviewCoverLetter:
     @pytest.mark.xfail(
         not _USING_GROQ,
         reason="llama3.2:3b identifies hallucinations in reasoning but doesn't "
-               "calibrate numeric scores correctly (gave 8/10 despite flagging "
-               "fabrications). Passes with Groq 8b.",
+        "calibrate numeric scores correctly (gave 8/10 despite flagging "
+        "fabrications). Passes with Groq 8b.",
     )
     def test_hallucinated_letter_scores_low(self):
         """A cover letter with fabricated claims should score below threshold."""
@@ -111,7 +111,6 @@ class TestReviewCoverLetter:
 
 
 class TestPassesQA:
-
     def test_passes_above_threshold(self):
         """Scores at or above the threshold should pass."""
         from app.services.llm_schemas import QAVerdict

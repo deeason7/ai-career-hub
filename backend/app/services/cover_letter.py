@@ -7,6 +7,7 @@ Two execution paths based on environment:
 The Groq path uses the dedicated llm_client for structured output.
 The Ollama path keeps the LangChain chain for local dev compatibility.
 """
+
 import logging
 
 from pydantic import ValidationError
@@ -65,7 +66,8 @@ def _rag_retrieve(resume_text: str, job_description: str) -> tuple[str, int]:
     from app.core.config import settings  # noqa: PLC0415
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=400, chunk_overlap=60,
+        chunk_size=400,
+        chunk_overlap=60,
         separators=["\n\n", "\n", ".", " ", ""],
     )
     docs = [Document(page_content=chunk) for chunk in splitter.split_text(resume_text)]
@@ -248,10 +250,12 @@ def _interview_via_langchain(resume_text: str, job_description: str) -> list[str
         "Output format: Numbered list 1-10. One question per line. No explanations.\n\n"
         "Interview Questions:"
     )
-    result = (prompt | llm).invoke({
-        "job_description": job_description[:1500],
-        "resume_excerpt": resume_text[:1500],
-    })
+    result = (prompt | llm).invoke(
+        {
+            "job_description": job_description[:1500],
+            "resume_excerpt": resume_text[:1500],
+        }
+    )
     output = result.content if hasattr(result, "content") else str(result)
     output = output.strip()
     lines = [line.strip() for line in output.split("\n") if line.strip()]

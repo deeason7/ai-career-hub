@@ -25,6 +25,9 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | 👤 **Multi-Resume Management** | Upload, store, and switch between up to 10 resumes per user (PDF, DOCX, TXT — 5 MB max) |
 | 🧠 **Semantic ATS Scorer** | `sentence-transformers` dense vector similarity + keyword matching + structure scoring — catches synonym matches keyword-only ATS systems miss |
 | 📝 **AI Cover Letter Generator** | RAG-based generation using FAISS + LangChain — only uses facts from YOUR resume, no hallucinations |
+| 🛡️ **AI-as-a-Judge QA** | Second LLM pass scores every cover letter for honesty (1–10) and tone (1–10) — auto-regenerates up to 2× if honesty < 6 |
+| 🔧 **Structured LLM Output** | All LLM calls return Pydantic v2-validated JSON via `instructor` — no regex parsing, deterministic contracts |
+| 🔗 **n8n Workflow Orchestration** | Event-driven cover letter pipeline via n8n Cloud webhooks — graceful fallback to local `BackgroundTasks` |
 | 📄 **PDF Export** | Download any generated cover letter as a professionally formatted PDF via `reportlab` |
 | 🔗 **Job URL Import** | Paste a LinkedIn / Greenhouse / Lever / Workday URL to auto-fill the job description |
 | 🔍 **Skill Gap Analysis** | Identify missing skills with AI-powered upskilling recommendations |
@@ -73,7 +76,9 @@ Upload your resume, score it semantically against job descriptions, generate hon
                                    LLaMA 3.1 8B Instant
 ```
 
-**Cover letter generation** runs as a FastAPI `BackgroundTask` — no separate Celery worker.  
+**Cover letter generation** dispatches to n8n Cloud (event-driven webhook) when configured — falls back to local `BackgroundTasks` if n8n is unreachable.  
+**AI QA review** runs a second LLM pass ("Reviewer" persona) scoring honesty and tone — auto-regenerates up to 2× if honesty < 6/10.  
+**Structured output** via `instructor` + Pydantic v2 — all LLM responses are validated before persisting to DB.  
 **ATS scoring** uses sentence-transformers `all-MiniLM-L6-v2` (80 MB, CPU-only, singleton via `lru_cache`).  
 **Secrets** are pulled from AWS SSM Parameter Store at deploy time via `infra/scripts/pull-secrets.sh`.
 
@@ -94,6 +99,8 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Input Validation** | JD ≤ 10,000 chars · resume name ≤ 100 chars · enforced by Pydantic v2 |
 | **Error Monitoring** | Sentry SDK integrated — opt-in via `SENTRY_DSN` |
 | **LLM Failures** | 502 Bad Gateway returned (not raw 500) when Groq/Ollama are unavailable |
+| **LLM Output Validation** | `instructor` enforces Pydantic v2 contracts on every LLM response — garbage output retries up to 3× before clean 502 |
+| **n8n Webhook Auth** | Callback endpoint validates `X-Webhook-Secret` header — not JWT (internal service) |
 | **Production Startup** | `create_all()` skipped in production — Alembic owns the schema |
 | **IAM Least Privilege** | Custom least-privilege IAM policies — scoped to named project resources; no `RunInstances`, no wildcards |
 | **MFA** | Enforced on root account (no access keys) and all developer IAM users |
@@ -114,8 +121,11 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Database** | AWS RDS PostgreSQL 16 (private VPC, on-demand) |
 | **Cache** | Redis 7 (Docker, local to EC2) |
 | **AI / LLM** | Groq API (LLaMA 3.1 8B instant) — cloud; Ollama (local dev fallback) |
+| **Structured Output** | `instructor` + Pydantic v2 — validated JSON contracts on all LLM responses |
+| **AI QA** | AI-as-a-Judge reviewer persona — honesty/tone scoring with auto-regeneration |
 | **Semantic NLP** | `sentence-transformers` — `all-MiniLM-L6-v2` for ATS semantic scoring |
 | **RAG Pipeline** | LangChain · FAISS · `nomic-embed-text` embeddings |
+| **Orchestration** | n8n Cloud (webhook-based, optional) — graceful fallback to local BackgroundTasks |
 | **PDF Generation** | `reportlab` — server-side, no headless browser |
 | **Web Scraping** | `httpx.AsyncClient` + `beautifulsoup4` — JSON-LD first, meta/HTML fallback |
 | **Frontend** | Streamlit |
@@ -124,8 +134,9 @@ Upload your resume, score it semantically against job descriptions, generate hon
 | **Serverless** | AWS Lambda · API Gateway · S3 · CloudFront · Route 53 failover |
 | **Scheduling** | EventBridge Scheduler — 90-min idle auto-stop + Mon–Fri 9 AM/6 PM ET business-hours start/stop |
 | **Observability** | Sentry · AWS CloudWatch (awslogs driver) |
-| **CI** | GitHub Actions — ruff lint (B, UP, F, E, I rules) + pytest on push to `main`/`develop` |
-| **Code Quality** | ruff (lint + format) · pre-commit hooks (trailing whitespace, YAML/JSON check, large-file guard) |
+| **CI** | GitHub Actions — ruff lint + format check + pytest on push to `main`/`develop` |
+| **CD** | GitHub Actions — Docker build → ECR push → EC2 deploy via SSM on push to `main` |
+| **Code Quality** | ruff (lint + format, rules: E/F/W/I/B/UP) · pre-commit hooks (trailing whitespace, YAML/JSON check, large-file guard) |
 
 ---
 
@@ -216,7 +227,8 @@ cd backend
 POSTGRES_SERVER=localhost POSTGRES_USER=... pytest tests/ -v --tb=short
 ```
 
-Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker CRUD.
+Tests cover: auth, resume upload, ATS scoring (keyword + semantic), job tracker CRUD, LLM schema validation, instructor client integration, QA service review logic, n8n webhook callback.  
+**37 total tests** (34 pass, 3 xfail — model-specific edge cases).
 
 > Rate limiting is automatically disabled in CI via `TESTING=true`.
 
@@ -340,19 +352,25 @@ bash infra/scripts/deploy.sh
 - [x] CI: `ci.yml` installs `requirements.dev.txt` — ruff and pytest now available in GitHub Actions
 - [x] All 59 ruff errors resolved (52 auto-fixed UP007/UP017/UP035, 7 B904 manually fixed)
 
-### 🔜 v2.7 — ML & Data Science
+### ✅ v3.0 — Structured Output & Orchestration
+- [x] Structured LLM output via `instructor` + Pydantic v2 (6 typed schemas, validated contracts)
+- [x] AI-as-a-Judge QA layer — honesty/tone scoring with auto-regeneration (up to 2× retries)
+- [x] n8n Cloud workflow orchestration — event-driven webhooks with graceful fallback
+- [x] Automated CD via GitHub Actions → ECR → EC2 SSM
+- [x] 37 tests (34 pass, 3 xfail)
+
+### 🔜 v3.1 — ML & Data Science
 - [ ] Resume section classifier (spaCy NER)
 - [ ] Application pipeline funnel chart (Plotly)
 - [ ] Skill gap priority scorer (TF-IDF + co-occurrence ranking)
 - [ ] Resume quality scorer (action verb density, readability)
 - [ ] Hybrid RAG: BM25 + Dense + Cross-encoder reranker
 
-### 🔜 v3.0 — Scale
+### 🔜 v4.0 — Scale
 - [ ] Next.js frontend (replace Streamlit)
 - [ ] Password reset via email
 - [ ] Cover letter tone selector (formal / casual / creative)
 - [ ] Resume version history & diff viewer
-- [ ] Automated CD via GitHub Actions → EC2 SSH
 
 ---
 

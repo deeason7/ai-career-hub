@@ -42,5 +42,6 @@ async def get_async_session():
 async def create_db_and_tables():
     """Create all tables (dev only). Use Alembic migrations in production."""
     import app.models  # noqa: F401 — ensures all models are registered
+
     async with async_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

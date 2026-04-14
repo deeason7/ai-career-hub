@@ -1,6 +1,6 @@
 import uuid
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Text
 from sqlmodel import Column, Field, Relationship, SQLModel
@@ -28,7 +28,7 @@ class JobApplication(JobApplicationBase, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    user: Optional["User"] = Relationship(back_populates="job_applications")
+    user: "User | None" = Relationship(back_populates="job_applications")
 
 
 class JobApplicationCreate(JobApplicationBase):

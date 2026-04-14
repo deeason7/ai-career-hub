@@ -8,6 +8,7 @@ Weights:
 
 Falls back to 80/20 keyword/structure if the embedding model fails to load.
 """
+
 import logging
 import re
 from dataclasses import dataclass
@@ -30,57 +31,138 @@ def _get_model() -> Any:
     not at app startup. The lru_cache ensures it's loaded at most once.
     """
     from sentence_transformers import SentenceTransformer  # lazy import
+
     logger.info("Loading sentence-transformers model: %s", MODEL_NAME)
     return SentenceTransformer(MODEL_NAME)
 
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 PRIORITY_KEYWORDS = {
-    "python", "sql", "machine learning", "deep learning", "nlp", "pytorch",
-    "tensorflow", "docker", "kubernetes", "aws", "azure", "gcp",
-    "fastapi", "django", "flask", "react", "typescript", "ci/cd",
-    "data science", "ai", "llm", "rag", "fine-tuning", "mlops",
-    "spark", "hadoop", "airflow", "dbt", "kafka", "elasticsearch",
-    "pandas", "numpy", "scikit-learn", "xgboost", "lightgbm",
+    "python",
+    "sql",
+    "machine learning",
+    "deep learning",
+    "nlp",
+    "pytorch",
+    "tensorflow",
+    "docker",
+    "kubernetes",
+    "aws",
+    "azure",
+    "gcp",
+    "fastapi",
+    "django",
+    "flask",
+    "react",
+    "typescript",
+    "ci/cd",
+    "data science",
+    "ai",
+    "llm",
+    "rag",
+    "fine-tuning",
+    "mlops",
+    "spark",
+    "hadoop",
+    "airflow",
+    "dbt",
+    "kafka",
+    "elasticsearch",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "xgboost",
+    "lightgbm",
 }
 
 SECTION_PATTERNS = {
     "experience": r"\b(experience|employment|work history|career)\b",
-    "education":  r"\b(education|degree|university|bachelor|master|phd)\b",
-    "skills":     r"\b(skills|technologies|tech stack|competencies)\b",
-    "projects":   r"\b(projects|portfolio|open.?source)\b",
-    "summary":    r"\b(summary|objective|profile|about me)\b",
+    "education": r"\b(education|degree|university|bachelor|master|phd)\b",
+    "skills": r"\b(skills|technologies|tech stack|competencies)\b",
+    "projects": r"\b(projects|portfolio|open.?source)\b",
+    "summary": r"\b(summary|objective|profile|about me)\b",
     "certifications": r"\b(certifications?|licenses?|credentials)\b",
 }
 
 STOP_WORDS = {
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "shall", "can", "need", "not",
-    "that", "this", "these", "those", "we", "you", "they", "our", "your",
-    "their", "its", "who", "what", "when", "where", "how", "which",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with",
+    "by",
+    "from",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "must",
+    "shall",
+    "can",
+    "need",
+    "not",
+    "that",
+    "this",
+    "these",
+    "those",
+    "we",
+    "you",
+    "they",
+    "our",
+    "your",
+    "their",
+    "its",
+    "who",
+    "what",
+    "when",
+    "where",
+    "how",
+    "which",
 }
 
 
 @dataclass
 class ATSResult:
-    score: float                        # 0–100 composite
-    semantic_score: float               # sentence-transformer cosine sim (0–100)
-    keyword_score: float                # keyword overlap (0–100)
-    structure_score: float              # section/length heuristics (0–100)
+    score: float  # 0–100 composite
+    semantic_score: float  # sentence-transformer cosine sim (0–100)
+    keyword_score: float  # keyword overlap (0–100)
+    structure_score: float  # section/length heuristics (0–100)
     matched_keywords: list[str]
     missing_keywords: list[str]
     recommendations: list[str]
-    section_scores: dict                # per-section semantic similarity
+    section_scores: dict  # per-section semantic similarity
     breakdown: dict
 
 
 # ─── Semantic Similarity ──────────────────────────────────────────────────────
 
+
 def _cosine_similarity(a: Any, b: Any) -> float:
     """Numerically stable cosine similarity."""
     import numpy as np  # lazy import — torch/numpy only loaded on first ATS request
+
     norm_a = np.linalg.norm(a)
     norm_b = np.linalg.norm(b)
     if norm_a == 0 or norm_b == 0:
@@ -131,6 +213,7 @@ def _score_semantic(resume_text: str, jd_text: str) -> tuple[float, dict]:
 
 # ─── Keyword Matching (kept as recall signal) ─────────────────────────────────
 
+
 def _tokenize(text: str) -> set[str]:
     text = text.lower()
     text = re.sub(r"[^a-z0-9\s]", " ", text)
@@ -180,6 +263,7 @@ def _score_keywords(resume_text: str, jd_text: str) -> tuple[float, list[str], l
 
 # ─── Structure Scoring ────────────────────────────────────────────────────────
 
+
 def _score_structure(resume_text: str) -> tuple[float, list[str]]:
     text_lower = resume_text.lower()
     found = [s for s, pat in SECTION_PATTERNS.items() if re.search(pat, text_lower)]
@@ -206,6 +290,7 @@ def _score_structure(resume_text: str) -> tuple[float, list[str]]:
 
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
 
+
 def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
     """
     Full ATS score — hybrid semantic + keyword + structure.
@@ -231,9 +316,7 @@ def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
         final = round(kw_score * 0.80 + struct_score * 0.20, 1)
         kw_weight, sem_weight = 0.80, 0.0
     else:
-        final = round(
-            semantic_score * 0.50 + kw_score * 0.30 + struct_score * 0.20, 1
-        )
+        final = round(semantic_score * 0.50 + kw_score * 0.30 + struct_score * 0.20, 1)
         kw_weight, sem_weight = 0.30, 0.50
 
     recommendations: list[str] = []
@@ -250,10 +333,7 @@ def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
             "Rewrite key bullet points to use the same language as the job posting."
         )
 
-    weak_sections = [
-        sec for sec, score in section_scores.items()
-        if 0 < score < 40
-    ]
+    weak_sections = [sec for sec, score in section_scores.items() if 0 < score < 40]
     if weak_sections:
         recommendations.append(
             f"These sections have low alignment with the JD: {', '.join(weak_sections)}. "
