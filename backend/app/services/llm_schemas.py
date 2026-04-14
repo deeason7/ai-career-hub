@@ -12,16 +12,19 @@ Keep docstrings and field descriptions minimal — smaller models (3b) echo
 verbose descriptions back as part of the JSON structure instead of filling
 in the actual data.
 """
+
 from pydantic import BaseModel, Field
 
 
 class CoverLetterOutput(BaseModel):
     """Generated cover letter."""
+
     cover_letter: str = Field(..., min_length=200)
 
 
 class QAVerdict(BaseModel):
     """QA review scores for a cover letter."""
+
     honesty_score: int = Field(..., ge=1, le=10)
     tone_score: int = Field(..., ge=1, le=10)
     flags: list[str] = Field(default_factory=list)
@@ -30,11 +33,13 @@ class QAVerdict(BaseModel):
 
 class InterviewQuestions(BaseModel):
     """List of interview questions."""
+
     questions: list[str] = Field(..., min_length=5, max_length=15)
 
 
 class SkillRecommendation(BaseModel):
     """A single learning recommendation."""
+
     skill: str
     resource: str
     timeline: str
@@ -42,6 +47,7 @@ class SkillRecommendation(BaseModel):
 
 class SkillGapResult(BaseModel):
     """Skill gap analysis output."""
+
     missing_skills: list[str] = Field(default_factory=list)
     priority_gaps: list[str] = Field(default_factory=list)
     recommendations: list[SkillRecommendation] = Field(default_factory=list)
@@ -49,6 +55,7 @@ class SkillGapResult(BaseModel):
 
 class JobExtraction(BaseModel):
     """Structured data extracted from a job description."""
+
     title: str
     company: str = Field(default="")
     required_skills: list[str] = Field(default_factory=list)

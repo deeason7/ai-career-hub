@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
-        traces_sample_rate=0.1,   # 10% of requests get performance traces
-        send_default_pii=False,   # Never send passwords, tokens, or PII
+        traces_sample_rate=0.1,  # 10% of requests get performance traces
+        send_default_pii=False,  # Never send passwords, tokens, or PII
     )
 
 

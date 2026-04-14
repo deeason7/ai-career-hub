@@ -9,9 +9,8 @@ Design:
   - Returns a QAVerdict with numeric scores, flags, and reasoning
   - The caller (background task) decides whether to regenerate or persist
 """
-import logging
 
-from pydantic import ValidationError
+import logging
 
 from app.services.llm_client import call_structured
 from app.services.llm_schemas import QAVerdict

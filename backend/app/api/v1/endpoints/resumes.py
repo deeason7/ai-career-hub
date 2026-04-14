@@ -127,9 +127,7 @@ async def activate_resume(
     await session.execute(
         update(Resume).where(Resume.user_id == current_user.id).values(is_active=False)
     )
-    await session.execute(
-        update(Resume).where(Resume.id == resume_id).values(is_active=True)
-    )
+    await session.execute(update(Resume).where(Resume.id == resume_id).values(is_active=True))
     await session.commit()
     await session.refresh(target)
     return target

@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: str = ""  # Set when Redis requires auth; empty for local/EC2 Docker Redis
 
-
     # AI — Ollama (local dev default)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_LLM_MODEL: str = "llama3.2:3b"

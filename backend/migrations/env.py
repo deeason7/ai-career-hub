@@ -4,6 +4,7 @@ Reads the database URL from the app settings so we never hard-code credentials.
 Supports synchronous migrations (required by Alembic) even though the app uses
 an async engine at runtime.
 """
+
 import sys
 from logging.config import fileConfig
 from pathlib import Path

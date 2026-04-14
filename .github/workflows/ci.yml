@@ -47,6 +47,9 @@ jobs:
       - name: Lint with Ruff
         run: ruff check backend/
 
+      - name: Check formatting with Ruff
+        run: ruff format --check backend/
+
       - name: Run Tests
         working-directory: backend
         env:

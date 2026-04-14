@@ -6,10 +6,9 @@ a shared secret (X-Webhook-Secret header), not JWT — n8n is an internal servic
 Flow:
   FastAPI (POST to n8n) → n8n runs workflow → n8n (PUT to /callback) → DB update
 """
-import json
+
 import logging
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -26,13 +25,14 @@ router = APIRouter()
 
 class N8nCallbackPayload(BaseModel):
     """Payload sent by n8n after processing a cover letter."""
+
     generated_text: str = Field(..., min_length=50)
     status: str = Field(default="success", pattern="^(success|failure)$")
-    qa_score_honesty: Optional[int] = Field(default=None, ge=1, le=10)
-    qa_score_tone: Optional[int] = Field(default=None, ge=1, le=10)
+    qa_score_honesty: int | None = Field(default=None, ge=1, le=10)
+    qa_score_tone: int | None = Field(default=None, ge=1, le=10)
     qa_flags: list[str] = Field(default_factory=list)
     qa_retries: int = Field(default=0, ge=0)
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 def _verify_webhook_secret(x_webhook_secret: str = Header(...)) -> str:
@@ -76,7 +76,8 @@ async def n8n_cover_letter_callback(
     if cl.status != "processing":
         logger.warning(
             "n8n callback for %s but status is '%s' (not 'processing')",
-            cover_letter_id, cl.status,
+            cover_letter_id,
+            cl.status,
         )
         return {"status": "ignored", "reason": f"Cover letter already in state '{cl.status}'"}
 
@@ -100,6 +101,8 @@ async def n8n_cover_letter_callback(
 
     logger.info(
         "n8n callback processed for %s: status=%s, honesty=%s",
-        cover_letter_id, cl.status, cl.qa_score_honesty,
+        cover_letter_id,
+        cl.status,
+        cl.qa_score_honesty,
     )
     return {"status": "updated", "cover_letter_id": str(cover_letter_id)}

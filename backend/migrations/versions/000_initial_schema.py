@@ -7,6 +7,7 @@ Create Date: 2026-04-04
 This is the base migration for fresh deployments (e.g. RDS).
 Subsequent migrations add columns and other incremental changes on top of this.
 """
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -33,7 +34,13 @@ def upgrade() -> None:
     op.create_table(
         "resumes",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False, index=True),
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            nullable=False,
+            index=True,
+        ),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("original_filename", sa.String(255), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="false"),
@@ -46,8 +53,20 @@ def upgrade() -> None:
     op.create_table(
         "cover_letters",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False, index=True),
-        sa.Column("resume_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("resumes.id"), nullable=False, index=True),
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            nullable=False,
+            index=True,
+        ),
+        sa.Column(
+            "resume_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("resumes.id"),
+            nullable=False,
+            index=True,
+        ),
         sa.Column("job_description", sa.Text(), nullable=False),
         sa.Column("ats_score", sa.Float(), nullable=True),
         sa.Column("generated_text", sa.Text(), nullable=True),
@@ -59,7 +78,13 @@ def upgrade() -> None:
     op.create_table(
         "job_applications",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False, index=True),
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            nullable=False,
+            index=True,
+        ),
         sa.Column("company", sa.String(255), nullable=False),
         sa.Column("role", sa.String(255), nullable=False),
         sa.Column("job_url", sa.String(500), nullable=True),

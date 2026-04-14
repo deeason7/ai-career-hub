@@ -2,6 +2,7 @@
 Real integration tests for the resume parser (ParsedResume schema).
 Tests the service logic and Pydantic model validation — no LLM mocking.
 """
+
 from app.services.resume_parser import ParsedResume
 
 
@@ -25,14 +26,21 @@ def test_parsed_resume_accepts_full_data():
         frameworks=["FastAPI", "PyTorch"],
         tools=["Docker", "Git"],
         experience=[
-            {"title": "ML Engineer", "company": "Tech Corp", "duration": "2 years", "description": "Built models"}
+            {
+                "title": "ML Engineer",
+                "company": "Tech Corp",
+                "duration": "2 years",
+                "description": "Built models",
+            }
         ],
-        education=[
-            {"degree": "M.Sc ML", "institution": "NYU", "year": "2022", "gpa": "3.9"}
-        ],
+        education=[{"degree": "M.Sc ML", "institution": "NYU", "year": "2022", "gpa": "3.9"}],
         certifications=["AWS Solutions Architect"],
         projects=[
-            {"name": "Sentiment Analyzer", "description": "NLP project", "tech_stack": ["Python", "NLTK"]}
+            {
+                "name": "Sentiment Analyzer",
+                "description": "NLP project",
+                "tech_stack": ["Python", "NLTK"],
+            }
         ],
     )
     assert parsed.full_name == "Jane Doe"

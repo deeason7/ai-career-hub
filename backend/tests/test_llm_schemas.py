@@ -4,6 +4,7 @@ Verifies that the schemas enforce the constraints we rely on to prevent
 bad LLM output from reaching the database or frontend.  No LLM calls —
 these are pure unit tests on the Pydantic models.
 """
+
 import pytest
 from pydantic import ValidationError
 
@@ -18,7 +19,6 @@ from app.services.llm_schemas import (
 
 
 class TestCoverLetterOutput:
-
     def test_valid_cover_letter(self):
         text = "A" * 250
         result = CoverLetterOutput(cover_letter=text)
@@ -34,7 +34,6 @@ class TestCoverLetterOutput:
 
 
 class TestQAVerdict:
-
     def test_valid_verdict(self):
         v = QAVerdict(
             honesty_score=8,
@@ -51,7 +50,9 @@ class TestQAVerdict:
         assert v.honesty_score == 1
 
     def test_score_boundary_high(self):
-        v = QAVerdict(honesty_score=10, tone_score=10, reasoning="Perfect letter. Grounded in facts.")
+        v = QAVerdict(
+            honesty_score=10, tone_score=10, reasoning="Perfect letter. Grounded in facts."
+        )
         assert v.honesty_score == 10
 
     def test_rejects_score_above_10(self):
@@ -72,7 +73,6 @@ class TestQAVerdict:
 
 
 class TestInterviewQuestions:
-
     def test_valid_questions(self):
         qs = [f"Question {i}?" for i in range(10)]
         result = InterviewQuestions(questions=qs)
@@ -94,7 +94,6 @@ class TestInterviewQuestions:
 
 
 class TestSkillGapResult:
-
     def test_valid_result(self):
         rec = SkillRecommendation(
             skill="Kubernetes",
@@ -117,7 +116,6 @@ class TestSkillGapResult:
 
 
 class TestJobExtraction:
-
     def test_valid_extraction(self):
         je = JobExtraction(
             title="Senior Backend Engineer",

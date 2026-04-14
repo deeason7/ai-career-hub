@@ -7,6 +7,7 @@ Tests verify:
   4. Duplicate callback (already processed) is handled idempotently
   5. Fallback behavior when n8n is not configured
 """
+
 import uuid
 
 import pytest
@@ -83,6 +84,7 @@ class TestFallbackBehavior:
     def test_n8n_disabled_by_default(self):
         """With no N8N_WEBHOOK_URL set, N8N_ENABLED should be False."""
         from app.core.config import settings
+
         # Default config has empty URLs — n8n is disabled
         if not settings.N8N_WEBHOOK_URL:
             assert settings.N8N_ENABLED is False

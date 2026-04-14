@@ -1,6 +1,6 @@
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Text
 from sqlmodel import Column, Field, Relationship, SQLModel
@@ -21,13 +21,15 @@ class Resume(ResumeBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
-    raw_text: str = Field(sa_column=Column(Text))          # Full plain text extracted
-    parsed_json: str | None = Field(default=None, sa_column=Column(Text))  # JSON string of structured data
+    raw_text: str = Field(sa_column=Column(Text))  # Full plain text extracted
+    parsed_json: str | None = Field(
+        default=None, sa_column=Column(Text)
+    )  # JSON string of structured data
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
-    user: Optional["User"] = Relationship(back_populates="resumes")
+    user: "User | None" = Relationship(back_populates="resumes")
     cover_letters: list["CoverLetter"] = Relationship(back_populates="resume")
 
 

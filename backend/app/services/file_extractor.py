@@ -2,6 +2,7 @@
 File Extractor Service
 Extracts plain text from PDF, DOCX, and TXT files uploaded by users.
 """
+
 import io
 import logging
 
@@ -33,11 +34,13 @@ async def extract_text_from_upload(file: UploadFile) -> str:
 
 def _extract_pdf(content: bytes) -> str:
     import fitz  # noqa: PLC0415 — lazy import to avoid startup cost
+
     doc = fitz.open(stream=content, filetype="pdf")
     return "\n".join(page.get_text() for page in doc)
 
 
 def _extract_docx(content: bytes) -> str:
     import docx  # noqa: PLC0415
+
     doc = docx.Document(io.BytesIO(content))
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())

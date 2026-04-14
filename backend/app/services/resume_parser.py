@@ -5,6 +5,7 @@ Extracts structured information from raw resume text using an LLM.
 Auto-detects: uses Groq (free cloud API) if GROQ_API_KEY is set, otherwise falls back to Ollama (local).
 All heavy imports are lazy so this module is importable without langchain installed.
 """
+
 import json
 import logging
 import re
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class ParsedResume(BaseModel):
     """Structured output of a parsed resume."""
+
     full_name: str | None = None
     email: str | None = None
     phone: str | None = None
@@ -27,10 +29,10 @@ class ParsedResume(BaseModel):
     programming_languages: list[str] = []
     frameworks: list[str] = []
     tools: list[str] = []
-    experience: list[dict] = []   # [{title, company, duration, description}]
-    education: list[dict] = []    # [{degree, institution, year, gpa}]
+    experience: list[dict] = []  # [{title, company, duration, description}]
+    education: list[dict] = []  # [{degree, institution, year, gpa}]
     certifications: list[str] = []
-    projects: list[dict] = []     # [{name, description, tech_stack}]
+    projects: list[dict] = []  # [{name, description, tech_stack}]
 
 
 _PARSE_PROMPT_TEMPLATE = """You are an expert resume parser. Extract structured information from the resume text below.
@@ -70,6 +72,7 @@ def _build_llm():
 
     if settings.USE_GROQ:
         from langchain_groq import ChatGroq  # noqa: PLC0415
+
         logger.info("Using Groq API for resume parsing")
         return ChatGroq(
             model=settings.GROQ_LLM_MODEL,
@@ -78,6 +81,7 @@ def _build_llm():
         )
     else:
         from langchain_community.llms import Ollama  # noqa: PLC0415
+
         logger.info("Using Ollama for resume parsing")
         return Ollama(
             model=settings.OLLAMA_LLM_MODEL,

@@ -1,4 +1,5 @@
 """Cover letter generation, status polling, and PDF download endpoints."""
+
 import io
 import logging
 import uuid
@@ -34,9 +35,7 @@ _STATUS_MAP = {
 }
 
 
-async def _dispatch_to_n8n(
-    cover_letter_id: str, resume_text: str, job_description: str
-) -> bool:
+async def _dispatch_to_n8n(cover_letter_id: str, resume_text: str, job_description: str) -> bool:
     """POST to n8n Cloud webhook to trigger the cover letter workflow.
 
     Returns True if n8n accepted the request, False if unreachable
@@ -59,12 +58,14 @@ async def _dispatch_to_n8n(
                 return True
             logger.warning(
                 "n8n returned %d for %s — falling back to local",
-                response.status_code, cover_letter_id,
+                response.status_code,
+                cover_letter_id,
             )
     except (httpx.RequestError, httpx.TimeoutException) as exc:
         logger.warning(
             "n8n unreachable for %s (%s) — falling back to local",
-            cover_letter_id, type(exc).__name__,
+            cover_letter_id,
+            type(exc).__name__,
         )
     return False
 
@@ -109,7 +110,9 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                 # Save the letter without QA scores rather than losing it.
                 logger.warning(
                     "QA review failed for %s (attempt %d): %s",
-                    cover_letter_id, attempt + 1, qa_exc,
+                    cover_letter_id,
+                    attempt + 1,
+                    qa_exc,
                 )
                 verdict = None
                 break
@@ -118,7 +121,9 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
             if passes_qa(verdict):
                 logger.info(
                     "QA passed for %s on attempt %d (honesty=%d)",
-                    cover_letter_id, attempt + 1, verdict.honesty_score,
+                    cover_letter_id,
+                    attempt + 1,
+                    verdict.honesty_score,
                 )
                 break
 
@@ -189,9 +194,7 @@ async def generate_cover_letter_endpoint(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
         result = await session.execute(
-            select(Resume).where(
-                Resume.user_id == current_user.id, Resume.is_active.is_(True)
-            )
+            select(Resume).where(Resume.user_id == current_user.id, Resume.is_active.is_(True))
         )
         resume = result.scalars().first()
         if not resume:

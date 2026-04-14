@@ -10,6 +10,7 @@ We parse that first since it's the most reliable; if blocked we fall back to
 meta-tag extraction. LinkedIn increasingly requires login for full pages, so
 the scraper returns whatever it can extract and signals partial results.
 """
+
 import json
 import re
 from urllib.parse import urlparse
@@ -67,7 +68,9 @@ def _extract_json_ld(soup: BeautifulSoup) -> str | None:
 
 def _extract_meta_description(soup: BeautifulSoup) -> str | None:
     """Fallback: extract from og:description / meta description."""
-    tag = soup.find("meta", property="og:description") or soup.find("meta", attrs={"name": "description"})
+    tag = soup.find("meta", property="og:description") or soup.find(
+        "meta", attrs={"name": "description"}
+    )
     if tag and tag.get("content"):
         return tag["content"].strip()
     return None
@@ -121,7 +124,9 @@ async def fetch_job_description(url: str) -> dict:
         }
     """
     try:
-        async with httpx.AsyncClient(headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True
+        ) as client:
             resp = await client.get(url)
     except httpx.TimeoutException:
         raise JobFetchError("Request timed out. The job site may be slow or unavailable.") from None
@@ -176,8 +181,7 @@ async def fetch_job_description(url: str) -> dict:
 
     if not text or len(text.strip()) < 50:
         raise JobFetchError(
-            "Could not extract job description from this URL. "
-            "Please paste the text manually."
+            "Could not extract job description from this URL. " "Please paste the text manually."
         )
 
     # Normalize whitespace
