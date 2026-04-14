@@ -1,6 +1,6 @@
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Text
 from sqlmodel import Column, Field, Relationship, SQLModel
@@ -29,7 +29,7 @@ class Resume(ResumeBase, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Relationships
-    user: "User | None" = Relationship(back_populates="resumes")
+    user: Optional["User"] = Relationship(back_populates="resumes")
     cover_letters: list["CoverLetter"] = Relationship(back_populates="resume")
 
 
