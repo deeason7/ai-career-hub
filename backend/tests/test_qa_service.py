@@ -68,6 +68,11 @@ _HALLUCINATED_LETTER = (
 
 
 class TestReviewCoverLetter:
+    @pytest.mark.xfail(
+        not _USING_GROQ,
+        reason="Requires Groq API key or local Ollama — neither available in CI.",
+        strict=False,
+    )
     def test_honest_letter_scores_high(self):
         """A cover letter grounded in resume facts should score >= threshold."""
         verdict = review_cover_letter(
@@ -96,6 +101,11 @@ class TestReviewCoverLetter:
         # Should flag at least some of the many fabrications
         assert len(verdict.flags) >= 1
 
+    @pytest.mark.xfail(
+        not _USING_GROQ,
+        reason="Requires Groq API key or local Ollama — neither available in CI.",
+        strict=False,
+    )
     def test_verdict_structure(self):
         """Verify the verdict contains all expected fields."""
         verdict = review_cover_letter(
