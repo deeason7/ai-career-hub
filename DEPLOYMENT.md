@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-Production deployment for AI Career Hub on AWS. Last updated: 2026-04-11 (v2.6.0).
+Production deployment for AI Career Hub on AWS. Last updated: 2026-04-18 (v3.1).
 
 ---
 
@@ -16,7 +16,8 @@ Production deployment for AI Career Hub on AWS. Last updated: 2026-04-11 (v2.6.0
 | Wake on Visit | **Live** | Route 53 failover → CloudFront → S3 splash page → Lambda boots EC2+RDS |
 | Auto-Sleep | **Live** | EventBridge Scheduler stops EC2+RDS 90 min after each wake (off-hours) |
 | Boot Deploy | **Live** | systemd service: `git pull + docker compose up` runs on every EC2 boot |
-| CI | **Live** | GitHub Actions: ruff lint + pytest on push to `main`/`develop` |
+| CI | **Live** | GitHub Actions: ruff lint + format check + pytest on push to `main`/`develop` |
+| CD | **Live** | GitHub Actions: ECR build + push → EC2 SSM deploy on push to `main` |
 | Pre-commit | **Live** | ruff lint+format + hygiene hooks — install with `pre-commit install` |
 
 ---
@@ -118,7 +119,13 @@ aws iam put-user-policy \
 Run from your local machine when you have new code to deploy:
 
 ```bash
-# 1. Build and push images (M-series Mac needs --platform linux/amd64)
+# Automated (preferred) — push to main triggers GitHub Actions CD pipeline:
+# 1. Build backend + frontend images for linux/amd64
+# 2. Push to ECR (tagged :latest + :${{ github.sha }})
+# 3. Deploy to EC2 via SSM send-command
+# Requires GitHub Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ACCOUNT_ID, EC2_INSTANCE_ID
+
+# Manual fallback (if CI not configured or emergency deploy)
 export ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
 
@@ -128,7 +135,7 @@ docker push $ECR_REGISTRY/careerhub-backend:latest
 docker build --platform linux/amd64 -t $ECR_REGISTRY/careerhub-frontend:latest ./frontend
 docker push $ECR_REGISTRY/careerhub-frontend:latest
 
-# 2. Connect to EC2 and run deploy
+# Connect to EC2 and run deploy
 INSTANCE_ID=$(aws ec2 describe-instances \
   --filters "Name=tag:Name,Values=portfolio-server" \
             "Name=instance-state-name,Values=running" \
@@ -136,7 +143,7 @@ INSTANCE_ID=$(aws ec2 describe-instances \
   --output text --region us-east-1)
 aws ssm start-session --target $INSTANCE_ID --region us-east-1
 
-# 3. On EC2 (as ubuntu user)
+# On EC2 (as ubuntu user)
 sudo su - ubuntu
 cd ~/ai-career-hub && git pull origin main
 bash infra/scripts/deploy.sh
@@ -303,7 +310,7 @@ ruff check --fix backend/
 ruff format backend/
 ```
 
-CI runs `ruff check backend/` on every push. Failing ruff = failing CI.
+CI runs `ruff check backend/` and `ruff format --check backend/` on every push. Either failing = failing CI.
 
 ### pre-commit
 
@@ -425,7 +432,9 @@ Do this in a terminal session NOT connected to any AI assistant to avoid credent
 | Boot deploy service | ✅ | `app-boot-deploy.service` installed on EC2 |
 | Auto-sleep (idle) | ✅ | EventBridge Scheduler stops EC2+RDS 90 min after wake |
 | Business hours | ✅ | EventBridge Scheduler start 9 AM / stop 6 PM ET, Mon–Fri |
-| Ruff CI | ✅ | GitHub Actions runs `ruff check backend/` on every push |
+| Ruff CI lint | ✅ | GitHub Actions runs `ruff check backend/` on every push |
+| Ruff CI format | ✅ | GitHub Actions runs `ruff format --check backend/` on every push |
+| Automated CD | ✅ | GitHub Actions builds ECR images and deploys via SSM on push to `main` |
 | Pre-commit | ✅ | `.pre-commit-config.yaml` — ruff + hygiene hooks |
 
 ---

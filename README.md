@@ -51,8 +51,9 @@ Upload your resume, score it semantically against job descriptions, generate hon
                     │                                                  │
                     └──────────────────────────────────────────────────┘
                                                                        │
-                                         GitHub Actions (CI)           │
-                                         ruff lint + pytest on push    │
+                                         GitHub Actions (CI + CD)       │
+                                         ruff lint + format + pytest    │
+                                         push main → ECR → SSM deploy   │
                                                │                       ▼
                                    ┌───────────────────────┐
                                    │   AWS EC2 (t3.small)  │
@@ -80,7 +81,8 @@ Upload your resume, score it semantically against job descriptions, generate hon
 **AI QA review** runs a second LLM pass ("Reviewer" persona) scoring honesty and tone — auto-regenerates up to 2× if honesty < 6/10.  
 **Structured output** via `instructor` + Pydantic v2 — all LLM responses are validated before persisting to DB.  
 **ATS scoring** uses sentence-transformers `all-MiniLM-L6-v2` (80 MB, CPU-only, singleton via `lru_cache`).  
-**Secrets** are pulled from AWS SSM Parameter Store at deploy time via `infra/scripts/pull-secrets.sh`.
+**Secrets** are pulled from AWS SSM Parameter Store at deploy time via `infra/scripts/pull-secrets.sh`.  
+**Deployments** are automated — push to `main` triggers GitHub Actions to build ECR images and deploy to EC2 via SSM.
 
 ---
 
