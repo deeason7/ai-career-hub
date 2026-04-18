@@ -8,7 +8,7 @@ on:
 
 jobs:
   backend-ci:
-    name: Backend (Python 3.11)
+    name: Backend — Python 3.11
     runs-on: ubuntu-latest
 
     services:
@@ -26,7 +26,6 @@ jobs:
         ports:
           - 5432:5432
 
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -41,7 +40,6 @@ jobs:
             backend/requirements.dev.txt
 
       - name: Install dependencies
-        # requirements.dev.txt includes -r requirements.txt + ruff/pytest/mypy
         run: pip install -r backend/requirements.dev.txt
 
       - name: Lint with Ruff
@@ -58,7 +56,9 @@ jobs:
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
           POSTGRES_PORT: 5432
-          OLLAMA_BASE_URL: http://localhost:11434
           SECRET_KEY: ci-test-secret-key-at-least-32-characters-long
           TESTING: "true"
-        run: pytest tests/ -v --tb=short -x
+          # Optional: set in GitHub Secrets to run live LLM integration tests.
+          # Without this, all LLM tests are marked xfail and skipped cleanly.
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: pytest tests/ -v --tb=short
