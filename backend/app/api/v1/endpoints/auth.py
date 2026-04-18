@@ -2,8 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
@@ -22,8 +22,8 @@ async def register(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Register a new user account. Rate limited: 5 requests/min per IP."""
-    result = await session.execute(select(User).where(User.email == user_in.email))
-    if result.scalars().first():
+    result = await session.exec(select(User).where(User.email == user_in.email))
+    if result.first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
@@ -47,8 +47,8 @@ async def login(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Authenticate and return a JWT access token. Rate limited: 10 requests/min per IP."""
-    result = await session.execute(select(User).where(User.email == form_data.username))
-    user = result.scalars().first()
+    result = await session.exec(select(User).where(User.email == form_data.username))
+    user = result.first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
