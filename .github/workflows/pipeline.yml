@@ -115,6 +115,34 @@ jobs:
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/careerhub-frontend:latest
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/careerhub-frontend:${{ github.sha }}
 
+      - name: Ensure EC2 is running
+        run: |
+          STATE=$(aws ec2 describe-instances \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --query "Reservations[0].Instances[0].State.Name" \
+            --region "${{ env.AWS_REGION }}" \
+            --output text)
+
+          if [ "$STATE" = "stopped" ] || [ "$STATE" = "stopping" ]; then
+            aws ec2 start-instances \
+              --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}"
+            aws ec2 wait instance-running \
+              --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+              --region "${{ env.AWS_REGION }}"
+          fi
+
+          # Wait for SSM agent to register (up to 3 min)
+          for i in $(seq 1 18); do
+            READY=$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" \
+              --query "InstanceInformationList[0].PingStatus" \
+              --region "${{ env.AWS_REGION }}" \
+              --output text 2>/dev/null || echo "None")
+            [ "$READY" = "Online" ] && break
+            sleep 10
+          done
+
       - name: Deploy via SSM
         run: |
           COMMAND_ID=$(aws ssm send-command \
@@ -137,6 +165,7 @@ jobs:
             --region "${{ env.AWS_REGION }}" \
             --query "[Status, StandardOutputContent, StandardErrorContent]" \
             --output text
+
 
       - name: Health check
         id: health
