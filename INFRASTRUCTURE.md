@@ -1,6 +1,6 @@
 # AI Career Hub — Infrastructure & Change Log
 
-> Last updated: 2026-04-11 | Region: `us-east-1` | Account: `346657261080`
+> Last updated: 2026-04-18 | Region: `us-east-1` | Account: `346657261080`
 
 ---
 
@@ -255,6 +255,19 @@ Total: ~4-5 minutes
 ---
 
 ## Change History
+
+### v3.1 — 2026-04-18 — Automated CD + CI/Test Polish
+
+**Changes:**
+
+- **CI (`ci.yml`):** Added `ruff format --check backend/` step after lint. Removed `OLLAMA_BASE_URL` from test env. Wired `GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}` as optional secret. Dropped `-x` flag so full suite runs.
+- **CD (`deploy.yml`):** Replaced placeholder step with real automated pipeline: builds `linux/amd64` images, pushes to ECR tagged `:latest` + `:<sha>`, deploys to EC2 via SSM `send-command`.
+- **LLM tests:** All `TestCoverLetterGeneration` and `TestQAVerdict` tests marked `xfail(not _USING_GROQ)` — no more `ConnectError` blocking CI.
+- **SQLModel:** Replaced `session.execute()` + `.scalars()` with `session.exec()` + direct result access across `auth.py`, `deps.py`, `job_tracker.py`.
+- **Security cleanup:** Deleted `.env.prod` (live secrets), `worker.Dockerfile` (dead Celery code), `report.json` (gitleaks output).
+- **Code:** `Optional[X]` → `X | None` modernization; `ruff format` applied to all 47 Python files.
+
+---
 
 ### v2.4.1 — 2026-04-11 — nginx HTTP /health fix (15-20s boot saving)
 
