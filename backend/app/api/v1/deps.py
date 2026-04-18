@@ -3,8 +3,8 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.security import verify_token
@@ -32,8 +32,8 @@ async def get_current_user(
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from None
-    result = await session.execute(select(User).where(User.id == user_uuid))
-    user = result.scalars().first()
+    result = await session.exec(select(User).where(User.id == user_uuid))
+    user = result.first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

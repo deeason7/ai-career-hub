@@ -3,8 +3,9 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
@@ -59,8 +60,8 @@ async def list_applications(
     if status_filter:
         query = query.where(JobApplication.status == status_filter)
     query = query.order_by(JobApplication.created_at.desc())
-    result = await session.execute(query)
-    return result.scalars().all()
+    result = await session.exec(query)
+    return result.all()
 
 
 @router.get("/stats")
@@ -69,12 +70,16 @@ async def application_stats(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Return a breakdown of job applications by status."""
-    total_result = await session.execute(
+    # func.count() aggregate queries return raw Row tuples, not model objects.
+    # session.exec() (SQLModel) wraps results as ScalarResult and loses the
+    # multi-column structure needed for the group-by breakdown — use the
+    # underlying session.execute() directly here.
+    total_result = await session.execute(  # type: ignore[call-overload]
         select(func.count()).where(JobApplication.user_id == current_user.id)
     )
     total = total_result.scalar_one()
 
-    breakdown_result = await session.execute(
+    breakdown_result = await session.execute(  # type: ignore[call-overload]
         select(JobApplication.status, func.count())
         .where(JobApplication.user_id == current_user.id)
         .group_by(JobApplication.status)
