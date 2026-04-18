@@ -66,6 +66,11 @@ _SAMPLE_JD = (
 
 
 class TestCoverLetterGeneration:
+    @pytest.mark.xfail(
+        not _USING_GROQ,
+        reason="Requires Groq API key or local Ollama — neither available in CI.",
+        strict=False,
+    )
     def test_generates_valid_cover_letter(self):
         """The model should produce a cover letter meeting the min length contract."""
         result = call_structured(
@@ -87,6 +92,11 @@ class TestCoverLetterGeneration:
 
 
 class TestQAVerdict:
+    @pytest.mark.xfail(
+        not _USING_GROQ,
+        reason="Requires Groq API key or local Ollama — neither available in CI.",
+        strict=False,
+    )
     def test_reviews_honest_letter(self):
         """A grounded letter should score high on honesty."""
         honest_letter = (
@@ -122,6 +132,11 @@ class TestQAVerdict:
         assert 1 <= result.tone_score <= 10
         assert result.honesty_score >= 6
 
+    @pytest.mark.xfail(
+        not _USING_GROQ,
+        reason="Requires Groq API key or local Ollama — neither available in CI.",
+        strict=False,
+    )
     def test_catches_hallucinated_letter(self):
         """A letter with fabricated claims should score low on honesty."""
         hallucinated_letter = (
