@@ -1,12 +1,9 @@
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, create_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 
-# Async engine — persistent pool talking directly to RDS.
-# pool_pre_ping re-validates connections that may have been idle across
-# the 1800s recycle window; prevents "SSL connection has been closed" errors
-# on the first request after quiet periods.
 async_engine = create_async_engine(
     settings.SQLALCHEMY_ASYNC_DATABASE_URI,
     pool_size=5,
@@ -15,10 +12,6 @@ async_engine = create_async_engine(
     pool_recycle=1800,
 )
 
-# Sync engine — Alembic migrations and synchronous background tasks
-# (e.g. cover letter generation, which holds a connection for the LLM call).
-# pool_size=3 is enough for our expected concurrency; max_overflow gives
-# headroom during brief traffic spikes without starving the async pool.
 _sync_pool_kwargs = dict(
     pool_pre_ping=True,
     pool_size=3,
