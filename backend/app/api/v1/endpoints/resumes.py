@@ -4,7 +4,7 @@ import os
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -89,10 +89,16 @@ async def upload_resume(
 async def list_resumes(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
 ):
-    """List all resumes for the current user."""
+    """List resumes for the current user. Paginated (default 20)."""
     result = await session.exec(
-        select(Resume).where(Resume.user_id == current_user.id).order_by(Resume.created_at.desc())
+        select(Resume)
+        .where(Resume.user_id == current_user.id)
+        .order_by(Resume.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
     return result.all()
 
