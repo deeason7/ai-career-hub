@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -54,12 +54,14 @@ async def list_applications(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
     status_filter: str | None = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
 ):
-    """List all job applications. Optionally filter by status."""
+    """List job applications. Optionally filter by status. Paginated (default 20)."""
     query = select(JobApplication).where(JobApplication.user_id == current_user.id)
     if status_filter:
         query = query.where(JobApplication.status == status_filter)
-    query = query.order_by(JobApplication.created_at.desc())
+    query = query.order_by(JobApplication.created_at.desc()).offset(skip).limit(limit)
     result = await session.exec(query)
     return result.all()
 

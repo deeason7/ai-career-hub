@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         return (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            "?connect_timeout=10"
         )
 
     @computed_field
@@ -29,6 +30,7 @@ class Settings(BaseSettings):
         return (
             f"postgresql+psycopg_async://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            "?connect_timeout=10"
         )
 
     # Redis — used for rate limiting and future caching.
@@ -65,7 +67,8 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    BASE_URL: str = "http://localhost:8000"  # Full origin for absolute callback URLs
     SENTRY_DSN: str = ""  # Optional — set to enable error tracking
 
     # CORS — comma-separated list of allowed origins.

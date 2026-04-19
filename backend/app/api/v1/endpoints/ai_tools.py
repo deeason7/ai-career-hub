@@ -1,11 +1,12 @@
 import logging
+import re
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import AnyHttpUrl, BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
@@ -18,6 +19,12 @@ from app.services.job_scraper import JobFetchError, fetch_job_description
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_text(text: str) -> str:
+    """Strip HTML tags and collapse whitespace to prevent prompt injection via markup."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 class AIRequest(BaseModel):
@@ -42,10 +49,10 @@ async def _get_resume_text(
         if not resume or resume.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
-        result = await session.execute(
+        result = await session.exec(
             select(Resume).where(Resume.user_id == current_user.id, Resume.is_active.is_(True))
         )
-        resume = result.scalars().first()
+        resume = result.first()
         if not resume:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -64,7 +71,7 @@ async def ats_score(
 ):
     """Score the resume against a job description. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
-    result = calculate_ats_score(resume_text, payload.job_description)
+    result = calculate_ats_score(resume_text, _sanitize_text(payload.job_description))
     return {
         "score": result.score,
         "semantic_score": result.semantic_score,
@@ -89,7 +96,7 @@ async def skill_gap(
     """Perform a skill gap analysis. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     try:
-        result = generate_skill_gap_analysis(resume_text, payload.job_description)
+        result = generate_skill_gap_analysis(resume_text, _sanitize_text(payload.job_description))
     except Exception as exc:
         logger.error("Skill gap analysis failed: %s", exc, exc_info=True)
         raise HTTPException(
@@ -110,7 +117,9 @@ async def interview_questions(
     """Generate interview questions. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     try:
-        questions = generate_interview_questions(resume_text, payload.job_description)
+        questions = generate_interview_questions(
+            resume_text, _sanitize_text(payload.job_description)
+        )
     except Exception as exc:
         logger.error("Interview question generation failed: %s", exc, exc_info=True)
         raise HTTPException(

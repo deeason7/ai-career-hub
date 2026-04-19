@@ -2,15 +2,15 @@
 
 import io
 import logging
+import re
 import uuid
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import Session
+from sqlmodel import Session, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.config import settings
@@ -23,6 +23,13 @@ from app.services.cover_letter import generate_cover_letter
 from app.services.pdf_generator import generate_cover_letter_pdf
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_text(text: str) -> str:
+    """Strip HTML tags and collapse whitespace to prevent prompt injection via markup."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
 
 router = APIRouter()
 
@@ -49,7 +56,7 @@ async def _dispatch_to_n8n(cover_letter_id: str, resume_text: str, job_descripti
                     "cover_letter_id": cover_letter_id,
                     "resume_text": resume_text[:8000],  # Limit payload size
                     "job_description": job_description[:4000],
-                    "callback_url": f"{settings.API_V1_STR}/webhooks/n8n/cover-letters/{cover_letter_id}/callback",
+                    "callback_url": f"{settings.BASE_URL}{settings.API_V1_STR}/webhooks/n8n/cover-letters/{cover_letter_id}/callback",
                 },
                 headers={"X-Webhook-Secret": settings.N8N_WEBHOOK_SECRET},
             )
@@ -193,10 +200,10 @@ async def generate_cover_letter_endpoint(
         if not resume or resume.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
-        result = await session.execute(
+        result = await session.exec(
             select(Resume).where(Resume.user_id == current_user.id, Resume.is_active.is_(True))
         )
-        resume = result.scalars().first()
+        resume = result.first()
         if not resume:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -207,7 +214,7 @@ async def generate_cover_letter_endpoint(
     cover_letter = CoverLetter(
         user_id=current_user.id,
         resume_id=resume.id,
-        job_description=payload.job_description,
+        job_description=_sanitize_text(payload.job_description),
         task_id=task_id,
         status="processing",
     )
@@ -238,14 +245,18 @@ async def generate_cover_letter_endpoint(
 async def list_cover_letters(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
 ):
-    """Return all generated cover letters for the current user."""
-    result = await session.execute(
+    """Return generated cover letters for the current user. Paginated (default 20)."""
+    result = await session.exec(
         select(CoverLetter)
         .where(CoverLetter.user_id == current_user.id)
         .order_by(CoverLetter.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
-    return result.scalars().all()
+    return result.all()
 
 
 @router.get("/task/{task_id}")
@@ -255,13 +266,13 @@ async def poll_task_status(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Poll cover letter generation status by task_id — reads from DB, no Celery."""
-    result = await session.execute(
+    result = await session.exec(
         select(CoverLetter).where(
             CoverLetter.task_id == task_id,
             CoverLetter.user_id == current_user.id,
         )
     )
-    cl = result.scalars().first()
+    cl = result.first()
     if not cl:
         return {"task_id": task_id, "status": "PENDING", "result": None}
 

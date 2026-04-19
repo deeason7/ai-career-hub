@@ -45,10 +45,11 @@ async def _run_migrations_when_db_ready() -> None:
     from alembic.config import Config as AlembicConfig
     from sqlalchemy import text
 
+    MAX_ATTEMPTS = 120  # 120 × 5s = 10 minutes max wait
     loop = asyncio.get_running_loop()
     attempt = 0
 
-    while True:
+    while attempt < MAX_ATTEMPTS:
         try:
             async with async_engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
@@ -63,11 +64,17 @@ async def _run_migrations_when_db_ready() -> None:
         except Exception as exc:
             attempt += 1
             logger.info(
-                "[startup] DB not ready (%s, attempt %d) — retrying in 5s",
+                "[startup] DB not ready (%s, attempt %d/%d) — retrying in 5s",
                 type(exc).__name__,
                 attempt,
+                MAX_ATTEMPTS,
             )
             await asyncio.sleep(5)
+
+    logger.error(
+        "[startup] DB unreachable after %d attempts (10 min) — giving up on migrations",
+        MAX_ATTEMPTS,
+    )
 
 
 @asynccontextmanager
@@ -153,6 +160,15 @@ async def add_security_headers(request: Request, call_next) -> Response:
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    # Streamlit requires 'unsafe-inline' for scripts and styles — restrict everything else.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
     return response
 
 
