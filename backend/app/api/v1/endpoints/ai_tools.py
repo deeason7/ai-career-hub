@@ -4,8 +4,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import AnyHttpUrl, BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
@@ -42,10 +42,10 @@ async def _get_resume_text(
         if not resume or resume.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
-        result = await session.execute(
+        result = await session.exec(
             select(Resume).where(Resume.user_id == current_user.id, Resume.is_active.is_(True))
         )
-        resume = result.scalars().first()
+        resume = result.first()
         if not resume:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

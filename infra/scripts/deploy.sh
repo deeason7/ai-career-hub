@@ -11,6 +11,6 @@ aws ecr get-login-password --region "$REGION" \
 
 bash "$(dirname "$0")/pull-secrets.sh"
 
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
+docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
 docker image prune -f
