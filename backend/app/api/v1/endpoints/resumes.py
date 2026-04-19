@@ -4,9 +4,9 @@ import os
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from sqlalchemy import select, update
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
@@ -35,8 +35,8 @@ async def upload_resume(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Upload a resume (PDF, DOCX, or TXT). Extracts text and runs LLM-based structured parsing."""
-    result = await session.execute(select(Resume).where(Resume.user_id == current_user.id))
-    existing = result.scalars().all()
+    result = await session.exec(select(Resume).where(Resume.user_id == current_user.id))
+    existing = result.all()
     if len(existing) >= MAX_RESUMES_PER_USER:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -89,12 +89,18 @@ async def upload_resume(
 async def list_resumes(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
 ):
-    """List all resumes for the current user."""
-    result = await session.execute(
-        select(Resume).where(Resume.user_id == current_user.id).order_by(Resume.created_at.desc())
+    """List resumes for the current user. Paginated (default 20)."""
+    result = await session.exec(
+        select(Resume)
+        .where(Resume.user_id == current_user.id)
+        .order_by(Resume.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
-    return result.scalars().all()
+    return result.all()
 
 
 @router.get("/{resume_id}", response_model=ResumeReadWithText)
@@ -117,13 +123,10 @@ async def activate_resume(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Set a resume as the active one (deactivates all others)."""
-    from sqlalchemy import update  # noqa: PLC0415
-
     target = await session.get(Resume, resume_id)
     if not target or target.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
 
-    # Deactivate all, then activate the target — two targeted UPDATEs, no full scan
     await session.execute(
         update(Resume).where(Resume.user_id == current_user.id).values(is_active=False)
     )

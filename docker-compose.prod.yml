@@ -20,9 +20,12 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # requirepass is set when REDIS_PASSWORD is non-empty (injected via --env-file in deploy.sh).
+    # An empty string disables auth — safe for local Docker dev where this compose isn't used.
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s        # was 10s — detect Redis faster
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      interval: 5s
       timeout: 5s
       retries: 5
 
