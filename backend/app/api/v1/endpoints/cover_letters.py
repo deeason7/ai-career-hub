@@ -8,9 +8,8 @@ from typing import Annotated
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import Session
+from sqlmodel import Session, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.config import settings
@@ -193,10 +192,10 @@ async def generate_cover_letter_endpoint(
         if not resume or resume.user_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
     else:
-        result = await session.execute(
+        result = await session.exec(
             select(Resume).where(Resume.user_id == current_user.id, Resume.is_active.is_(True))
         )
-        resume = result.scalars().first()
+        resume = result.first()
         if not resume:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -240,12 +239,12 @@ async def list_cover_letters(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Return all generated cover letters for the current user."""
-    result = await session.execute(
+    result = await session.exec(
         select(CoverLetter)
         .where(CoverLetter.user_id == current_user.id)
         .order_by(CoverLetter.created_at.desc())
     )
-    return result.scalars().all()
+    return result.all()
 
 
 @router.get("/task/{task_id}")
@@ -255,13 +254,13 @@ async def poll_task_status(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Poll cover letter generation status by task_id — reads from DB, no Celery."""
-    result = await session.execute(
+    result = await session.exec(
         select(CoverLetter).where(
             CoverLetter.task_id == task_id,
             CoverLetter.user_id == current_user.id,
         )
     )
-    cl = result.scalars().first()
+    cl = result.first()
     if not cl:
         return {"task_id": task_id, "status": "PENDING", "result": None}
 
