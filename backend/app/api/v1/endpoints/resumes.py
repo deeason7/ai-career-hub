@@ -117,8 +117,6 @@ async def activate_resume(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Set a resume as the active one (deactivates all others)."""
-    from sqlalchemy import update  # noqa: PLC0415
-
     target = await session.get(Resume, resume_id)
     if not target or target.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
