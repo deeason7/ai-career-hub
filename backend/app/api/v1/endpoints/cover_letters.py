@@ -2,11 +2,12 @@
 
 import io
 import logging
+import re
 import uuid
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -22,6 +23,13 @@ from app.services.cover_letter import generate_cover_letter
 from app.services.pdf_generator import generate_cover_letter_pdf
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_text(text: str) -> str:
+    """Strip HTML tags and collapse whitespace to prevent prompt injection via markup."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
 
 router = APIRouter()
 
@@ -206,7 +214,7 @@ async def generate_cover_letter_endpoint(
     cover_letter = CoverLetter(
         user_id=current_user.id,
         resume_id=resume.id,
-        job_description=payload.job_description,
+        job_description=_sanitize_text(payload.job_description),
         task_id=task_id,
         status="processing",
     )
@@ -237,12 +245,16 @@ async def generate_cover_letter_endpoint(
 async def list_cover_letters(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
 ):
-    """Return all generated cover letters for the current user."""
+    """Return generated cover letters for the current user. Paginated (default 20)."""
     result = await session.exec(
         select(CoverLetter)
         .where(CoverLetter.user_id == current_user.id)
         .order_by(CoverLetter.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
     return result.all()
 

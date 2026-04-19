@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from typing import Annotated
 
@@ -18,6 +19,12 @@ from app.services.job_scraper import JobFetchError, fetch_job_description
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_text(text: str) -> str:
+    """Strip HTML tags and collapse whitespace to prevent prompt injection via markup."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 class AIRequest(BaseModel):
@@ -64,7 +71,7 @@ async def ats_score(
 ):
     """Score the resume against a job description. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
-    result = calculate_ats_score(resume_text, payload.job_description)
+    result = calculate_ats_score(resume_text, _sanitize_text(payload.job_description))
     return {
         "score": result.score,
         "semantic_score": result.semantic_score,
@@ -89,7 +96,7 @@ async def skill_gap(
     """Perform a skill gap analysis. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     try:
-        result = generate_skill_gap_analysis(resume_text, payload.job_description)
+        result = generate_skill_gap_analysis(resume_text, _sanitize_text(payload.job_description))
     except Exception as exc:
         logger.error("Skill gap analysis failed: %s", exc, exc_info=True)
         raise HTTPException(
@@ -110,7 +117,9 @@ async def interview_questions(
     """Generate interview questions. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     try:
-        questions = generate_interview_questions(resume_text, payload.job_description)
+        questions = generate_interview_questions(
+            resume_text, _sanitize_text(payload.job_description)
+        )
     except Exception as exc:
         logger.error("Interview question generation failed: %s", exc, exc_info=True)
         raise HTTPException(
