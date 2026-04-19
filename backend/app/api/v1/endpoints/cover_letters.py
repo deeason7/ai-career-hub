@@ -48,7 +48,7 @@ async def _dispatch_to_n8n(cover_letter_id: str, resume_text: str, job_descripti
                     "cover_letter_id": cover_letter_id,
                     "resume_text": resume_text[:8000],  # Limit payload size
                     "job_description": job_description[:4000],
-                    "callback_url": f"{settings.API_V1_STR}/webhooks/n8n/cover-letters/{cover_letter_id}/callback",
+                    "callback_url": f"{settings.BASE_URL}{settings.API_V1_STR}/webhooks/n8n/cover-letters/{cover_letter_id}/callback",
                 },
                 headers={"X-Webhook-Secret": settings.N8N_WEBHOOK_SECRET},
             )
