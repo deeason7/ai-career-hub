@@ -1,11 +1,7 @@
 """
 ATS Scorer — hybrid semantic + keyword + structure scoring.
 
-Weights:
-  50%  Semantic similarity  — sentence-transformers cosine similarity
-  30%  Keyword match        — exact + bigram overlap
-  20%  Structure heuristics — section presence and length
-
+Weights: 50% semantic similarity, 30% keyword match, 20% structure heuristics.
 Falls back to 80/20 keyword/structure if the embedding model fails to load.
 """
 
@@ -17,7 +13,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ─── Model Configuration ──────────────────────────────────────────────────────
+# --- Model Configuration ---
 # all-MiniLM-L6-v2: 80MB, 384-dim, excellent speed/quality tradeoff for CPU
 # Downloaded once and cached at ~/.cache/huggingface/
 MODEL_NAME = "all-MiniLM-L6-v2"
@@ -36,7 +32,7 @@ def _get_model() -> Any:
     return SentenceTransformer(MODEL_NAME)
 
 
-# ─── Constants ────────────────────────────────────────────────────────────────
+# --- Constants ---
 PRIORITY_KEYWORDS = {
     "python",
     "sql",
@@ -156,7 +152,7 @@ class ATSResult:
     breakdown: dict
 
 
-# ─── Semantic Similarity ──────────────────────────────────────────────────────
+# --- Semantic Similarity ---
 
 
 def _cosine_similarity(a: Any, b: Any) -> float:
@@ -211,7 +207,7 @@ def _score_semantic(resume_text: str, jd_text: str) -> tuple[float, dict]:
     return overall_score, section_scores
 
 
-# ─── Keyword Matching (kept as recall signal) ─────────────────────────────────
+# --- Keyword Matching ---
 
 
 def _tokenize(text: str) -> set[str]:
@@ -261,7 +257,7 @@ def _score_keywords(resume_text: str, jd_text: str) -> tuple[float, list[str], l
     return round(final_score, 1), sorted(matched), missing_sorted[:20]
 
 
-# ─── Structure Scoring ────────────────────────────────────────────────────────
+# --- Structure Scoring ---
 
 
 def _score_structure(resume_text: str) -> tuple[float, list[str]]:
@@ -288,7 +284,7 @@ def _score_structure(resume_text: str) -> tuple[float, list[str]]:
     return round(score, 1), recs
 
 
-# ─── Main Entry Point ─────────────────────────────────────────────────────────
+# --- Main Entry Point ---
 
 
 def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:

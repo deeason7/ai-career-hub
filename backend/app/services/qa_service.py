@@ -3,11 +3,6 @@
 After cover letter generation, this service runs a second LLM pass with a
 "Reviewer" persona that scores the letter against the original resume for
 honesty (are claims traceable?) and tone (professional, not sycophantic?).
-
-Design:
-  - Uses the same instructor-based call_structured() from M4
-  - Returns a QAVerdict with numeric scores, flags, and reasoning
-  - The caller (background task) decides whether to regenerate or persist
 """
 
 import logging
