@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Text
 from sqlmodel import Column, Field, Relationship, SQLModel
@@ -35,8 +35,8 @@ class CoverLetter(CoverLetterBase, table=True):
     qa_retries: int = Field(default=0)
 
     # Relationships
-    user: Optional["User"] = Relationship(back_populates="cover_letters")
-    resume: Optional["Resume"] = Relationship(back_populates="cover_letters")
+    user: "User | None" = Relationship(back_populates="cover_letters")
+    resume: "Resume | None" = Relationship(back_populates="cover_letters")
 
     def set_qa_flags(self, flags: list[str]) -> None:
         """Serialize QA flags list to JSON for DB storage."""
@@ -50,8 +50,8 @@ class CoverLetter(CoverLetterBase, table=True):
 
 
 class CoverLetterCreate(SQLModel):
-    job_description: str
-    resume_id: uuid.UUID | None = None  # If None, uses the user's active resume
+    job_description: str = Field(..., max_length=10_000)
+    resume_id: uuid.UUID | None = None
 
 
 class CoverLetterRead(CoverLetterBase):
