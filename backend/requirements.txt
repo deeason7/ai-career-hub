@@ -19,7 +19,7 @@ greenlet>=3.0.3
 redis==5.0.7
 
 # --- AI & NLP ---
-langchain-community==0.2.10
+langchain-community==0.4.1
 langchain-core>=0.2.23,<0.3.0
 langchain-text-splitters==0.2.4
 langchain-groq==0.1.9
