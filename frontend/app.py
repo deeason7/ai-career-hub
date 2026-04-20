@@ -28,13 +28,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Cookie manager — must be instantiated before any other widgets.
-# Persists the JWT across browser refreshes so users stay logged in.
-@st.cache_resource
-def _get_cookie_manager():
-    return stx.CookieManager(key="careerhub_session")
-
-cookie_manager = _get_cookie_manager()
+# Cookie manager — instantiated directly at module level.
+# CookieManager is a Streamlit custom component (widget) and MUST NOT be
+# wrapped in @st.cache_resource or @st.cache_data: Streamlit cannot replay
+# widget calls from cache, which raises CachedWidgetWarning and crashes.
+cookie_manager = stx.CookieManager(key="careerhub_session")
 
 # ─── Session State Init ───────────────────────────────────────────────────────
 for key in ["token", "user"]:
@@ -259,7 +257,12 @@ def sidebar():
         st.session_state["current_page"] = page
         st.divider()
         if st.button("🚪 Logout"):
-            cookie_manager.delete("auth_token")  # clear persisted session
+            cookie_manager.delete("auth_token")  # clear access-token cookie
+            # Also clear the HttpOnly refresh-token cookie via the backend endpoint
+            try:
+                requests.post(f"{API_URL}/auth/logout", timeout=3)
+            except Exception:
+                pass  # best-effort — local state is still cleared
             st.session_state.token = None
             st.session_state.user = None
             st.session_state["current_page"] = "📋 Dashboard"
