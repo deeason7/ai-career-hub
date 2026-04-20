@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 class UserBase(SQLModel):
     email: str = Field(unique=True, index=True, max_length=255)
     full_name: str | None = Field(default=None, max_length=255)
-    role: str = Field(default="candidate")
     is_active: bool = Field(default=True)
 
 
