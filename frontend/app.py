@@ -14,6 +14,7 @@ import json
 import os
 import time
 
+import extra_streamlit_components as stx
 import requests
 import streamlit as st
 
@@ -26,6 +27,14 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Cookie manager — must be instantiated before any other widgets.
+# Persists the JWT across browser refreshes so users stay logged in.
+@st.cache_resource
+def _get_cookie_manager():
+    return stx.CookieManager(key="careerhub_session")
+
+cookie_manager = _get_cookie_manager()
 
 # ─── Session State Init ───────────────────────────────────────────────────────
 for key in ["token", "user"]:
@@ -106,6 +115,14 @@ def page_auth():
                     if not st.session_state.token:
                         show_error("Login failed: no token received.")
                         return
+                    # Persist JWT in a browser cookie so refreshes keep the session alive.
+                    # expires_at matches the backend JWT expiry (60 min).
+                    from datetime import datetime, timedelta
+                    cookie_manager.set(
+                        "auth_token",
+                        st.session_state.token,
+                        expires_at=datetime.now() + timedelta(hours=1),
+                    )
                     me = safe_json(api("get", "/auth/me"), {})
                     st.session_state.user = me
                     show_success("Logged in!")
@@ -242,6 +259,7 @@ def sidebar():
         st.session_state["current_page"] = page
         st.divider()
         if st.button("🚪 Logout"):
+            cookie_manager.delete("auth_token")  # clear persisted session
             st.session_state.token = None
             st.session_state.user = None
             st.session_state["current_page"] = "📋 Dashboard"
@@ -886,6 +904,22 @@ def page_legal():
 
 # ─── MAIN ──────────────────────────────────────────────────────────────────────
 
+# ── Session restore from cookie (survives browser refresh) ────────────────────
+# On first load after a refresh, session_state is empty. Check the browser
+# cookie for a stored JWT and verify it's still valid via /auth/me.
+if not st.session_state.token:
+    _cookie_token = cookie_manager.get("auth_token")
+    if _cookie_token:
+        st.session_state.token = _cookie_token  # temp-set so api() sends the header
+        _me = safe_json(api("get", "/auth/me"), {})
+        if _me and _me.get("email"):
+            st.session_state.user = _me          # valid — session fully restored
+        else:
+            # Token expired or invalid — clear cookie and force re-login
+            cookie_manager.delete("auth_token")
+            st.session_state.token = None
+
+# ── Page routing ─────────────────────────────────────────────────────────────
 if not st.session_state.token:
     page_auth()
 else:
