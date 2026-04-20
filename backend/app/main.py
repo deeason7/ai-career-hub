@@ -71,18 +71,10 @@ async def _run_migrations_when_db_ready() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup behaviour by environment:
-
-    - Dev:  create tables directly via SQLModel (fast, no migration overhead).
-    - Prod: schedule alembic migrations as a non-blocking asyncio background
-            task.  FastAPI starts and serves /health immediately, with DB
-            features becoming available once RDS finishes its cold start.
-    """
+    """Create tables in dev; run migrations async in prod."""
     if not settings.PRODUCTION:
         await create_db_and_tables()
     else:
-        # Fire-and-forget: uvicorn is already serving by the time this task
-        # connects to RDS and applies any pending migrations.
         asyncio.create_task(_run_migrations_when_db_ready())
     yield
 
@@ -118,12 +110,7 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-# ── DB availability handlers ────────────────────────────────────────────────
-# During the Wake-on-Visit cold start, RDS takes 3-5 minutes to come online.
-# FastAPI starts immediately but the DB is still warming up.  Without these
-# handlers, any DB-touching request would return a raw 500.  Instead we return
-# a clean 503 with a Retry-After header so the Streamlit frontend can show a
-# friendly "Database starting up" message and auto-retry.
+# Return a clean 503 with Retry-After during DB cold-start.
 
 
 @app.exception_handler(OperationalError)
