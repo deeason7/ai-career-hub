@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
+from app.core.config import settings
 from app.core.limiter import rate_limit
 from app.core.security import (
     REFRESH_TOKEN_EXPIRE_DAYS,
@@ -80,10 +81,10 @@ async def login(
         key=_REFRESH_COOKIE,
         value=refresh_token,
         httponly=True,
-        secure=True,  # HTTPS only in production
+        secure=settings.PRODUCTION,
         samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        path="/api/v1/auth",  # Scoped to auth routes only
+        path="/api/v1/auth",
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
