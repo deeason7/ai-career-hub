@@ -15,7 +15,7 @@ pytest==8.3.2
 pytest-asyncio==0.23.8
 
 # --- Linting & Type Checking ---
-ruff==0.5.5
+ruff==0.15.11
 mypy==1.11.1
 
 # --- Git Hooks ---
