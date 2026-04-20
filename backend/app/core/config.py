@@ -80,8 +80,9 @@ class Settings(BaseSettings):
     def CORS_ORIGINS(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
-    # Storage
-    S3_BUCKET: str = ""  # Set in production via env/SSM
+    # Storage — reserved for future S3 resume file storage.
+    # Uncomment and configure when implementing S3 upload support.
+    # S3_BUCKET: str = ""  # Set in production via env/SSM
 
     model_config = SettingsConfigDict(
         env_file="backend/.env",
