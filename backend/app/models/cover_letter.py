@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Text
 from sqlmodel import Column, Field, Relationship, SQLModel
@@ -28,15 +28,15 @@ class CoverLetter(CoverLetterBase, table=True):
     status: str = Field(default="pending", max_length=50)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    # QA review scores (M1: AI-as-a-Judge)
+    # QA review scores
     qa_score_honesty: int | None = Field(default=None)
     qa_score_tone: int | None = Field(default=None)
     qa_flags: str | None = Field(default=None, sa_column=Column(Text))
     qa_retries: int = Field(default=0)
 
     # Relationships
-    user: "User | None" = Relationship(back_populates="cover_letters")
-    resume: "Resume | None" = Relationship(back_populates="cover_letters")
+    user: Optional["User"] = Relationship(back_populates="cover_letters")
+    resume: Optional["Resume"] = Relationship(back_populates="cover_letters")
 
     def set_qa_flags(self, flags: list[str]) -> None:
         """Serialize QA flags list to JSON for DB storage."""
