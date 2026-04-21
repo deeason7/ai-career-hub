@@ -5,7 +5,7 @@ slowapi==0.1.9
 sentry-sdk[fastapi]==2.25.1
 pydantic==2.11.3
 pydantic-settings==2.9.1
-python-multipart==0.0.20
+python-multipart==0.0.26
 httpx==0.28.1
 beautifulsoup4==4.13.4
 
@@ -16,12 +16,12 @@ psycopg[binary]==3.2.9
 greenlet>=3.0.3
 
 # --- Session / Rate Limiting ---
-redis==5.3.0
+redis==5.0.7
 
 # --- AI & NLP ---
-langchain-community==0.4.1
-langchain-core>=1.2.8,<2.0.0
-langchain-text-splitters==0.3.8
+langchain-community==0.3.27
+langchain-core>=1.2.22,<2.0.0
+langchain-text-splitters==1.1.2
 langchain-groq==1.1.2
 faiss-cpu==1.10.0
 tiktoken==0.9.0
@@ -37,5 +37,5 @@ reportlab==4.4.0
 
 # --- Security ---
 bcrypt==4.2.1
-PyJWT==2.10.1
+PyJWT==2.12.1
 cryptography>=44.0.0
