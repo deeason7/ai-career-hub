@@ -20,7 +20,7 @@ redis==5.0.7
 
 # --- AI & NLP ---
 langchain-community==0.3.27
-langchain-core>=0.3.84,<1.0.0
+langchain-core>=1.3.0,<2.0.0
 langchain-text-splitters==0.3.8
 langchain-groq==0.3.2
 faiss-cpu==1.8.0.post1
