@@ -54,13 +54,6 @@ node_modules/
 .next/
 out/
 
-# Planning / internal docs (not for repo)
-engineering_plan.md
-.agent_changelog.md
-.agent_rules.md
-.task_tracker.md
-.implementation_plan.md
-
 # Stray empty ghost directories (real code lives in backend/)
 /alembic.ini
 /migrations/
