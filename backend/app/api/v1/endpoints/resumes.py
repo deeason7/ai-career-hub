@@ -19,7 +19,7 @@ from app.services.resume_parser import parse_resume
 router = APIRouter()
 
 MAX_RESUMES_PER_USER = 10
-MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB — matches Streamlit frontend cap
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 ALLOWED_MIME_TYPES = {
     "application/pdf",
@@ -63,13 +63,11 @@ async def upload_resume(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
-    # parse_resume calls Groq/Ollama (sync HTTP, 2-10s) — offload to thread pool
-    # so we don't block the event loop for every upload request.
+    # parse_resume is sync and LLM-bound — run in thread pool to avoid blocking
     parsed = await asyncio.to_thread(parse_resume, raw_text)
     parsed_json = parsed.model_dump_json()
     is_first = len(existing) == 0
 
-    # Sanitize filename — prevent path traversal attacks
     safe_filename = os.path.basename(file.filename or "resume")[:255]
 
     resume = Resume(

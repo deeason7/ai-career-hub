@@ -28,18 +28,10 @@ if settings.SENTRY_DSN:
 
 
 async def _run_migrations_when_db_ready() -> None:
-    """Run alembic upgrade head once the database is reachable.
+    """Wait for the DB to accept connections, then run alembic upgrade head.
 
-    Executes as a non-blocking asyncio background task so uvicorn starts
-    immediately without waiting for RDS to become available.  This is the
-    core mechanism behind the Wake-on-Visit <90s boot target:
-
-      EC2 boots  →  uvicorn starts  →  /health returns 200  →  wake-page
-      redirects  →  alembic runs in background when RDS is ready (3-5 min)
-      →  all DB features available seamlessly.
-
-    Retries a lightweight SELECT 1 ping every 5s until the DB accepts
-    connections, then runs alembic via a thread-pool executor (sync API).
+    Runs as a background task so uvicorn starts immediately without waiting
+    for RDS. Retries every 5s for up to 10 minutes.
     """
     from alembic import command as alembic_command
     from alembic.config import Config as AlembicConfig
@@ -79,18 +71,10 @@ async def _run_migrations_when_db_ready() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup behaviour by environment:
-
-    - Dev:  create tables directly via SQLModel (fast, no migration overhead).
-    - Prod: schedule alembic migrations as a non-blocking asyncio background
-            task.  FastAPI starts and serves /health immediately, with DB
-            features becoming available once RDS finishes its cold start.
-    """
+    """Create tables in dev; run migrations async in prod."""
     if not settings.PRODUCTION:
         await create_db_and_tables()
     else:
-        # Fire-and-forget: uvicorn is already serving by the time this task
-        # connects to RDS and applies any pending migrations.
         asyncio.create_task(_run_migrations_when_db_ready())
     yield
 
@@ -103,8 +87,8 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description=(
-        "🚀 AI Career Hub API — Multi-resume management, RAG cover letter generation, "
-        "ATS scoring, skill gap analysis, interview question generation, and job application tracking."
+        "AI Career Hub API — resume management, cover letter generation, "
+        "ATS scoring, skill gap analysis, and job application tracking."
     ),
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=_docs_url,
@@ -126,12 +110,7 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-# ── DB availability handlers ────────────────────────────────────────────────
-# During the Wake-on-Visit cold start, RDS takes 3-5 minutes to come online.
-# FastAPI starts immediately but the DB is still warming up.  Without these
-# handlers, any DB-touching request would return a raw 500.  Instead we return
-# a clean 503 with a Retry-After header so the Streamlit frontend can show a
-# friendly "Database starting up" message and auto-retry.
+# Return a clean 503 with Retry-After during DB cold-start.
 
 
 @app.exception_handler(OperationalError)
@@ -153,14 +132,15 @@ async def db_unavailable_handler(request: Request, exc: Exception) -> JSONRespon
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next) -> Response:
-    """Inject security headers on every response — prevents clickjacking, MIME sniffing, etc."""
+    """Inject security headers on every response."""
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    # Streamlit requires 'unsafe-inline' for scripts and styles — restrict everything else.
+    if settings.PRODUCTION:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Streamlit requires 'unsafe-inline' for scripts and styles.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "

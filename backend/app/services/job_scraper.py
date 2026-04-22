@@ -1,14 +1,9 @@
-"""Job description scraper service.
+"""Job description scraper.
 
 Fetches job postings from public URLs and extracts the job description text.
 Supports LinkedIn, Greenhouse, Lever, Workday, and generic job boards.
-
-LinkedIn Notes
---------------
-LinkedIn public job pages embed structured data as JSON-LD (application/ld+json).
-We parse that first since it's the most reliable; if blocked we fall back to
-meta-tag extraction. LinkedIn increasingly requires login for full pages, so
-the scraper returns whatever it can extract and signals partial results.
+LinkedIn increasingly requires login for full pages; the scraper returns
+whatever it can extract and signals partial results.
 """
 
 import json
