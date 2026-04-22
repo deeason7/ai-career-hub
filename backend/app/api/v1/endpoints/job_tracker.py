@@ -72,16 +72,15 @@ async def application_stats(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """Return a breakdown of job applications by status."""
-    # func.count() aggregate queries return raw Row tuples, not model objects.
-    # session.exec() (SQLModel) wraps results as ScalarResult and loses the
-    # multi-column structure needed for the group-by breakdown — use the
-    # underlying session.execute() directly here.
-    total_result = await session.execute(  # type: ignore[call-overload]
+    # Aggregate queries return multi-column Row tuples that sqlmodel.exec()
+    # can't handle — use the raw SQLAlchemy execute path instead.
+    conn = await session.connection()
+    total_result = await conn.execute(
         select(func.count()).where(JobApplication.user_id == current_user.id)
     )
     total = total_result.scalar_one()
 
-    breakdown_result = await session.execute(  # type: ignore[call-overload]
+    breakdown_result = await conn.execute(
         select(JobApplication.status, func.count())
         .where(JobApplication.user_id == current_user.id)
         .group_by(JobApplication.status)
