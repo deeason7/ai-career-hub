@@ -1,14 +1,7 @@
 """Structured LLM client backed by instructor.
 
-Provides a single call_structured() function that wraps either the Groq SDK
-(production) or an OpenAI-compatible client pointed at Ollama (local dev)
-with instructor's automatic Pydantic validation and retry logic.
-
-Both backends are free:
-  - Groq: free API tier (~30 RPM)
-  - Ollama: runs locally, instructor talks to it via its OpenAI-compatible
-    endpoint (http://localhost:11434/v1). The openai Python package is just
-    a client library — no OpenAI account or API key needed.
+Wraps Groq (production) or Ollama (local dev) with instructor's Pydantic
+validation and automatic retry logic.
 """
 
 import logging
@@ -72,27 +65,10 @@ def call_structured(
     temperature: float = 0.3,
     max_retries: int = 3,
 ) -> T:
-    """Send a prompt to the active LLM and parse the response into a Pydantic model.
+    """Send a prompt to the active LLM and return a validated Pydantic model.
 
-    instructor automatically retries when the LLM output fails Pydantic
-    validation — it appends the validation error to the next attempt so
-    the model can self-correct.  After max_retries exhausted, raises
-    ValidationError (or InstructorRetryException wrapping it).
-
-    Args:
-        response_model: Pydantic model class defining the expected output shape.
-        system_prompt:  System-level instructions (persona, constraints).
-        user_prompt:    The actual user-facing content (resume, JD, etc.).
-        model:          Override the default model ID.
-        temperature:    Sampling temperature. Lower = more deterministic.
-        max_retries:    Instructor retry attempts on validation failure.
-
-    Returns:
-        An instance of response_model, fully validated.
-
-    Raises:
-        pydantic.ValidationError: LLM output doesn't match schema after retries.
-        RuntimeError: Wrapped InstructorRetryException for consistent error handling.
+    Instructor retries on validation failure, feeding the error back to the
+    model so it can self-correct. Raises ValidationError after max_retries.
     """
     from instructor.core.exceptions import InstructorRetryException
 
@@ -118,9 +94,6 @@ def call_structured(
             ],
         )
     except InstructorRetryException as exc:
-        # instructor wraps ValidationError in InstructorRetryException after
-        # exhausting retries. Re-raise as ValidationError for consistent
-        # handling in the service layer (cover_letter.py catches ValidationError).
         logger.warning(
             "Structured output failed after %d retries for %s",
             max_retries,

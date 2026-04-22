@@ -2,7 +2,6 @@
 
 import io
 import logging
-import re
 import uuid
 from typing import Annotated
 
@@ -16,19 +15,15 @@ from app.api.v1.deps import get_current_user
 from app.core.config import settings
 from app.core.db import get_async_session, sync_engine
 from app.core.limiter import rate_limit
+from app.core.utils import sanitize_text
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.cover_letter import generate_cover_letter
 from app.services.pdf_generator import generate_cover_letter_pdf
+from app.services.qa_service import HALLUCINATION_THRESHOLD
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_text(text: str) -> str:
-    """Strip HTML tags and collapse whitespace to prevent prompt injection via markup."""
-    text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 router = APIRouter()
@@ -78,15 +73,7 @@ async def _dispatch_to_n8n(cover_letter_id: str, resume_text: str, job_descripti
 
 
 def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
-    """Background thread: generates cover letter, runs QA review, persists result.
-
-    Pipeline:
-      1. Generate cover letter via instructor (Groq) or LangChain (Ollama)
-      2. Run AI-as-a-Judge QA review → get honesty/tone scores
-      3. If honesty < threshold, auto-regenerate (up to MAX_QA_RETRIES times)
-      4. Persist the best result with QA scores to DB
-      5. If still below threshold after retries, save anyway but status reflects it
-    """
+    """Generate a cover letter, run QA review, and persist the result."""
     from app.services.qa_service import (  # noqa: PLC0415
         HALLUCINATION_THRESHOLD,
         MAX_QA_RETRIES,
@@ -101,11 +88,9 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
         retries = 0
 
         for attempt in range(1 + MAX_QA_RETRIES):
-            # Step 1: Generate
             result = generate_cover_letter(resume_text, job_description)
             cover_letter_text = result["cover_letter"]
 
-            # Step 2: QA Review
             try:
                 verdict = review_cover_letter(
                     cover_letter=cover_letter_text,
@@ -113,8 +98,6 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                     job_description=job_description,
                 )
             except Exception as qa_exc:
-                # QA review failed (LLM error, validation error, etc.)
-                # Save the letter without QA scores rather than losing it.
                 logger.warning(
                     "QA review failed for %s (attempt %d): %s",
                     cover_letter_id,
@@ -124,7 +107,6 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                 verdict = None
                 break
 
-            # Step 3: Check threshold
             if passes_qa(verdict):
                 logger.info(
                     "QA passed for %s on attempt %d (honesty=%d)",
@@ -145,7 +127,7 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                     MAX_QA_RETRIES,
                 )
 
-        # Step 4: Persist result with QA scores
+        # Persist result
         with Session(sync_engine) as session:
             cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
             if cl:
@@ -189,11 +171,9 @@ async def generate_cover_letter_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Dispatch cover letter generation. Rate limited: 5 req/min per IP.
+    """Dispatch cover letter generation (async, returns 202).
 
-    Dispatch strategy:
-      - If N8N_ENABLED: POST to n8n Cloud webhook (event-driven)
-      - Fallback: in-process BackgroundTasks (local dev / n8n unreachable)
+    Uses n8n webhook when configured, falls back to in-process BackgroundTasks.
     """
     if payload.resume_id:
         resume = await session.get(Resume, payload.resume_id)
@@ -214,7 +194,7 @@ async def generate_cover_letter_endpoint(
     cover_letter = CoverLetter(
         user_id=current_user.id,
         resume_id=resume.id,
-        job_description=_sanitize_text(payload.job_description),
+        job_description=sanitize_text(payload.job_description),
         task_id=task_id,
         status="processing",
     )
@@ -235,7 +215,7 @@ async def generate_cover_letter_endpoint(
             _run_cover_letter_bg,
             str(cover_letter.id),
             resume.raw_text,
-            payload.job_description,
+            sanitize_text(payload.job_description),
         )
 
     return cover_letter
@@ -289,7 +269,7 @@ async def poll_task_status(
             "tone_score": cl.qa_score_tone,
             "flags": cl.get_qa_flags(),
             "retries": cl.qa_retries,
-            "passed": cl.qa_score_honesty >= 6,
+            "passed": cl.qa_score_honesty >= HALLUCINATION_THRESHOLD,
         }
 
     return response

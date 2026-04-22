@@ -1,4 +1,4 @@
-from pydantic import computed_field
+from pydantic import computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -68,8 +68,15 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    BASE_URL: str = "http://localhost:8000"  # Full origin for absolute callback URLs
-    SENTRY_DSN: str = ""  # Optional — set to enable error tracking
+    BASE_URL: str = "http://localhost:8000"
+    SENTRY_DSN: str = ""
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters")
+        return v
 
     # CORS — comma-separated list of allowed origins.
     # Locally defaults to Streamlit dev server; in production set via env/SSM.

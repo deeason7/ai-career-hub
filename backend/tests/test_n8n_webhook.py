@@ -99,7 +99,7 @@ class TestFallbackBehavior:
             POSTGRES_USER="test",
             POSTGRES_PASSWORD="test",
             POSTGRES_DB="test",
-            SECRET_KEY="test",
+            SECRET_KEY="test-secret-key-for-unit-tests-only",
             N8N_WEBHOOK_URL="https://example.com/webhook",
             N8N_WEBHOOK_SECRET="",
         )
@@ -111,7 +111,7 @@ class TestFallbackBehavior:
             POSTGRES_USER="test",
             POSTGRES_PASSWORD="test",
             POSTGRES_DB="test",
-            SECRET_KEY="test",
+            SECRET_KEY="test-secret-key-for-unit-tests-only",
             N8N_WEBHOOK_URL="https://example.com/webhook",
             N8N_WEBHOOK_SECRET="my-secret",
         )

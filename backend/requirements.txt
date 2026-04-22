@@ -4,8 +4,8 @@ uvicorn[standard]==0.30.1
 slowapi==0.1.9
 sentry-sdk[fastapi]==2.8.0
 pydantic==2.8.2
-pydantic-settings==2.3.4
-python-multipart==0.0.9
+pydantic-settings==2.4.0
+python-multipart==0.0.26
 httpx==0.27.0
 beautifulsoup4==4.12.3
 
@@ -19,10 +19,10 @@ greenlet>=3.0.3
 redis==5.0.7
 
 # --- AI & NLP ---
-langchain-community==0.2.10
-langchain-core>=0.2.23,<0.3.0
-langchain-text-splitters==0.2.4
-langchain-groq==0.1.9
+langchain-community==0.3.27
+langchain-core>=0.3.84,<1.0.0
+langchain-text-splitters==0.3.8
+langchain-groq==0.3.2
 faiss-cpu==1.8.0.post1
 tiktoken==0.7.0
 pymupdf==1.24.7
@@ -37,6 +37,6 @@ reportlab==4.2.2
 
 # --- Security ---
 bcrypt==4.2.0
-PyJWT==2.9.0
+PyJWT==2.12.1
 cryptography>=44.0.0
 

@@ -6,8 +6,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.deps import get_current_user
-from app.core.db import get_async_session
 from app.core.config import settings
+from app.core.db import get_async_session
 from app.core.limiter import rate_limit
 from app.core.security import (
     REFRESH_TOKEN_EXPIRE_DAYS,

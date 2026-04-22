@@ -28,7 +28,7 @@ class CoverLetter(CoverLetterBase, table=True):
     status: str = Field(default="pending", max_length=50)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    # QA review scores (M1: AI-as-a-Judge)
+    # QA review scores
     qa_score_honesty: int | None = Field(default=None)
     qa_score_tone: int | None = Field(default=None)
     qa_flags: str | None = Field(default=None, sa_column=Column(Text))
@@ -50,8 +50,8 @@ class CoverLetter(CoverLetterBase, table=True):
 
 
 class CoverLetterCreate(SQLModel):
-    job_description: str
-    resume_id: uuid.UUID | None = None  # If None, uses the user's active resume
+    job_description: str = Field(..., max_length=10_000)
+    resume_id: uuid.UUID | None = None
 
 
 class CoverLetterRead(CoverLetterBase):
