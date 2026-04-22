@@ -1,10 +1,7 @@
 """n8n webhook callback endpoint.
 
-Receives results from n8n Cloud after workflow execution. Authenticated via
-a shared secret (X-Webhook-Secret header), not JWT — n8n is an internal service.
-
-Flow:
-  FastAPI (POST to n8n) → n8n runs workflow → n8n (PUT to /callback) → DB update
+Receives cover letter results from n8n Cloud after workflow execution.
+Authenticated via X-Webhook-Secret header (shared secret, not JWT).
 """
 
 import logging

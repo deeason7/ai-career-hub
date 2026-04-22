@@ -1,12 +1,4 @@
-"""Cover Letter Generator + AI Tools Service
-
-Two execution paths based on environment:
-  - Groq (cloud): structured output via instructor — validated Pydantic models
-  - Ollama (local dev): LangChain RAG pipeline with FAISS context retrieval
-
-The Groq path uses the dedicated llm_client for structured output.
-The Ollama path keeps the LangChain chain for local dev compatibility.
-"""
+"""Cover letter generation and AI tools service."""
 
 import logging
 
@@ -44,7 +36,7 @@ _SKILL_GAP_SYSTEM_PROMPT = (
 
 
 def _build_ollama_llm():
-    """Return an Ollama LLM client for local dev. Not used when Groq is configured."""
+    """Return an Ollama LLM client for local dev."""
     from langchain_community.llms import Ollama  # noqa: PLC0415
 
     from app.core.config import settings  # noqa: PLC0415
