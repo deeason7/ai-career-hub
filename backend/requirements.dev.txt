@@ -1,18 +1,22 @@
-# Development + testing dependencies (not installed in production Docker image).
+# Development + testing dependencies.
+# Includes everything from requirements.txt (production) plus dev tooling.
 #
 # Usage:
-#   pip install -r requirements.dev.txt   <- local dev / CI
-#   pip install -r requirements.txt       <- production Docker image
+#   pip install -r requirements.dev.txt   ← local dev / CI
+#   pip install -r requirements.txt       ← production Docker image (Dockerfile)
+#
+# DO NOT add these to requirements.txt — they inflate the ~3GB production image
+# by ~300-400MB and add ~60-90s to every ECR build for zero runtime benefit.
 
 -r requirements.txt
 
 # --- Testing ---
 pytest==9.0.3
-pytest-asyncio==0.26.0
+pytest-asyncio==0.23.8
 
 # --- Linting & Type Checking ---
-ruff==0.11.6
-mypy==1.15.0
+ruff==0.5.5
+mypy==1.11.1
 
 # --- Git Hooks ---
-pre-commit==4.2.0
+pre-commit==3.7.1
