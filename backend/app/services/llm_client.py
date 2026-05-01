@@ -36,7 +36,7 @@ def _get_client():
     if settings.USE_GROQ:
         import groq
 
-        raw_client = groq.Groq(api_key=settings.GROQ_API_KEY)
+        raw_client = groq.Groq(api_key=settings.GROQ_API_KEY, timeout=60.0)
         _client = instructor.from_groq(raw_client, mode=instructor.Mode.JSON)
         _active_model = settings.GROQ_LLM_MODEL
         logger.info("Instructor client: Groq (%s)", _active_model)
