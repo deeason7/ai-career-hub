@@ -133,12 +133,7 @@ async def db_unavailable_handler(request: Request, exc: Exception) -> JSONRespon
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next) -> Response:
-    """Attach a correlation ID to every request and echo it in the response.
-
-    Reads X-Request-ID from the incoming request (set by nginx or the client)
-    or generates a fresh UUID. The ID is returned on every response so clients
-    and Sentry can correlate logs across services.
-    """
+    """Pass through or generate a request correlation ID (X-Request-ID)."""
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
