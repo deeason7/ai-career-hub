@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 import sentry_sdk
@@ -128,6 +129,20 @@ async def db_unavailable_handler(request: Request, exc: Exception) -> JSONRespon
         content={"detail": "Database is starting up. Please try again in 30 seconds."},
         headers={"Retry-After": "30"},
     )
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next) -> Response:
+    """Attach a correlation ID to every request and echo it in the response.
+
+    Reads X-Request-ID from the incoming request (set by nginx or the client)
+    or generates a fresh UUID. The ID is returned on every response so clients
+    and Sentry can correlate logs across services.
+    """
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.middleware("http")
