@@ -14,8 +14,10 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     get_password_hash,
+    is_token_revoked,
+    revoke_token,
     verify_password,
-    verify_token,
+    verify_refresh_token,
 )
 from app.models.user import User, UserCreate, UserRead
 
@@ -108,11 +110,19 @@ async def refresh_access_token(
             detail="No refresh token provided.",
         )
 
-    user_id = verify_token(refresh_token, token_type="refresh")
-    if not user_id:
+    token_data = verify_refresh_token(refresh_token)
+    if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token. Please log in again.",
+        )
+
+    user_id, jti = token_data
+
+    if await is_token_revoked(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked. Please log in again.",
         )
 
     result = await session.exec(select(User).where(User.id == user_id))
@@ -128,8 +138,15 @@ async def refresh_access_token(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response):
-    """Clear the refresh token cookie to fully log the user out server-side."""
+async def logout(
+    response: Response,
+    refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+):
+    if refresh_token:
+        token_data = verify_refresh_token(refresh_token)
+        if token_data:
+            _, jti = token_data
+            await revoke_token(jti, REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600)
     response.delete_cookie(key=_REFRESH_COOKIE, path="/api/v1/auth")
 
 
