@@ -218,10 +218,14 @@ jobs:
       - name: Health check
         id: health
         run: |
-          echo "Waiting for app to stabilise..."
+          EC2_IP=$(aws ec2 describe-instances \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --region "${{ env.AWS_REGION }}" --output text)
+          echo "Checking health directly on EC2 ($EC2_IP) — bypasses Route 53 failover..."
           for i in $(seq 1 20); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              "https://${{ secrets.APP_DOMAIN }}/health" 2>/dev/null)
+              "http://$EC2_IP/health" 2>/dev/null)
             echo "[$i/20] Health check: HTTP $STATUS"
             [ "$STATUS" = "200" ] && { echo "Deployment verified."; exit 0; }
             sleep 15
