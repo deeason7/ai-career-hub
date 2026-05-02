@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Queue deploys on main; cancel stale runs on PRs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
 
@@ -57,7 +62,7 @@ jobs:
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
           POSTGRES_PORT: 5432
-          SECRET_KEY: ${{ secrets.CI_SECRET_KEY || 'ci-only-secret-key-not-used-in-production' }}
+          SECRET_KEY: ${{ secrets.CI_SECRET_KEY || 'ci-only-insecure-key-never-used-in-prod' }}
           TESTING: "true"
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: pytest tests/ -v --tb=short
@@ -67,6 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ci
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production  # OIDC sub: repo:deeason7/ai-career-hub:environment:production
 
     env:
       PREV_SHA: ${{ github.event.before }}
@@ -78,17 +84,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Amazon ECR
         id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build and push backend
+      - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -101,7 +109,7 @@ jobs:
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/careerhub-backend:latest
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/careerhub-backend:${{ github.sha }}
 
-      - name: Build and push frontend
+      - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -121,6 +129,7 @@ jobs:
             --query "Reservations[0].Instances[0].State.Name" \
             --region "${{ env.AWS_REGION }}" \
             --output text)
+          echo "EC2 state: $STATE"
 
           if [ "$STATE" = "stopped" ] || [ "$STATE" = "stopping" ]; then
             aws ec2 start-instances \
@@ -131,15 +140,18 @@ jobs:
               --region "${{ env.AWS_REGION }}"
           fi
 
+          echo "Waiting for SSM agent..."
           for i in $(seq 1 18); do
             READY=$(aws ssm describe-instance-information \
               --filters "Key=InstanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" \
               --query "InstanceInformationList[0].PingStatus" \
               --region "${{ env.AWS_REGION }}" \
               --output text 2>/dev/null || echo "None")
+            echo "  SSM ping [$i/18]: $READY"
             [ "$READY" = "Online" ] && break
             sleep 10
           done
+          [ "$READY" = "Online" ] || { echo "::error::SSM agent did not come online"; exit 1; }
 
       - name: Ensure RDS is running
         run: |
@@ -148,15 +160,16 @@ jobs:
             --query "DBInstances[0].DBInstanceStatus" \
             --region "${{ env.AWS_REGION }}" \
             --output text)
-
           echo "RDS state: $STATE"
 
-          if [ "$STATE" = "stopped" ] || [ "$STATE" = "stopping" ]; then
-            if [ "$STATE" = "stopping" ]; then
-              aws rds wait db-instance-stopped \
-                --db-instance-identifier "${{ vars.RDS_DB_IDENTIFIER }}" \
-                --region "${{ env.AWS_REGION }}"
-            fi
+          if [ "$STATE" = "stopping" ]; then
+            aws rds wait db-instance-stopped \
+              --db-instance-identifier "${{ vars.RDS_DB_IDENTIFIER }}" \
+              --region "${{ env.AWS_REGION }}"
+            STATE="stopped"
+          fi
+
+          if [ "$STATE" = "stopped" ]; then
             aws rds start-db-instance \
               --db-instance-identifier "${{ vars.RDS_DB_IDENTIFIER }}" \
               --region "${{ env.AWS_REGION }}"
@@ -167,8 +180,10 @@ jobs:
               --db-instance-identifier "${{ vars.RDS_DB_IDENTIFIER }}" \
               --region "${{ env.AWS_REGION }}"
           fi
+          echo "RDS is available."
 
       - name: Deploy via SSM
+        id: ssm-deploy
         run: |
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
@@ -178,17 +193,18 @@ jobs:
             --region "${{ env.AWS_REGION }}" \
             --query "Command.CommandId" \
             --output text)
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
-          # Poll for up to 10 minutes (30 attempts × 20s)
           for i in $(seq 1 30); do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" \
               --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
               --region "${{ env.AWS_REGION }}" \
               --query "Status" --output text 2>/dev/null || echo "Pending")
-            echo "[$i/30] SSM status: $STATUS"
+            echo "[$i/30] SSM: $STATUS"
             [ "$STATUS" = "Success" ] && break
-            [ "$STATUS" = "Failed" ] && { echo "Deploy command failed on EC2"; exit 1; }
+            [ "$STATUS" = "Failed" ] && { echo "::error::Deploy script failed on EC2"; exit 1; }
+            [ "$STATUS" = "Cancelled" ] && { echo "::error::SSM command was cancelled"; exit 1; }
             sleep 20
           done
 
@@ -199,24 +215,23 @@ jobs:
             --query "[Status, StandardOutputContent, StandardErrorContent]" \
             --output text
 
-
-
       - name: Health check
         id: health
         run: |
           sleep 20
           STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
             "https://${{ secrets.APP_DOMAIN }}/health" || echo "000")
-          echo "HTTP $STATUS"
-          [ "$STATUS" = "200" ]
+          echo "Health check: HTTP $STATUS"
+          [ "$STATUS" = "200" ] || { echo "::error::Health check failed (HTTP $STATUS)"; exit 1; }
 
-      - name: Rollback on failure
-        if: failure() && steps.health.outcome == 'failure'
+      - name: Rollback on health check failure
+        if: failure() && steps.ssm-deploy.outcome == 'success' && steps.health.outcome == 'failure'
         run: |
           if [ -z "$PREV_SHA" ] || [ "$PREV_SHA" = "0000000000000000000000000000000000000000" ]; then
-            echo "No valid previous SHA — cannot roll back automatically."
-            exit 1
+            echo "::warning::No previous SHA — skipping automatic rollback."
+            exit 0
           fi
+          echo "Rolling back to $PREV_SHA..."
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
@@ -235,4 +250,4 @@ jobs:
             --region "${{ env.AWS_REGION }}" \
             --query "[Status, StandardOutputContent, StandardErrorContent]" \
             --output text
-          echo "Rollback to $PREV_SHA complete — verify the site manually."
+          echo "::warning::Rolled back to $PREV_SHA — verify the site manually."
