@@ -218,11 +218,16 @@ jobs:
       - name: Health check
         id: health
         run: |
-          sleep 20
-          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-            "https://${{ secrets.APP_DOMAIN }}/health" || echo "000")
-          echo "Health check: HTTP $STATUS"
-          [ "$STATUS" = "200" ] || { echo "::error::Health check failed (HTTP $STATUS)"; exit 1; }
+          echo "Waiting for app to stabilise..."
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://${{ secrets.APP_DOMAIN }}/health" 2>/dev/null)
+            echo "[$i/20] Health check: HTTP $STATUS"
+            [ "$STATUS" = "200" ] && { echo "Deployment verified."; exit 0; }
+            sleep 15
+          done
+          echo "::error::Health check timed out after 5 minutes (last status: HTTP $STATUS)"
+          exit 1
 
       - name: Rollback on health check failure
         if: failure() && steps.ssm-deploy.outcome == 'success' && steps.health.outcome == 'failure'
