@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 import sentry_sdk
@@ -128,6 +129,15 @@ async def db_unavailable_handler(request: Request, exc: Exception) -> JSONRespon
         content={"detail": "Database is starting up. Please try again in 30 seconds."},
         headers={"Retry-After": "30"},
     )
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next) -> Response:
+    """Pass through or generate a request correlation ID (X-Request-ID)."""
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.middleware("http")
