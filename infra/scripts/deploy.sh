@@ -16,3 +16,5 @@ docker image prune -af
 
 docker compose --env-file .env.prod -f docker-compose.prod.yml pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
+# nginx caches upstream IPs — restart it so it picks up the new api container
+docker compose --env-file .env.prod -f docker-compose.prod.yml restart nginx
