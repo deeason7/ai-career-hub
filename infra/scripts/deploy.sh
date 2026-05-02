@@ -11,6 +11,8 @@ aws ecr get-login-password --region "$REGION" \
 
 bash "$(dirname "$0")/pull-secrets.sh"
 
+# Prune unused images before pulling to avoid disk exhaustion during download
+docker image prune -af
+
 docker compose --env-file .env.prod -f docker-compose.prod.yml pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
-docker image prune -f
