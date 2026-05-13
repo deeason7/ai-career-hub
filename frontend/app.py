@@ -44,6 +44,8 @@ if "disclaimer_accepted" not in st.session_state:
     st.session_state["disclaimer_accepted"] = False
 if "disclaimer_never_show" not in st.session_state:
     st.session_state["disclaimer_never_show"] = False
+if "active_cl_id" not in st.session_state:
+    st.session_state["active_cl_id"] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
