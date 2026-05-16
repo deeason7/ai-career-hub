@@ -24,6 +24,7 @@ from app.models.cover_letter_revision import (
 )
 from app.models.resume import Resume
 from app.models.user import User
+from app.services import audit_logger
 from app.services.cover_letter import generate_cover_letter, refine_cover_letter
 from app.services.lifecycle import set_cover_letter_expiry
 from app.services.pdf_generator import generate_cover_letter_pdf
@@ -280,6 +281,13 @@ async def generate_cover_letter_endpoint(
     session.add(cover_letter)
     await session.commit()
     await session.refresh(cover_letter)
+
+    audit_logger.emit(
+        "cover_letter.generate",
+        user_id=current_user.id,
+        request=request,
+        metadata={"cover_letter_id": str(cover_letter.id)},
+    )
 
     dispatched = False
     if settings.N8N_ENABLED:

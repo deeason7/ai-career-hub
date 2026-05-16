@@ -13,6 +13,7 @@ from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
 from app.models.resume import Resume, ResumeRead, ResumeReadWithText
 from app.models.user import User
+from app.services import audit_logger
 from app.services.file_extractor import extract_text_from_upload
 from app.services.lifecycle import set_resume_expiry
 from app.services.resume_parser import parse_resume
@@ -83,6 +84,12 @@ async def upload_resume(
     session.add(resume)
     await session.commit()
     await session.refresh(resume)
+    audit_logger.emit(
+        "resume.upload",
+        user_id=current_user.id,
+        request=None,
+        metadata={"resume_id": str(resume.id)},
+    )
     return resume
 
 

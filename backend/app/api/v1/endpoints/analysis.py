@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
 from app.core.limiter import rate_limit
-from app.core.utils import sanitize_text
+from app.core.utils import _sanitize_jd_for_prompt, sanitize_text
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.ats_scorer import calculate_ats_score
@@ -38,7 +38,7 @@ async def job_match(
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
 
-    jd = sanitize_text(payload.job_description)
+    jd = _sanitize_jd_for_prompt(sanitize_text(payload.job_description))
     resume_text = resume.raw_text
 
     def _ats() -> dict:

@@ -20,6 +20,7 @@ from app.core.security import (
     verify_refresh_token,
 )
 from app.models.user import User, UserCreate, UserRead
+from app.services import audit_logger
 
 router = APIRouter()
 
@@ -27,13 +28,13 @@ _REFRESH_COOKIE = "refresh_token"
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-@rate_limit("5/minute")
+@rate_limit("3/minute")
 async def register(
     request: Request,
     user_in: UserCreate,
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Register a new user account. Rate limited: 5 requests/min per IP."""
+    """Register a new user account. Rate limited: 3 requests/min per IP."""
     result = await session.exec(select(User).where(User.email == user_in.email))
     if result.first():
         raise HTTPException(
@@ -52,14 +53,14 @@ async def register(
 
 
 @router.post("/login")
-@rate_limit("10/minute")
+@rate_limit("5/minute")
 async def login(
     request: Request,
     response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Authenticate and return a JWT access token. Rate limited: 10 requests/min per IP.
+    """Authenticate and return a JWT access token. Rate limited: 5 requests/min per IP.
 
     Also sets an HttpOnly ``refresh_token`` cookie (7 days) so the frontend
     can silently renew the 60-min access token via ``POST /auth/refresh``.
@@ -89,6 +90,7 @@ async def login(
         path="/api/v1/auth",
     )
 
+    audit_logger.emit("auth.login", user_id=user.id, request=request)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
