@@ -11,7 +11,7 @@ beautifulsoup4==4.14.3
 
 # --- Database ---
 sqlmodel==0.0.19
-alembic==1.13.2
+alembic==1.18.4
 psycopg[binary]==3.2.1
 greenlet>=3.4.0
 
