@@ -2,10 +2,12 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Text
-from sqlmodel import Column, Field, Relationship, SQLModel
+from sqlalchemy import Column, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from app.models.cover_letter import CoverLetter
     from app.models.user import User
 
 
@@ -24,11 +26,25 @@ class JobApplication(JobApplicationBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
+    cover_letter_id: uuid.UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey("cover_letters.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
+    source: str = Field(
+        default="manual",
+        sa_column=Column(String(50), nullable=False, server_default="manual"),
+    )
     notes: str | None = Field(default=None, sa_column=Column(Text))
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     user: Optional["User"] = Relationship(back_populates="job_applications")
+    cover_letter: Optional["CoverLetter"] = Relationship()
 
 
 class JobApplicationCreate(JobApplicationBase):
@@ -48,5 +64,7 @@ class JobApplicationUpdate(SQLModel):
 class JobApplicationRead(JobApplicationBase):
     id: uuid.UUID
     user_id: uuid.UUID
+    cover_letter_id: uuid.UUID | None = None
+    source: str
     created_at: datetime
     updated_at: datetime
