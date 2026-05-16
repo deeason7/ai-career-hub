@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from components import show_error, show_success
+from components import loading_spinner, show_error, show_success
 
 
 def _job_url_import_cl(key_prefix: str) -> str:
@@ -74,7 +74,7 @@ def page_cover_letter() -> None:
         if not jd.strip():
             show_error("Please paste the job description.")
             return
-        with st.spinner("Dispatching AI task..."):
+        with loading_spinner("Dispatching AI task..."):
             resp = api(
                 "post",
                 "/cover-letters/generate",
