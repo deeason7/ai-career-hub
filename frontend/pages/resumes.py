@@ -1,11 +1,9 @@
 """Resumes page — upload, list, activate, delete."""
 
-from datetime import UTC, datetime
-
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from components import show_error, show_success
+from components import lifecycle_badge, loading_spinner, show_error, show_success
 
 
 def page_resumes() -> None:
@@ -25,7 +23,7 @@ def page_resumes() -> None:
                 elif not file:
                     show_error("Please select a file.")
                 else:
-                    with st.spinner("🔍 Extracting text and parsing resume with AI..."):
+                    with loading_spinner("Extracting text and parsing resume with AI..."):
                         resp = api(
                             "post",
                             "/resumes/upload",
@@ -51,24 +49,7 @@ def page_resumes() -> None:
     st.subheader(f"Your Resumes ({len(resumes)})")
     for r in resumes:
         active_tag = "🟢 **ACTIVE**" if r["is_active"] else "⚪ inactive"
-        if r.get("is_permanent"):
-            lifecycle_tag = "  📌 permanent"
-        elif r.get("expires_at"):
-            try:
-                exp = datetime.fromisoformat(r["expires_at"].replace("Z", "+00:00"))
-                days_left = (exp - datetime.now(UTC)).days
-                if days_left < 0:
-                    lifecycle_tag = "  🔴 expired"
-                elif days_left == 0:
-                    lifecycle_tag = "  🔴 expires today"
-                elif days_left <= 3:
-                    lifecycle_tag = f"  🟠 expires in {days_left}d"
-                else:
-                    lifecycle_tag = f"  🗓️ expires in {days_left}d"
-            except (ValueError, AttributeError):
-                lifecycle_tag = ""
-        else:
-            lifecycle_tag = ""
+        lifecycle_tag = lifecycle_badge(r.get("expires_at"), r.get("is_permanent", False))
 
         with st.expander(
             f"{active_tag}{lifecycle_tag} — {r['name']}  |  `{r['original_filename']}`"
