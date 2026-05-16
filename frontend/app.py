@@ -4,9 +4,7 @@ Full-featured multi-section app with:
   - Auth (register/login)
   - Multi-Resume Management
   - AI Cover Letter Generator (async polling)
-  - ATS Scorer
-  - Skill Gap Analysis
-  - Interview Question Generator
+  - Job Match Analysis (ATS Score + Skill Gap + Interview Prep)
   - Job Application Tracker
 """
 
@@ -258,9 +256,7 @@ def sidebar():
         "📋 Dashboard",
         "📄 My Resumes",
         "✉️ Cover Letter",
-        "🎯 ATS Score",
-        "🔍 Skill Gap",
-        "🎙️ Interview Questions",
+        "🎯 Job Match Analysis",
         "📊 Job Tracker",
         "📜 Legal & Info",
     ]
@@ -351,7 +347,7 @@ def page_dashboard():
         st.session_state["current_page"] = "✉️ Cover Letter"
         st.rerun()
     if q3.button("🎯 Score My Resume", use_container_width=True, type="primary"):
-        st.session_state["current_page"] = "🎯 ATS Score"
+        st.session_state["current_page"] = "🎯 Job Match Analysis"
         st.rerun()
 
 
@@ -691,18 +687,18 @@ def page_cover_letter():
         st.info("No cover letters generated yet.")
 
 
-# ─── PAGE: ATS SCORE ──────────────────────────────────────────────────────────
+# ─── PAGE: JOB MATCH ANALYSIS ────────────────────────────────────────────────
 
 
-def page_ats_score():
-    st.title("🎯 ATS Score Analyzer")
+def page_job_match():
+    st.title("🎯 Job Match Analysis")
     st.markdown(
-        "Scores your resume against any job description in **< 1 second** — instant algorithmic analysis."
+        "One job description → **ATS score**, **skill gap**, and **interview questions** — all at once."
     )
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
-        st.warning("Upload a resume first.")
+        st.warning("⚠️ Upload a resume first in **My Resumes**.")
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
@@ -716,228 +712,191 @@ def page_ats_score():
     )
     selected_id = resume_options[selected_name]
 
-    prefilled_jd = _job_url_import("ats")
+    prefilled_jd = _job_url_import("job_match")
     jd = st.text_area(
         "Job Description",
         value=prefilled_jd,
-        height=250,
-        placeholder="Paste the job description or import from URL above.",
+        height=260,
+        placeholder="Paste the full job posting here, or import from URL above.",
     )
 
-    if st.button("🎯 Score My Resume", type="primary"):
+    if st.button("🔍 Analyze", type="primary"):
         if not jd.strip():
             show_error("Please paste a job description.")
             return
-        with st.spinner("Scoring..."):
+
+        with st.spinner(
+            "Running ATS scoring, skill gap analysis, and interview prep in parallel…"
+        ):
             resp = api(
                 "post",
-                "/ai/ats-score",
-                json={"job_description": jd, "resume_id": selected_id},
+                "/analysis/job-match",
+                json={"resume_id": selected_id, "job_description": jd},
             )
 
         if resp.status_code == 429:
             show_error("Too many requests. Please wait 1 minute and try again.")
             return
+        if resp.status_code == 502:
+            show_error("AI service temporarily unavailable. Please try again.")
+            return
         if resp.status_code != 200:
-            show_error(_detail(resp, "Scoring failed."))
+            show_error(_detail(resp, f"Analysis failed (HTTP {resp.status_code})."))
             return
 
         data = safe_json(resp, {})
-        score = data["score"]
-        sem_score = data.get("semantic_score", 0)
+        ats = data.get("ats", {})
+        skill_gap = data.get("skill_gap", {})
+        questions = data.get("interview_questions", [])
 
-        # --- Main metrics row ---
-        color = "🟢" if score >= 70 else "🟡" if score >= 45 else "🔴"
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric(
-            f"{color} ATS Score",
-            f"{score}%",
-            help="Composite: 50% semantic + 30% keyword + 20% structure",
-        )
-        col2.metric(
-            "🧠 Semantic Match",
-            f"{sem_score}%",
-            help="Sentence-transformer cosine similarity — catches synonyms and paraphrases",
-        )
-        col3.metric(
-            "🔑 Keyword Score",
-            f"{data['keyword_score']}%",
-            help="Exact + bigram keyword overlap",
-        )
-        col4.metric(
-            "📐 Structure Score",
-            f"{data['structure_score']}%",
-            help="Section presence and resume length",
+        tab_ats, tab_gap, tab_interview = st.tabs(
+            ["🎯 ATS Score", "🔍 Skill Gap", "🎙️ Interview Prep"]
         )
 
-        st.progress(int(score) / 100)
+        # ── Tab 1: ATS Score ──────────────────────────────────────────────────
+        with tab_ats:
+            score = ats.get("score", 0)
+            sem_score = ats.get("semantic_score", 0)
+            kw_score = ats.get("keyword_score", 0)
+            struct_score = ats.get("structure_score", 0)
 
-        # --- Semantic score interpretation ---
-        if sem_score >= 70:
-            st.success(
-                "🧠 High semantic alignment — your resume language closely matches the job description."
+            color = "🟢" if score >= 70 else "🟡" if score >= 45 else "🔴"
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric(
+                f"{color} ATS Score",
+                f"{score}%",
+                help="Composite: 50% semantic + 30% keyword + 20% structure",
             )
-        elif sem_score >= 45:
-            st.warning(
-                "🧠 Moderate semantic alignment — consider mirroring more of the job description's phrasing."
+            col2.metric(
+                "🧠 Semantic Match",
+                f"{sem_score}%",
+                help="Sentence-transformer cosine similarity — catches synonyms",
             )
-        elif sem_score > 0:
-            st.error(
-                "🧠 Low semantic alignment — your resume content may not be addressing what this role requires."
+            col3.metric(
+                "🔑 Keywords",
+                f"{kw_score}%",
+                help="Exact + bigram keyword overlap",
+            )
+            col4.metric(
+                "📐 Structure",
+                f"{struct_score}%",
+                help="Section presence and resume length",
             )
 
-        # --- Section-level breakdown ---
-        section_scores = data.get("section_scores", {})
-        if section_scores:
-            st.subheader("📊 Section Alignment with JD")
-            sec_cols = st.columns(len(section_scores))
-            for col, (sec, sec_score) in zip(sec_cols, section_scores.items()):
-                sec_color = (
-                    "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
+            st.progress(int(score) / 100)
+
+            if sem_score >= 70:
+                st.success(
+                    "🧠 High semantic alignment — your resume language closely matches the JD."
                 )
-                col.metric(
-                    f"{sec_color} {sec.title()}",
-                    f"{sec_score}%" if sec_score > 0 else "—",
+            elif sem_score >= 45:
+                st.warning(
+                    "🧠 Moderate semantic alignment — consider mirroring more of the JD's phrasing."
+                )
+            elif sem_score > 0:
+                st.error(
+                    "🧠 Low semantic alignment — your resume may not address what this role requires."
                 )
 
-        st.divider()
-        col_l, col_r = st.columns(2)
-        with col_l:
-            st.subheader("✅ Matched Keywords")
-            st.write(", ".join(data["matched_keywords"]) or "None")
-        with col_r:
-            st.subheader("❌ Missing Keywords")
-            st.write(", ".join(data["missing_keywords"]) or "None")
+            section_scores = ats.get("section_scores", {})
+            if section_scores:
+                st.subheader("📊 Section Alignment with JD")
+                sec_cols = st.columns(len(section_scores))
+                for col, (sec, sec_score) in zip(sec_cols, section_scores.items()):
+                    sec_color = (
+                        "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
+                    )
+                    col.metric(
+                        f"{sec_color} {sec.title()}",
+                        f"{sec_score}%" if sec_score > 0 else "—",
+                    )
 
-        if data["recommendations"]:
-            st.subheader("💡 Recommendations")
-            for rec in data["recommendations"]:
-                st.markdown(f"- {rec}")
+            st.divider()
+            col_l, col_r = st.columns(2)
+            with col_l:
+                st.subheader("✅ Matched Keywords")
+                matched = ats.get("matched_keywords", [])
+                if matched:
+                    st.markdown(
+                        " ".join(
+                            f'<span style="background:#1e7e34;color:#fff;padding:2px 8px;'
+                            f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
+                            f"{kw}</span>"
+                            for kw in matched[:30]
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.write("None")
+            with col_r:
+                st.subheader("❌ Missing Keywords")
+                missing = ats.get("missing_keywords", [])
+                if missing:
+                    st.markdown(
+                        " ".join(
+                            f'<span style="background:#b02a37;color:#fff;padding:2px 8px;'
+                            f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
+                            f"{kw}</span>"
+                            for kw in missing[:20]
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.write("None")
 
+            recs = ats.get("recommendations", [])
+            if recs:
+                st.subheader("💡 Recommendations")
+                for rec in recs:
+                    st.markdown(f"- {rec}")
 
-# ─── PAGE: SKILL GAP ──────────────────────────────────────────────────────────
+        # ── Tab 2: Skill Gap ──────────────────────────────────────────────────
+        with tab_gap:
+            sg_score = skill_gap.get("ats_score", 0)
+            sg_color = "🟢" if sg_score >= 70 else "🟡" if sg_score >= 45 else "🔴"
+            st.metric(f"{sg_color} ATS Score", f"{sg_score}%")
 
+            col_l, col_r = st.columns(2)
+            with col_l:
+                st.subheader("✅ Skills You Have")
+                for s in skill_gap.get("matched_skills", [])[:15]:
+                    st.markdown(f"- `{s}`")
+            with col_r:
+                st.subheader("❌ Missing Skills")
+                for s in skill_gap.get("missing_skills", [])[:15]:
+                    st.markdown(f"- `{s}`")
 
-def page_skill_gap():
-    st.title("🔍 Skill Gap Analysis")
-    st.markdown(
-        "Identify your skill gaps and get **personalized learning recommendations**."
-    )
+            priority_gaps = skill_gap.get("priority_gaps", [])
+            if priority_gaps:
+                st.subheader("🚨 Priority Gaps")
+                st.warning(", ".join(priority_gaps))
 
-    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
-    if not isinstance(resumes, list) or not resumes:
-        st.warning("Upload a resume first.")
-        return
+            learning = skill_gap.get("learning_recommendations", [])
+            if learning:
+                st.subheader("📚 Learning Path")
+                for rec in learning:
+                    if isinstance(rec, dict):
+                        skill_name = rec.get("skill", "Skill")
+                        with st.expander(f"📖 {skill_name}"):
+                            if rec.get("resource"):
+                                st.markdown(f"**Resource:** {rec['resource']}")
+                            if rec.get("platform"):
+                                st.markdown(f"**Platform:** {rec['platform']}")
+                            if rec.get("timeline"):
+                                st.markdown(f"**Timeline:** {rec['timeline']}")
+                    else:
+                        st.markdown(f"- {rec}")
 
-    resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next(
-        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
-    )
-    selected_name = st.selectbox(
-        "Resume",
-        list(resume_options.keys()),
-        index=list(resume_options.keys()).index(active),
-    )
-    selected_id = resume_options[selected_name]
-
-    prefilled_jd = _job_url_import("skill_gap")
-    jd = st.text_area(
-        "Job Description",
-        value=prefilled_jd,
-        height=250,
-        placeholder="Paste the job description or import from URL above.",
-    )
-
-    if st.button("🔍 Analyze Skill Gap", type="primary"):
-        if not jd.strip():
-            show_error("Please paste a job description.")
-            return
-        with st.spinner("Analyzing gaps and generating recommendations with AI..."):
-            resp = api(
-                "post",
-                "/ai/skill-gap",
-                json={"job_description": jd, "resume_id": selected_id},
-            )
-
-        if resp.status_code != 200:
-            show_error(_detail(resp, "Analysis failed."))
-            return
-
-        data = safe_json(resp, {})
-        st.metric("ATS Score", f"{data['ats_score']}%")
-
-        col_l, col_r = st.columns(2)
-        with col_l:
-            st.subheader("✅ Skills You Have")
-            for s in data["matched_skills"][:15]:
-                st.markdown(f"- `{s}`")
-        with col_r:
-            st.subheader("❌ Missing Skills")
-            for s in data["missing_skills"][:15]:
-                st.markdown(f"- `{s}`")
-
-        if data.get("priority_gaps"):
-            st.subheader("🚨 Priority Gaps (High-value skills)")
-            st.warning(", ".join(data["priority_gaps"]))
-
-        if data.get("learning_recommendations"):
-            st.subheader("📚 AI Learning Recommendations")
-            for rec in data["learning_recommendations"]:
-                st.markdown(f"- {rec}")
-
-
-# ─── PAGE: INTERVIEW QUESTIONS ────────────────────────────────────────────────
-
-
-def page_interview_questions():
-    st.title("🎙️ Interview Question Generator")
-    st.markdown(
-        "Get **10 tailored interview questions** based on your resume and the job description."
-    )
-
-    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
-    if not isinstance(resumes, list) or not resumes:
-        st.warning("Upload a resume first.")
-        return
-
-    resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next(
-        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
-    )
-    selected_name = st.selectbox(
-        "Resume",
-        list(resume_options.keys()),
-        index=list(resume_options.keys()).index(active),
-    )
-    selected_id = resume_options[selected_name]
-
-    prefilled_jd = _job_url_import("interview")
-    jd = st.text_area(
-        "Job Description",
-        value=prefilled_jd,
-        height=200,
-        placeholder="Paste the job description or import from URL above.",
-    )
-
-    if st.button("🎙️ Generate Questions", type="primary"):
-        if not jd.strip():
-            show_error("Please paste a job description.")
-            return
-        with st.spinner("Generating tailored interview questions..."):
-            resp = api(
-                "post",
-                "/ai/interview-questions",
-                json={"job_description": jd, "resume_id": selected_id},
-            )
-
-        if resp.status_code != 200:
-            show_error(_detail(resp, "Failed to generate questions."))
-            return
-
-        questions = safe_json(resp, {}).get("questions", [])
-        st.subheader(f"🎤 {len(questions)} Interview Questions")
-        for i, q in enumerate(questions, 1):
-            st.markdown(f"**{i}.** {q}")
+        # ── Tab 3: Interview Prep ─────────────────────────────────────────────
+        with tab_interview:
+            if questions:
+                st.subheader(f"🎤 {len(questions)} Interview Questions")
+                for i, q in enumerate(questions, 1):
+                    st.markdown(f"**{i}.** {q}")
+            else:
+                st.info(
+                    "No interview questions generated. Try again with a more detailed JD."
+                )
 
 
 # ─── PAGE: JOB TRACKER ───────────────────────────────────────────────────────
@@ -1094,13 +1053,12 @@ def page_legal():
         2. **Upload a Resume** — Go to *My Resumes*, upload a PDF, DOCX, or TXT (max 5 MB).
            Label it clearly (e.g. “Software Engineer 2026”).
         3. **Set an Active Resume** — Mark one resume as active. All AI tools will use it.
-        4. **ATS Score** — Paste a job description and score your resume instantly.
-           Aim for 70%+ before applying.
-        5. **Skill Gap** — Identifies missing skills and suggests learning resources.
-        6. **Cover Letter** — Generates a RAG-based letter using only facts from your resume.
+        4. **Job Match Analysis** — Paste one job description and get your ATS score,
+           skill gap breakdown, and 10 tailored interview questions — all in one click.
+           Aim for 70%+ ATS before applying.
+        5. **Cover Letter** — Generates a RAG-based letter using only facts from your resume.
            Always proofread before sending.
-        7. **Interview Questions** — Get 10 tailored questions based on your resume + job.
-        8. **Job Tracker** — Track every application from wishlist to offer.
+        6. **Job Tracker** — Track every application from wishlist to offer.
 
         > ⚠️ AI outputs are drafts. Review carefully before using in real applications.
         """)
@@ -1232,12 +1190,8 @@ else:
         page_resumes()
     elif page == "✉️ Cover Letter":
         page_cover_letter()
-    elif page == "🎯 ATS Score":
-        page_ats_score()
-    elif page == "🔍 Skill Gap":
-        page_skill_gap()
-    elif page == "🎙️ Interview Questions":
-        page_interview_questions()
+    elif page == "🎯 Job Match Analysis":
+        page_job_match()
     elif page == "📊 Job Tracker":
         page_job_tracker()
     elif page == "📜 Legal & Info":
