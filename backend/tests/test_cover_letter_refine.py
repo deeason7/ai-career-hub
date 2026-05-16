@@ -89,7 +89,9 @@ async def cover_letter_id(client: AsyncClient, auth_headers: dict):
         cl = session.get(CoverLetter, uuid.UUID(cl_id))
         if cl:
             cl.status = "success"
-            cl.generated_text = "Dear Hiring Manager, I am excited to apply for the Python backend role."
+            cl.generated_text = (
+                "Dear Hiring Manager, I am excited to apply for the Python backend role."
+            )
             session.add(cl)
             session.commit()
 
@@ -97,6 +99,7 @@ async def cover_letter_id(client: AsyncClient, auth_headers: dict):
 
 
 # --- Refine endpoint ---
+
 
 @pytest.mark.asyncio
 async def test_refine_requires_auth(client: AsyncClient):
@@ -168,6 +171,7 @@ async def test_refine_command_too_short(
 
 # --- List revisions endpoint ---
 
+
 @pytest.mark.asyncio
 async def test_list_revisions_returns_list(
     client: AsyncClient, auth_headers: dict, cover_letter_id: str
@@ -188,10 +192,9 @@ async def test_list_revisions_requires_auth(client: AsyncClient, cover_letter_id
 
 # --- Activate revision endpoint ---
 
+
 @pytest.mark.asyncio
-async def test_activate_revision(
-    client: AsyncClient, auth_headers: dict, cover_letter_id: str
-):
+async def test_activate_revision(client: AsyncClient, auth_headers: dict, cover_letter_id: str):
     with patch("app.api.v1.endpoints.cover_letters._run_refine_bg"):
         refine = await client.post(
             f"/api/v1/cover-letters/{cover_letter_id}/refine",

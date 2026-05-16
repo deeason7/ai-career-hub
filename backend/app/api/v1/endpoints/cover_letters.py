@@ -356,7 +356,9 @@ def _run_refine_bg(
                 session.add(rev)
                 session.commit()
     except Exception as exc:
-        logger.error("Refine background task failed for revision %s: %s", revision_id, exc, exc_info=True)
+        logger.error(
+            "Refine background task failed for revision %s: %s", revision_id, exc, exc_info=True
+        )
 
 
 @router.post(
@@ -389,6 +391,7 @@ async def refine_cover_letter_endpoint(
 
     # Determine next version number
     from sqlalchemy import func  # noqa: PLC0415
+
     conn = await session.connection()
     count_result = await conn.execute(
         select(func.count()).where(CoverLetterRevision.cover_letter_id == cover_letter_id)
