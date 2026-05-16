@@ -1,5 +1,7 @@
 """Job match analysis page — ATS score, skill gap, interview prep."""
 
+import html
+
 import streamlit as st
 
 from api_client import api, detail, safe_json
@@ -120,7 +122,9 @@ def page_job_match() -> None:
                 if matched:
                     st.markdown(
                         " ".join(
-                            f'<span style="background:#1e7e34;color:#fff;padding:2px 8px;border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">{kw}</span>'
+                            f'<span style="background:#1e7e34;color:#fff;padding:2px 8px;'
+                            f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
+                            f"{html.escape(str(kw))}</span>"
                             for kw in matched[:30]
                         ),
                         unsafe_allow_html=True,
@@ -133,7 +137,9 @@ def page_job_match() -> None:
                 if missing:
                     st.markdown(
                         " ".join(
-                            f'<span style="background:#b02a37;color:#fff;padding:2px 8px;border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">{kw}</span>'
+                            f'<span style="background:#b02a37;color:#fff;padding:2px 8px;'
+                            f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
+                            f"{html.escape(str(kw))}</span>"
                             for kw in missing[:20]
                         ),
                         unsafe_allow_html=True,
