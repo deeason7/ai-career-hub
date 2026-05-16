@@ -66,7 +66,7 @@ class TestEmit:
             )
 
         log: AuditLog = session.add.call_args[0][0]
-        meta = json.loads(log.metadata)
+        meta = json.loads(log.event_metadata)
         # Only non-PII UUIDs allowed — no email, name, or resume text
         assert "email" not in meta
         assert "password" not in meta

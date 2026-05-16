@@ -6,6 +6,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import Column, Text
 from sqlmodel import Field, Session, SQLModel
 
 from app.core.db import sync_engine
@@ -20,7 +21,11 @@ class AuditLog(SQLModel, table=True):
     user_id: uuid.UUID | None = Field(default=None, index=True)
     event: str = Field(max_length=100)
     ip_hash: str | None = Field(default=None, max_length=64)
-    metadata: str | None = Field(default=None)
+    # "metadata" is reserved by SQLAlchemy's Declarative API — use "event_metadata"
+    # as the Python attribute; the DB column stays named "metadata" via sa_column.
+    event_metadata: str | None = Field(
+        default=None, sa_column=Column("metadata", Text(), nullable=True)
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -50,7 +55,7 @@ def emit(
             user_id=user_id,
             event=event,
             ip_hash=ip_hash,
-            metadata=meta_str,
+            event_metadata=meta_str,
         )
         with Session(sync_engine) as session:
             session.add(log)
