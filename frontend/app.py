@@ -935,6 +935,25 @@ def _deadline_badge(deadline_str: str | None) -> str:
         return f"  🗓️ Due {dl.strftime('%b %d')}"
 
 
+_STATUS_ORDER = [
+    "wishlist",
+    "applied",
+    "phone_screen",
+    "interview",
+    "offer",
+    "accepted",
+]
+
+
+def _next_status(current: str) -> str | None:
+    """Return the next status in the pipeline, or None if already at end/rejected."""
+    try:
+        idx = _STATUS_ORDER.index(current)
+        return _STATUS_ORDER[idx + 1] if idx + 1 < len(_STATUS_ORDER) else None
+    except ValueError:
+        return None
+
+
 def page_job_tracker():
     st.title("📊 Job Application Tracker")
 
@@ -993,19 +1012,37 @@ def page_job_tracker():
     for app in apps:
         emoji = STATUS_EMOJIS.get(app["status"], "")
         badge = _deadline_badge(app.get("deadline"))
+        is_auto = app.get("source") == "auto"
+        auto_tag = "  🤖 Auto" if is_auto else ""
         with st.expander(
-            f"{emoji} **{app['company']}** — {app['role']}  |  `{app['status']}`{badge}"
+            f"{emoji} **{app['company']}** — {app['role']}  |  `{app['status']}`{badge}{auto_tag}"
         ):
             col1, col2 = st.columns([3, 1])
             with col1:
+                if is_auto:
+                    st.caption("🤖 Auto-created when your cover letter was generated.")
                 st.markdown(f"**Applied:** {app.get('applied_at', 'N/A')}")
                 if app.get("deadline"):
                     badge_text = _deadline_badge(app["deadline"])
                     st.markdown(f"**Deadline:** `{app['deadline']}`{badge_text}")
                 if app.get("job_url"):
                     st.markdown(f"**URL:** [{app['job_url']}]({app['job_url']})")
+                if app.get("cover_letter_id"):
+                    st.markdown(
+                        f"**Cover Letter:** linked — "
+                        f"[View in Cover Letter tab](#) _(ID: {str(app['cover_letter_id'])[:8]}…)_"
+                    )
                 if app.get("notes"):
                     st.markdown(f"**Notes:** {app['notes']}")
+
+                # One-click status promotion
+                next_st = _next_status(app["status"])
+                if next_st and app["status"] != "rejected":
+                    next_label = f"{STATUS_EMOJIS.get(next_st, '')} Advance → {next_st.replace('_', ' ').title()}"
+                    if st.button(next_label, key=f"promote_{app['id']}"):
+                        api("patch", f"/jobs/{app['id']}", json={"status": next_st})
+                        st.rerun()
+
             with col2:
                 new_status = st.selectbox(
                     "Update Status",
