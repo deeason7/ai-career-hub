@@ -113,15 +113,14 @@ def sidebar():
         dark = st.toggle("🌙 Dark Mode", value=st.session_state["dark_mode"])
         st.session_state["dark_mode"] = dark
         if dark:
-            st.markdown(
-                """<style>
-                [data-testid="stAppViewContainer"] { background-color: #0e1117; color: #fafafa; }
-                [data-testid="stSidebar"] { background-color: #161b22; }
-                [data-testid="stHeader"] { background-color: #0e1117; }
-                .stTextInput input, .stTextArea textarea, .stSelectbox select {
-                    background-color: #1e2530 !important; color: #fafafa !important; }
-                </style>""",
-                unsafe_allow_html=True,
+            st.html(
+                "<style>"
+                "[data-testid='stAppViewContainer'] { background-color: #0e1117; color: #fafafa; }"
+                "[data-testid='stSidebar'] { background-color: #161b22; }"
+                "[data-testid='stHeader'] { background-color: #0e1117; }"
+                ".stTextInput input, .stTextArea textarea, .stSelectbox select {"
+                "    background-color: #1e2530 !important; color: #fafafa !important; }"
+                "</style>"
             )
 
         st.divider()
