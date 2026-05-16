@@ -44,6 +44,8 @@ if "disclaimer_accepted" not in st.session_state:
     st.session_state["disclaimer_accepted"] = False
 if "disclaimer_never_show" not in st.session_state:
     st.session_state["disclaimer_never_show"] = False
+if "active_cl_id" not in st.session_state:
+    st.session_state["active_cl_id"] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -432,19 +434,18 @@ def page_cover_letter():
 
             if status == "SUCCESS":
                 progress.progress(100, text="Done!")
-                # Fetch updated record from DB
                 detail = safe_json(api("get", f"/cover-letters/{cl_id}"), {})
                 cover_text = detail.get("generated_text", "")
                 show_success("Cover letter generated!")
-                st.text_area("📝 Your Cover Letter", cover_text, height=450)
+                st.session_state["active_cl_id"] = cl_id
+                st.text_area("📝 Your Cover Letter", cover_text, height=450, key="cl_generated")
                 dl_col1, dl_col2 = st.columns(2)
                 dl_col1.download_button(
-                    " Download TXT",
+                    "⬇ Download TXT",
                     cover_text,
                     file_name="cover_letter.txt",
                     use_container_width=True,
                 )
-                # PDF download — fetch from backend
                 pdf_resp = api("get", f"/cover-letters/{cl_id}/pdf")
                 if pdf_resp.status_code == 200:
                     dl_col2.download_button(
@@ -463,6 +464,71 @@ def page_cover_letter():
                 show_error("Timed out after 2 minutes. Check the backend logs.")
                 break
 
+    # ── Refinement panel ──────────────────────────────────────────────────────
+    active_cl_id = st.session_state.get("active_cl_id")
+    if active_cl_id:
+        st.divider()
+        st.subheader("✏️ Refine This Cover Letter")
+        st.caption("Give a specific edit instruction. The AI applies only the change you request.")
+        command = st.text_input(
+            "Refinement command",
+            placeholder="e.g. 'Make the opening paragraph more confident'",
+            key="refine_command_input",
+        )
+        if st.button("🔄 Apply Refinement", type="primary", key="apply_refine_btn"):
+            if not command.strip():
+                show_error("Enter an instruction first.")
+            else:
+                with st.spinner("Applying refinement…"):
+                    resp = api(
+                        "post",
+                        f"/cover-letters/{active_cl_id}/refine",
+                        json={"command": command.strip()},
+                    )
+                if resp.status_code == 202:
+                    show_success("Refinement queued — check the version history below in a few seconds.")
+                    st.rerun()
+                else:
+                    show_error(_detail(resp, "Refinement failed."))
+
+        revisions_resp = api("get", f"/cover-letters/{active_cl_id}/revisions")
+        revisions = safe_json(revisions_resp, [])
+        if isinstance(revisions, list) and revisions:
+            st.subheader(f"📋 Version History ({len(revisions)} revision{'s' if len(revisions) != 1 else ''})")
+            for rev in revisions:
+                v = rev["version_number"]
+                cmd_label = rev["user_command"][:60] + ("…" if len(rev["user_command"]) > 60 else "")
+                with st.expander(f"v{v} — \"{cmd_label}\"  |  {rev['created_at'][:10]}"):
+                    st.text_area(
+                        "Revised text",
+                        rev["generated_text"],
+                        height=300,
+                        key=f"rev_text_{rev['id']}",
+                    )
+                    r_col1, r_col2 = st.columns(2)
+                    r_col1.download_button(
+                        "⬇ TXT",
+                        rev["generated_text"],
+                        file_name=f"cover_letter_v{v}.txt",
+                        key=f"rev_dl_{rev['id']}",
+                        use_container_width=True,
+                    )
+                    if r_col2.button(
+                        "⭐ Activate this version",
+                        key=f"activate_rev_{rev['id']}",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        act_resp = api(
+                            "post",
+                            f"/cover-letters/{active_cl_id}/revisions/{v}/activate",
+                        )
+                        if act_resp.status_code == 200:
+                            show_success(f"v{v} is now the active cover letter.")
+                            st.rerun()
+                        else:
+                            show_error(_detail(act_resp, "Activation failed."))
+
     st.divider()
     st.subheader("📜 Past Cover Letters")
     history = safe_json(api("get", "/cover-letters/"), [])
@@ -472,9 +538,12 @@ def page_cover_letter():
             with st.expander(f"Cover Letter — {cl['created_at'][:10]} | Status: `{status_label}`"):
                 if cl.get("generated_text"):
                     st.text_area("", cl["generated_text"], height=250, key=f"hist_{cl['id']}")
+                    if st.button("✏️ Refine this letter", key=f"load_refine_{cl['id']}"):
+                        st.session_state["active_cl_id"] = cl["id"]
+                        st.rerun()
                     h_col1, h_col2 = st.columns(2)
                     h_col1.download_button(
-                        " TXT",
+                        "⬇ TXT",
                         cl["generated_text"],
                         file_name="cover_letter.txt",
                         key=f"txt_{cl['id']}",
