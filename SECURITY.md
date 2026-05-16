@@ -55,10 +55,26 @@ Please include:
 
 ### Rate Limiting
 - Redis-backed rate limiting on all authenticated and auth endpoints
+- `/auth/login`: 5 requests/minute per IP (OWASP A07)
+- `/auth/register`: 3 requests/minute per IP
 
 ### Input Validation
 - All user-submitted text sanitized before persistence and LLM prompt injection
+- `_sanitize_jd_for_prompt()` strips prompt-injection tokens (fenced code blocks,
+  role delimiters: `\nHuman:`, `\nAssistant:`, `\nSystem:`, `</s>`, `<|im_start|>`)
+  from job description text before it enters any LLM call (OWASP A03)
+- `sanitize_text()` strips HTML tags, null bytes, and control characters from all
+  user free-text fields before storage
 - `AnyHttpUrl` validation on job URL fields (blocks SSRF vectors)
+
+### Audit Logging (OWASP A09)
+- Sensitive actions logged: `auth.login`, `resume.upload`, `cover_letter.generate`
+- Raw IP addresses are **never stored** — only SHA-256 hashes
+- No PII (email, name, resume content) in audit metadata
+- Audit log stored in `audit_logs` PostgreSQL table
+
+### Dependency Scanning
+- `pip-audit` runs on every CI build against `requirements.txt`
 
 ### API Security
 - `/docs` and `/redoc` disabled in production
