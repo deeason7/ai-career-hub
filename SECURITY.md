@@ -60,9 +60,9 @@ Please include:
 
 ### Input Validation
 - All user-submitted text sanitized before persistence and LLM prompt injection
-- `_sanitize_jd_for_prompt()` strips prompt-injection tokens (fenced code blocks,
-  role delimiters: `\nHuman:`, `\nAssistant:`, `\nSystem:`, `</s>`, `<|im_start|>`)
-  from job description text before it enters any LLM call (OWASP A03)
+- Job description inputs are stripped of prompt-injection tokens before entering any LLM
+  call (fenced code blocks, role delimiters such as `\nHuman:`, `\nAssistant:`,
+  `\nSystem:`) (OWASP A03)
 - `sanitize_text()` strips HTML tags, null bytes, and control characters from all
   user free-text fields before storage
 - `AnyHttpUrl` validation on job URL fields (blocks SSRF vectors)
@@ -84,5 +84,11 @@ Please include:
 
 ## Known Limitations
 
-- Streamlit requires `unsafe-inline` in the Content Security Policy. This is a known constraint of the Streamlit framework and cannot be removed without replacing the frontend.
+- Streamlit requires `unsafe-inline` in the Content Security Policy. This is a known
+  constraint of the Streamlit framework and cannot be removed without replacing the frontend.
+- Two `pip-audit` vulnerability ignores are currently in effect (CVE-2026-41481,
+  CVE-2026-1839). Both are transitive dependencies where the vulnerable code path
+  is not used in this codebase. The rationale and mitigation notes are documented
+  inline in `backend/requirements.txt`. Fixes require a major ecosystem upgrade
+  currently blocked by a pinned dependency constraint.
 - This is a single-developer portfolio project. There is no security team or bug bounty program.
