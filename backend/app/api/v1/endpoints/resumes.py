@@ -64,13 +64,12 @@ async def upload_resume(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
-    # parse_resume is sync and LLM-bound — run in thread pool to avoid blocking
     parsed = await asyncio.to_thread(parse_resume, raw_text)
     parsed_json = parsed.model_dump_json()
-    is_first = len(existing) == 0
+    existing_count = len(existing)
+    is_first = existing_count == 0
 
     safe_filename = os.path.basename(file.filename or "resume")[:255]
-    existing_count = len(existing)
 
     resume = Resume(
         user_id=current_user.id,

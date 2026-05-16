@@ -1,11 +1,4 @@
-"""Document lifecycle management.
-
-Rules:
-- Each user's most recent resume is permanent (is_permanent=True, expires_at=None).
-- All other resumes expire 15 days after upload.
-- Cover letters expire 15 days after creation.
-- Expired documents are hard-deleted by run_lifecycle_cleanup().
-"""
+"""Document lifecycle: 15-day TTL for resumes (except newest) and cover letters."""
 
 import logging
 from datetime import UTC, datetime, timedelta
@@ -18,12 +11,7 @@ LIFECYCLE_DAYS = 15
 
 
 def set_resume_expiry(resume, existing_count: int) -> None:
-    """Assign lifecycle fields when a resume is first saved.
-
-    The newest resume (existing_count == 0) is permanent. All others
-    expire in LIFECYCLE_DAYS days and any previous permanent resume is
-    demoted — handled separately by _demote_previous_permanent().
-    """
+    """Mark resume permanent if it is the user's first; otherwise set a 15-day expiry."""
     if existing_count == 0:
         resume.is_permanent = True
         resume.expires_at = None
