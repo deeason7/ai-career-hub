@@ -8,15 +8,13 @@ Full-featured multi-section app with:
   - Job Application Tracker
 """
 
-import os
 import time
 
 import extra_streamlit_components as stx
 import requests
 import streamlit as st
 
-# ─── Config ───────────────────────────────────────────────────────────────────
-API_URL = os.environ.get("API_URL", "http://api:8000/api/v1")
+from api_client import API_URL, api, detail, safe_json
 
 st.set_page_config(
     page_title="AI Career Hub",
@@ -43,56 +41,6 @@ if "disclaimer_never_show" not in st.session_state:
     st.session_state["disclaimer_never_show"] = False
 if "active_cl_id" not in st.session_state:
     st.session_state["active_cl_id"] = None
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-
-def api(method: str, path: str, **kwargs) -> requests.Response:
-    headers = kwargs.pop("headers", {})
-    if st.session_state.token:
-        headers["Authorization"] = f"Bearer {st.session_state.token}"
-    return getattr(requests, method)(f"{API_URL}{path}", headers=headers, **kwargs)
-
-
-def extract_text(uploaded_file) -> str:
-    if uploaded_file.name.endswith(".pdf"):
-        import PyPDF2
-
-        reader = PyPDF2.PdfReader(uploaded_file)
-        return "\n".join(p.extract_text() for p in reader.pages if p.extract_text())
-    elif uploaded_file.name.endswith(".docx"):
-        import docx
-
-        doc = docx.Document(uploaded_file)
-        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    return uploaded_file.getvalue().decode("utf-8")
-
-
-def show_error(msg: str):
-    st.error(f"❌ {msg}")
-
-
-def show_success(msg: str):
-    st.success(f"✅ {msg}")
-
-
-def safe_json(resp: requests.Response, fallback=None):
-    """Safely parse JSON from a response; returns fallback on decode errors (e.g. 502s)."""
-    try:
-        return resp.json()
-    except Exception:
-        return fallback
-
-
-def _detail(
-    resp: requests.Response, default: str = "An unexpected error occurred."
-) -> str:
-    """Extract error detail from an error response, safely."""
-    data = safe_json(resp, {})
-    if isinstance(data, dict):
-        return data.get("detail", default)
-    return f"API error (HTTP {resp.status_code})"
 
 
 # ─── AUTH PAGES ───────────────────────────────────────────────────────────────
@@ -144,7 +92,7 @@ def page_auth():
                         "Too many login attempts. Please wait 1 minute and try again."
                     )
                 else:
-                    show_error(_detail(resp, "Login failed."))
+                    show_error(detail(resp, "Login failed."))
 
     with tab_register:
         with st.form("register_form"):
@@ -168,7 +116,7 @@ def page_auth():
                         "Too many registration attempts. Please wait 1 minute and try again."
                     )
                 else:
-                    show_error(_detail(resp, "Registration failed."))
+                    show_error(detail(resp, "Registration failed."))
 
 
 # ─── Job URL Import Helper ─────────────────────────────────────────────────────
@@ -208,7 +156,7 @@ def _job_url_import(key_prefix: str) -> str:
                     if data.get("warning"):
                         st.warning(data["warning"])
                 else:
-                    show_error(_detail(resp, "Could not fetch job description."))
+                    show_error(detail(resp, "Could not fetch job description."))
     # Return any previously fetched JD stored in session state
     return st.session_state.get(f"{key_prefix}_prefilled_jd", "")
 
@@ -385,7 +333,7 @@ def page_resumes():
                         show_success(f"Resume '{label}' uploaded and parsed!")
                         st.rerun()
                     else:
-                        show_error(_detail(resp, "Upload failed."))
+                        show_error(detail(resp, "Upload failed."))
 
     # List
     resumes_resp = api("get", "/resumes/")
@@ -497,7 +445,7 @@ def page_cover_letter():
 
         if resp.status_code != 202:
             show_error(
-                _detail(
+                detail(
                     resp,
                     f"API error (HTTP {resp.status_code}). Is the backend running?",
                 )
@@ -583,7 +531,7 @@ def page_cover_letter():
                     )
                     st.rerun()
                 else:
-                    show_error(_detail(resp, "Refinement failed."))
+                    show_error(detail(resp, "Refinement failed."))
 
         revisions_resp = api("get", f"/cover-letters/{active_cl_id}/revisions")
         revisions = safe_json(revisions_resp, [])
@@ -627,7 +575,7 @@ def page_cover_letter():
                             show_success(f"v{v} is now the active cover letter.")
                             st.rerun()
                         else:
-                            show_error(_detail(act_resp, "Activation failed."))
+                            show_error(detail(act_resp, "Activation failed."))
 
     st.divider()
     st.subheader("📜 Past Cover Letters")
@@ -741,7 +689,7 @@ def page_job_match():
             show_error("AI service temporarily unavailable. Please try again.")
             return
         if resp.status_code != 200:
-            show_error(_detail(resp, f"Analysis failed (HTTP {resp.status_code})."))
+            show_error(detail(resp, f"Analysis failed (HTTP {resp.status_code})."))
             return
 
         data = safe_json(resp, {})
@@ -984,7 +932,7 @@ def page_job_tracker():
                     show_success("Application added!")
                     st.rerun()
                 else:
-                    show_error(_detail(resp, "Failed to add."))
+                    show_error(detail(resp, "Failed to add."))
 
     # Stats
     stats = safe_json(api("get", "/jobs/stats"), {})
