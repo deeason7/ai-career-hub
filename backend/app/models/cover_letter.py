@@ -7,6 +7,7 @@ from sqlalchemy import Text
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from app.models.cover_letter_revision import CoverLetterRevision
     from app.models.resume import Resume
     from app.models.user import User
 
@@ -37,6 +38,7 @@ class CoverLetter(CoverLetterBase, table=True):
     # Relationships
     user: Optional["User"] = Relationship(back_populates="cover_letters")
     resume: Optional["Resume"] = Relationship(back_populates="cover_letters")
+    revisions: list["CoverLetterRevision"] = Relationship(back_populates="cover_letter")
 
     def set_qa_flags(self, flags: list[str]) -> None:
         """Serialize QA flags list to JSON for DB storage."""
