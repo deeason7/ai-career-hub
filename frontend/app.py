@@ -9,8 +9,7 @@ Full-featured multi-section app with:
   - Interview Question Generator
   - Job Application Tracker
 """
-import io
-import json
+
 import os
 import time
 
@@ -50,6 +49,7 @@ if "active_cl_id" not in st.session_state:
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def api(method: str, path: str, **kwargs) -> requests.Response:
     headers = kwargs.pop("headers", {})
     if st.session_state.token:
@@ -60,10 +60,12 @@ def api(method: str, path: str, **kwargs) -> requests.Response:
 def extract_text(uploaded_file) -> str:
     if uploaded_file.name.endswith(".pdf"):
         import PyPDF2
+
         reader = PyPDF2.PdfReader(uploaded_file)
         return "\n".join(p.extract_text() for p in reader.pages if p.extract_text())
     elif uploaded_file.name.endswith(".docx"):
         import docx
+
         doc = docx.Document(uploaded_file)
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
     return uploaded_file.getvalue().decode("utf-8")
@@ -85,7 +87,9 @@ def safe_json(resp: requests.Response, fallback=None):
         return fallback
 
 
-def _detail(resp: requests.Response, default: str = "An unexpected error occurred.") -> str:
+def _detail(
+    resp: requests.Response, default: str = "An unexpected error occurred."
+) -> str:
     """Extract error detail from an error response, safely."""
     data = safe_json(resp, {})
     if isinstance(data, dict):
@@ -94,6 +98,7 @@ def _detail(resp: requests.Response, default: str = "An unexpected error occurre
 
 
 # ─── AUTH PAGES ───────────────────────────────────────────────────────────────
+
 
 def page_auth():
     st.title("🚀 AI Career Hub")
@@ -108,7 +113,10 @@ def page_auth():
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
             if st.form_submit_button("Login", type="primary"):
-                resp = requests.post(f"{API_URL}/auth/login", data={"username": email, "password": password})
+                resp = requests.post(
+                    f"{API_URL}/auth/login",
+                    data={"username": email, "password": password},
+                )
                 if resp.status_code == 200:
                     data = safe_json(resp, {})
                     st.session_state.token = data.get("access_token")
@@ -118,6 +126,7 @@ def page_auth():
                     # Persist JWT in a browser cookie so refreshes keep the session alive.
                     # expires_at matches the backend JWT expiry (60 min).
                     from datetime import datetime, timedelta
+
                     cookie_manager.set(
                         "auth_token",
                         st.session_state.token,
@@ -133,7 +142,9 @@ def page_auth():
                         "Please wait **~30 seconds** and try again."
                     )
                 elif resp.status_code == 429:
-                    show_error("Too many login attempts. Please wait 1 minute and try again.")
+                    show_error(
+                        "Too many login attempts. Please wait 1 minute and try again."
+                    )
                 else:
                     show_error(_detail(resp, "Login failed."))
 
@@ -143,9 +154,10 @@ def page_auth():
             r_email = st.text_input("Email")
             r_password = st.text_input("Password", type="password")
             if st.form_submit_button("Create Account", type="primary"):
-                resp = requests.post(f"{API_URL}/auth/register", json={
-                    "email": r_email, "full_name": name, "password": r_password
-                })
+                resp = requests.post(
+                    f"{API_URL}/auth/register",
+                    json={"email": r_email, "full_name": name, "password": r_password},
+                )
                 if resp.status_code == 201:
                     show_success("Account created! Please log in.")
                 elif resp.status_code == 503:
@@ -154,11 +166,15 @@ def page_auth():
                         "Please wait **~30 seconds** and try again."
                     )
                 elif resp.status_code == 429:
-                    show_error("Too many registration attempts. Please wait 1 minute and try again.")
+                    show_error(
+                        "Too many registration attempts. Please wait 1 minute and try again."
+                    )
                 else:
                     show_error(_detail(resp, "Registration failed."))
 
+
 # ─── Job URL Import Helper ─────────────────────────────────────────────────────
+
 
 def _job_url_import(key_prefix: str) -> str:
     """
@@ -181,12 +197,16 @@ def _job_url_import(key_prefix: str) -> str:
                 show_error("Please enter a URL.")
             else:
                 with st.spinner("Fetching job description…"):
-                    resp = api("post", "/ai/fetch-job", json={"url": job_url_input.strip()})
+                    resp = api(
+                        "post", "/ai/fetch-job", json={"url": job_url_input.strip()}
+                    )
                 data = safe_json(resp, {})
                 if resp.status_code == 200 and data.get("success"):
                     fetched_jd = data.get("job_description", "")
                     st.session_state[f"{key_prefix}_prefilled_jd"] = fetched_jd
-                    show_success("Job description fetched! Scroll down — it’s pre-filled below.")
+                    show_success(
+                        "Job description fetched! Scroll down — it’s pre-filled below."
+                    )
                     if data.get("warning"):
                         st.warning(data["warning"])
                 else:
@@ -196,6 +216,7 @@ def _job_url_import(key_prefix: str) -> str:
 
 
 # ─── Disclaimer Modal ───────────────────────────────────────────────────────
+
 
 @st.dialog("⚠️ Terms & Disclaimer")
 def show_disclaimer_modal():
@@ -231,6 +252,7 @@ def show_disclaimer_modal():
 
 # ─── SIDEBAR & NAVIGATION ─────────────────────────────────────────────────────
 
+
 def sidebar():
     _pages = [
         "📋 Dashboard",
@@ -245,11 +267,17 @@ def sidebar():
     with st.sidebar:
         st.title("🚀 AI Career Hub")
         user = st.session_state.user or {}
-        st.markdown(f"👤 **{user.get('full_name', 'User')}**  \n`{user.get('email', '')}`")
+        st.markdown(
+            f"👤 **{user.get('full_name', 'User')}**  \n`{user.get('email', '')}`"
+        )
         st.divider()
 
         # Sync radio with session state so buttons can drive navigation
-        current_idx = _pages.index(st.session_state["current_page"]) if st.session_state["current_page"] in _pages else 0
+        current_idx = (
+            _pages.index(st.session_state["current_page"])
+            if st.session_state["current_page"] in _pages
+            else 0
+        )
         page = st.radio(
             "Navigation",
             _pages,
@@ -274,18 +302,25 @@ def sidebar():
 
 # ─── PAGE: DASHBOARD ──────────────────────────────────────────────────────────
 
+
 def page_dashboard():
     st.title("📋 Dashboard")
 
     # Resume count
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     jobs = safe_json(api("get", "/jobs/stats"), {}) if st.session_state.token else {}
-    cover_letters = safe_json(api("get", "/cover-letters/"), []) if st.session_state.token else []
+    cover_letters = (
+        safe_json(api("get", "/cover-letters/"), []) if st.session_state.token else []
+    )
 
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 Resumes", len(resumes) if isinstance(resumes, list) else 0)
-    col2.metric("✉️ Cover Letters", len(cover_letters) if isinstance(cover_letters, list) else 0)
-    col3.metric("📊 Applications", jobs.get("total", 0) if isinstance(jobs, dict) else 0)
+    col2.metric(
+        "✉️ Cover Letters", len(cover_letters) if isinstance(cover_letters, list) else 0
+    )
+    col3.metric(
+        "📊 Applications", jobs.get("total", 0) if isinstance(jobs, dict) else 0
+    )
 
     st.divider()
     st.subheader("Application Pipeline")
@@ -293,11 +328,18 @@ def page_dashboard():
         statuses = jobs["by_status"]
         cols = st.columns(len(statuses))
         status_emojis = {
-            "wishlist": "⭐", "applied": "📨", "phone_screen": "📞",
-            "interview": "🎤", "offer": "🎉", "rejected": "❌", "accepted": "✅"
+            "wishlist": "⭐",
+            "applied": "📨",
+            "phone_screen": "📞",
+            "interview": "🎤",
+            "offer": "🎉",
+            "rejected": "❌",
+            "accepted": "✅",
         }
         for col, (s, count) in zip(cols, statuses.items()):
-            col.metric(f"{status_emojis.get(s, '')} {s.replace('_', ' ').title()}", count)
+            col.metric(
+                f"{status_emojis.get(s, '')} {s.replace('_', ' ').title()}", count
+            )
 
     st.divider()
     st.subheader("🚀 Quick Actions")
@@ -315,6 +357,7 @@ def page_dashboard():
 
 # ─── PAGE: RESUMES ────────────────────────────────────────────────────────────
 
+
 def page_resumes():
     st.title("📄 My Resumes")
     st.markdown("Upload up to **10 resumes**. Activate the one to use for AI features.")
@@ -322,8 +365,13 @@ def page_resumes():
     # Upload
     with st.expander("➕ Upload a New Resume", expanded=True):
         with st.form("upload_form"):
-            label = st.text_input("Resume Label (e.g. 'ML Engineer Resume')", placeholder="ML Engineer 2026")
-            file = st.file_uploader("File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
+            label = st.text_input(
+                "Resume Label (e.g. 'ML Engineer Resume')",
+                placeholder="ML Engineer 2026",
+            )
+            file = st.file_uploader(
+                "File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"]
+            )
             if st.form_submit_button("Upload & Parse", type="primary"):
                 if not label.strip():
                     show_error("Please provide a label.")
@@ -331,9 +379,12 @@ def page_resumes():
                     show_error("Please select a file.")
                 else:
                     with st.spinner("🔍 Extracting text and parsing resume with AI..."):
-                        resp = api("post", "/resumes/upload",
-                                  data={"name": label},
-                                  files={"file": (file.name, file.getvalue(), file.type)})
+                        resp = api(
+                            "post",
+                            "/resumes/upload",
+                            data={"name": label},
+                            files={"file": (file.name, file.getvalue(), file.type)},
+                        )
                     if resp.status_code == 201:
                         show_success(f"Resume '{label}' uploaded and parsed!")
                         st.rerun()
@@ -353,8 +404,31 @@ def page_resumes():
 
     st.subheader(f"Your Resumes ({len(resumes)})")
     for r in resumes:
-        badge = "🟢 **ACTIVE**" if r["is_active"] else "⚪ inactive"
-        with st.expander(f"{badge} — {r['name']}  |  `{r['original_filename']}`"):
+        active_tag = "🟢 **ACTIVE**" if r["is_active"] else "⚪ inactive"
+        if r.get("is_permanent"):
+            lifecycle_tag = "  📌 permanent"
+        elif r.get("expires_at"):
+            from datetime import UTC, datetime  # noqa: PLC0415
+
+            try:
+                exp = datetime.fromisoformat(r["expires_at"].replace("Z", "+00:00"))
+                days_left = (exp - datetime.now(UTC)).days
+                if days_left < 0:
+                    lifecycle_tag = "  🔴 expired"
+                elif days_left == 0:
+                    lifecycle_tag = "  🔴 expires today"
+                elif days_left <= 3:
+                    lifecycle_tag = f"  🟠 expires in {days_left}d"
+                else:
+                    lifecycle_tag = f"  🗓️ expires in {days_left}d"
+            except (ValueError, AttributeError):
+                lifecycle_tag = ""
+        else:
+            lifecycle_tag = ""
+
+        with st.expander(
+            f"{active_tag}{lifecycle_tag} — {r['name']}  |  `{r['original_filename']}`"
+        ):
             col1, col2, col3 = st.columns(3)
 
             if not r["is_active"]:
@@ -378,9 +452,12 @@ def page_resumes():
 
 # ─── PAGE: COVER LETTER ───────────────────────────────────────────────────────
 
+
 def page_cover_letter():
     st.title("✉️ AI Cover Letter Generator")
-    st.markdown("Generates a **zero-hallucination** cover letter using RAG — only facts from YOUR resume.")
+    st.markdown(
+        "Generates a **zero-hallucination** cover letter using RAG — only facts from YOUR resume."
+    )
 
     # Resume selector
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
@@ -389,8 +466,14 @@ def page_cover_letter():
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next((r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0])
-    selected_name = st.selectbox("Choose Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
+    active = next(
+        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
+    )
+    selected_name = st.selectbox(
+        "Choose Resume",
+        list(resume_options.keys()),
+        index=list(resume_options.keys()).index(active),
+    )
     selected_id = resume_options[selected_name]
 
     prefilled_jd = _job_url_import("cover_letter")
@@ -407,13 +490,22 @@ def page_cover_letter():
             return
 
         with st.spinner("Dispatching AI task..."):
-            resp = api("post", "/cover-letters/generate", json={
-                "job_description": jd,
-                "resume_id": selected_id,
-            })
+            resp = api(
+                "post",
+                "/cover-letters/generate",
+                json={
+                    "job_description": jd,
+                    "resume_id": selected_id,
+                },
+            )
 
         if resp.status_code != 202:
-            show_error(_detail(resp, f"API error (HTTP {resp.status_code}). Is the backend running?"))
+            show_error(
+                _detail(
+                    resp,
+                    f"API error (HTTP {resp.status_code}). Is the backend running?",
+                )
+            )
             return
 
         cl = safe_json(resp, {})
@@ -438,7 +530,9 @@ def page_cover_letter():
                 cover_text = detail.get("generated_text", "")
                 show_success("Cover letter generated!")
                 st.session_state["active_cl_id"] = cl_id
-                st.text_area("📝 Your Cover Letter", cover_text, height=450, key="cl_generated")
+                st.text_area(
+                    "📝 Your Cover Letter", cover_text, height=450, key="cl_generated"
+                )
                 dl_col1, dl_col2 = st.columns(2)
                 dl_col1.download_button(
                     "⬇ Download TXT",
@@ -469,7 +563,9 @@ def page_cover_letter():
     if active_cl_id:
         st.divider()
         st.subheader("✏️ Refine This Cover Letter")
-        st.caption("Give a specific edit instruction. The AI applies only the change you request.")
+        st.caption(
+            "Give a specific edit instruction. The AI applies only the change you request."
+        )
         command = st.text_input(
             "Refinement command",
             placeholder="e.g. 'Make the opening paragraph more confident'",
@@ -486,7 +582,9 @@ def page_cover_letter():
                         json={"command": command.strip()},
                     )
                 if resp.status_code == 202:
-                    show_success("Refinement queued — check the version history below in a few seconds.")
+                    show_success(
+                        "Refinement queued — check the version history below in a few seconds."
+                    )
                     st.rerun()
                 else:
                     show_error(_detail(resp, "Refinement failed."))
@@ -494,11 +592,17 @@ def page_cover_letter():
         revisions_resp = api("get", f"/cover-letters/{active_cl_id}/revisions")
         revisions = safe_json(revisions_resp, [])
         if isinstance(revisions, list) and revisions:
-            st.subheader(f"📋 Version History ({len(revisions)} revision{'s' if len(revisions) != 1 else ''})")
+            st.subheader(
+                f"📋 Version History ({len(revisions)} revision{'s' if len(revisions) != 1 else ''})"
+            )
             for rev in revisions:
                 v = rev["version_number"]
-                cmd_label = rev["user_command"][:60] + ("…" if len(rev["user_command"]) > 60 else "")
-                with st.expander(f"v{v} — \"{cmd_label}\"  |  {rev['created_at'][:10]}"):
+                cmd_label = rev["user_command"][:60] + (
+                    "…" if len(rev["user_command"]) > 60 else ""
+                )
+                with st.expander(
+                    f"v{v} — \"{cmd_label}\"  |  {rev['created_at'][:10]}"
+                ):
                     st.text_area(
                         "Revised text",
                         rev["generated_text"],
@@ -535,9 +639,32 @@ def page_cover_letter():
     if isinstance(history, list) and history:
         for cl in history[:5]:
             status_label = cl.get("status", "")
-            with st.expander(f"Cover Letter — {cl['created_at'][:10]} | Status: `{status_label}`"):
+            cl_expiry_tag = ""
+            if cl.get("expires_at"):
+                from datetime import UTC, datetime  # noqa: PLC0415
+
+                try:
+                    exp = datetime.fromisoformat(
+                        cl["expires_at"].replace("Z", "+00:00")
+                    )
+                    days_left = (exp - datetime.now(UTC)).days
+                    if days_left < 0:
+                        cl_expiry_tag = "  🔴 expired"
+                    elif days_left == 0:
+                        cl_expiry_tag = "  🔴 expires today"
+                    elif days_left <= 3:
+                        cl_expiry_tag = f"  🟠 {days_left}d left"
+                    else:
+                        cl_expiry_tag = f"  🗓️ {days_left}d left"
+                except (ValueError, AttributeError):
+                    pass
+            with st.expander(
+                f"Cover Letter — {cl['created_at'][:10]}{cl_expiry_tag} | Status: `{status_label}`"
+            ):
                 if cl.get("generated_text"):
-                    st.text_area("", cl["generated_text"], height=250, key=f"hist_{cl['id']}")
+                    st.text_area(
+                        "", cl["generated_text"], height=250, key=f"hist_{cl['id']}"
+                    )
                     if st.button("✏️ Refine this letter", key=f"load_refine_{cl['id']}"):
                         st.session_state["active_cl_id"] = cl["id"]
                         st.rerun()
@@ -566,9 +693,12 @@ def page_cover_letter():
 
 # ─── PAGE: ATS SCORE ──────────────────────────────────────────────────────────
 
+
 def page_ats_score():
     st.title("🎯 ATS Score Analyzer")
-    st.markdown("Scores your resume against any job description in **< 1 second** — instant algorithmic analysis.")
+    st.markdown(
+        "Scores your resume against any job description in **< 1 second** — instant algorithmic analysis."
+    )
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
@@ -576,20 +706,34 @@ def page_ats_score():
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next((r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0])
-    selected_name = st.selectbox("Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
+    active = next(
+        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
+    )
+    selected_name = st.selectbox(
+        "Resume",
+        list(resume_options.keys()),
+        index=list(resume_options.keys()).index(active),
+    )
     selected_id = resume_options[selected_name]
 
     prefilled_jd = _job_url_import("ats")
-    jd = st.text_area("Job Description", value=prefilled_jd, height=250,
-                      placeholder="Paste the job description or import from URL above.")
+    jd = st.text_area(
+        "Job Description",
+        value=prefilled_jd,
+        height=250,
+        placeholder="Paste the job description or import from URL above.",
+    )
 
     if st.button("🎯 Score My Resume", type="primary"):
         if not jd.strip():
             show_error("Please paste a job description.")
             return
         with st.spinner("Scoring..."):
-            resp = api("post", "/ai/ats-score", json={"job_description": jd, "resume_id": selected_id})
+            resp = api(
+                "post",
+                "/ai/ats-score",
+                json={"job_description": jd, "resume_id": selected_id},
+            )
 
         if resp.status_code == 429:
             show_error("Too many requests. Please wait 1 minute and try again.")
@@ -605,20 +749,42 @@ def page_ats_score():
         # --- Main metrics row ---
         color = "🟢" if score >= 70 else "🟡" if score >= 45 else "🔴"
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric(f"{color} ATS Score", f"{score}%", help="Composite: 50% semantic + 30% keyword + 20% structure")
-        col2.metric("🧠 Semantic Match", f"{sem_score}%", help="Sentence-transformer cosine similarity — catches synonyms and paraphrases")
-        col3.metric("🔑 Keyword Score", f"{data['keyword_score']}%", help="Exact + bigram keyword overlap")
-        col4.metric("📐 Structure Score", f"{data['structure_score']}%", help="Section presence and resume length")
+        col1.metric(
+            f"{color} ATS Score",
+            f"{score}%",
+            help="Composite: 50% semantic + 30% keyword + 20% structure",
+        )
+        col2.metric(
+            "🧠 Semantic Match",
+            f"{sem_score}%",
+            help="Sentence-transformer cosine similarity — catches synonyms and paraphrases",
+        )
+        col3.metric(
+            "🔑 Keyword Score",
+            f"{data['keyword_score']}%",
+            help="Exact + bigram keyword overlap",
+        )
+        col4.metric(
+            "📐 Structure Score",
+            f"{data['structure_score']}%",
+            help="Section presence and resume length",
+        )
 
         st.progress(int(score) / 100)
 
         # --- Semantic score interpretation ---
         if sem_score >= 70:
-            st.success("🧠 High semantic alignment — your resume language closely matches the job description.")
+            st.success(
+                "🧠 High semantic alignment — your resume language closely matches the job description."
+            )
         elif sem_score >= 45:
-            st.warning("🧠 Moderate semantic alignment — consider mirroring more of the job description's phrasing.")
+            st.warning(
+                "🧠 Moderate semantic alignment — consider mirroring more of the job description's phrasing."
+            )
         elif sem_score > 0:
-            st.error("🧠 Low semantic alignment — your resume content may not be addressing what this role requires.")
+            st.error(
+                "🧠 Low semantic alignment — your resume content may not be addressing what this role requires."
+            )
 
         # --- Section-level breakdown ---
         section_scores = data.get("section_scores", {})
@@ -626,8 +792,13 @@ def page_ats_score():
             st.subheader("📊 Section Alignment with JD")
             sec_cols = st.columns(len(section_scores))
             for col, (sec, sec_score) in zip(sec_cols, section_scores.items()):
-                sec_color = "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
-                col.metric(f"{sec_color} {sec.title()}", f"{sec_score}%" if sec_score > 0 else "—")
+                sec_color = (
+                    "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
+                )
+                col.metric(
+                    f"{sec_color} {sec.title()}",
+                    f"{sec_score}%" if sec_score > 0 else "—",
+                )
 
         st.divider()
         col_l, col_r = st.columns(2)
@@ -646,9 +817,12 @@ def page_ats_score():
 
 # ─── PAGE: SKILL GAP ──────────────────────────────────────────────────────────
 
+
 def page_skill_gap():
     st.title("🔍 Skill Gap Analysis")
-    st.markdown("Identify your skill gaps and get **personalized learning recommendations**.")
+    st.markdown(
+        "Identify your skill gaps and get **personalized learning recommendations**."
+    )
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
@@ -656,20 +830,34 @@ def page_skill_gap():
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next((r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0])
-    selected_name = st.selectbox("Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
+    active = next(
+        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
+    )
+    selected_name = st.selectbox(
+        "Resume",
+        list(resume_options.keys()),
+        index=list(resume_options.keys()).index(active),
+    )
     selected_id = resume_options[selected_name]
 
     prefilled_jd = _job_url_import("skill_gap")
-    jd = st.text_area("Job Description", value=prefilled_jd, height=250,
-                      placeholder="Paste the job description or import from URL above.")
+    jd = st.text_area(
+        "Job Description",
+        value=prefilled_jd,
+        height=250,
+        placeholder="Paste the job description or import from URL above.",
+    )
 
     if st.button("🔍 Analyze Skill Gap", type="primary"):
         if not jd.strip():
             show_error("Please paste a job description.")
             return
         with st.spinner("Analyzing gaps and generating recommendations with AI..."):
-            resp = api("post", "/ai/skill-gap", json={"job_description": jd, "resume_id": selected_id})
+            resp = api(
+                "post",
+                "/ai/skill-gap",
+                json={"job_description": jd, "resume_id": selected_id},
+            )
 
         if resp.status_code != 200:
             show_error(_detail(resp, "Analysis failed."))
@@ -700,9 +888,12 @@ def page_skill_gap():
 
 # ─── PAGE: INTERVIEW QUESTIONS ────────────────────────────────────────────────
 
+
 def page_interview_questions():
     st.title("🎙️ Interview Question Generator")
-    st.markdown("Get **10 tailored interview questions** based on your resume and the job description.")
+    st.markdown(
+        "Get **10 tailored interview questions** based on your resume and the job description."
+    )
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
@@ -710,20 +901,34 @@ def page_interview_questions():
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next((r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0])
-    selected_name = st.selectbox("Resume", list(resume_options.keys()), index=list(resume_options.keys()).index(active))
+    active = next(
+        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
+    )
+    selected_name = st.selectbox(
+        "Resume",
+        list(resume_options.keys()),
+        index=list(resume_options.keys()).index(active),
+    )
     selected_id = resume_options[selected_name]
 
     prefilled_jd = _job_url_import("interview")
-    jd = st.text_area("Job Description", value=prefilled_jd, height=200,
-                      placeholder="Paste the job description or import from URL above.")
+    jd = st.text_area(
+        "Job Description",
+        value=prefilled_jd,
+        height=200,
+        placeholder="Paste the job description or import from URL above.",
+    )
 
     if st.button("🎙️ Generate Questions", type="primary"):
         if not jd.strip():
             show_error("Please paste a job description.")
             return
         with st.spinner("Generating tailored interview questions..."):
-            resp = api("post", "/ai/interview-questions", json={"job_description": jd, "resume_id": selected_id})
+            resp = api(
+                "post",
+                "/ai/interview-questions",
+                json={"job_description": jd, "resume_id": selected_id},
+            )
 
         if resp.status_code != 200:
             show_error(_detail(resp, "Failed to generate questions."))
@@ -753,6 +958,7 @@ def _deadline_badge(deadline_str: str | None) -> str:
     if not deadline_str:
         return ""
     from datetime import date
+
     try:
         dl = date.fromisoformat(deadline_str)
     except ValueError:
@@ -784,11 +990,18 @@ def page_job_tracker():
             deadline = st.date_input("Application Deadline (optional)", value=None)
             notes = st.text_area("Notes", height=80)
             if st.form_submit_button("Add Application", type="primary"):
-                resp = api("post", "/jobs/", json={
-                    "company": company, "role": role, "status": status,
-                    "job_url": job_url or None, "notes": notes or None,
-                    "deadline": deadline.isoformat() if deadline else None,
-                })
+                resp = api(
+                    "post",
+                    "/jobs/",
+                    json={
+                        "company": company,
+                        "role": role,
+                        "status": status,
+                        "job_url": job_url or None,
+                        "notes": notes or None,
+                        "deadline": deadline.isoformat() if deadline else None,
+                    },
+                )
                 if resp.status_code == 201:
                     show_success("Application added!")
                     st.rerun()
@@ -801,11 +1014,15 @@ def page_job_tracker():
         st.subheader(f"📈 Pipeline — {stats['total']} Applications")
         cols = st.columns(7)
         for col, (s, count) in zip(cols, stats["by_status"].items()):
-            col.metric(f"{STATUS_EMOJIS.get(s, '')} {s.replace('_', ' ').title()}", count)
+            col.metric(
+                f"{STATUS_EMOJIS.get(s, '')} {s.replace('_', ' ').title()}", count
+            )
 
     # Filter
     st.divider()
-    filter_status = st.selectbox("Filter by Status", ["All"] + list(STATUS_EMOJIS.keys()))
+    filter_status = st.selectbox(
+        "Filter by Status", ["All"] + list(STATUS_EMOJIS.keys())
+    )
     params = {} if filter_status == "All" else {"status_filter": filter_status}
     apps_resp = api("get", "/jobs/", params=params)
     apps = apps_resp.json() if apps_resp.status_code == 200 else []
@@ -817,7 +1034,9 @@ def page_job_tracker():
     for app in apps:
         emoji = STATUS_EMOJIS.get(app["status"], "")
         badge = _deadline_badge(app.get("deadline"))
-        with st.expander(f"{emoji} **{app['company']}** — {app['role']}  |  `{app['status']}`{badge}"):
+        with st.expander(
+            f"{emoji} **{app['company']}** — {app['role']}  |  `{app['status']}`{badge}"
+        ):
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.markdown(f"**Applied:** {app.get('applied_at', 'N/A')}")
@@ -854,16 +1073,19 @@ def page_job_tracker():
 
 # ─── PAGE: LEGAL & INFO ──────────────────────────────────────────────────────────────
 
+
 def page_legal():
     st.title("📜 Legal & Info")
 
-    tab_use, tab_terms, tab_disclaimer, tab_ai, tab_privacy = st.tabs([
-        "📖 How to Use",
-        "📄 Terms of Use",
-        "⚠️ Disclaimer",
-        "🤖 AI Notice",
-        "🔒 Privacy",
-    ])
+    tab_use, tab_terms, tab_disclaimer, tab_ai, tab_privacy = st.tabs(
+        [
+            "📖 How to Use",
+            "📄 Terms of Use",
+            "⚠️ Disclaimer",
+            "🤖 AI Notice",
+            "🔒 Privacy",
+        ]
+    )
 
     with tab_use:
         st.subheader("📖 How to Use AI Career Hub")
@@ -985,7 +1207,7 @@ if not st.session_state.token:
         st.session_state.token = _cookie_token  # temp-set so api() sends the header
         _me = safe_json(api("get", "/auth/me"), {})
         if _me and _me.get("email"):
-            st.session_state.user = _me          # valid — session fully restored
+            st.session_state.user = _me  # valid — session fully restored
         else:
             # Token expired or invalid — clear cookie and force re-login
             cookie_manager.delete("auth_token")
@@ -996,7 +1218,10 @@ if not st.session_state.token:
     page_auth()
 else:
     # Show disclaimer modal on first login (unless user clicked Never Show Again)
-    if not st.session_state["disclaimer_accepted"] and not st.session_state["disclaimer_never_show"]:
+    if (
+        not st.session_state["disclaimer_accepted"]
+        and not st.session_state["disclaimer_never_show"]
+    ):
         show_disclaimer_modal()
 
     page = sidebar()
