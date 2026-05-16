@@ -78,7 +78,9 @@ async def _dispatch_to_n8n(cover_letter_id: str, resume_text: str, job_descripti
     return False
 
 
-def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
+def _run_cover_letter_bg(
+    cover_letter_id: str, user_id: str, resume_text: str, job_description: str
+) -> None:
     """Generate a cover letter, run QA review, and persist the result."""
     from app.services.qa_service import (  # noqa: PLC0415
         HALLUCINATION_THRESHOLD,
@@ -154,6 +156,11 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                     verdict.honesty_score if verdict else "N/A",
                     retries,
                 )
+                _create_tracker_entry_bg(
+                    user_id=uuid.UUID(user_id),
+                    cover_letter_id=uuid.UUID(cover_letter_id),
+                    job_description=job_description,
+                )
 
     except Exception as exc:
         logger.error("Cover letter background task failed: %s", exc, exc_info=True)
@@ -166,6 +173,71 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                     session.commit()
         except Exception as inner_exc:
             logger.error("Failed to persist failure status for %s: %s", cover_letter_id, inner_exc)
+
+
+def _create_tracker_entry_bg(
+    user_id: uuid.UUID,
+    cover_letter_id: uuid.UUID,
+    job_description: str,
+) -> None:
+    """Auto-create a JobApplication row in wishlist state after a cover letter is generated.
+
+    Deduplicates by (user_id, company, role) within 7 days.
+    Failures are logged and swallowed — must not affect CL generation result.
+    """
+    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
+
+    from app.models.job_application import JobApplication  # noqa: PLC0415
+    from app.services.job_tracker_service import extract_job_metadata  # noqa: PLC0415
+
+    try:
+        meta = extract_job_metadata(job_description)
+        company = meta["company"]
+        role = meta["role"]
+        cutoff = datetime.now(UTC) - timedelta(days=7)
+
+        with Session(sync_engine) as session:
+            existing = session.exec(
+                select(JobApplication).where(
+                    JobApplication.user_id == user_id,
+                    JobApplication.company == company,
+                    JobApplication.role == role,
+                    JobApplication.created_at >= cutoff,
+                )
+            ).first()
+
+            if existing:
+                if existing.cover_letter_id is None:
+                    existing.cover_letter_id = cover_letter_id
+                    session.add(existing)
+                    session.commit()
+                logger.info(
+                    "Tracker dedup hit for user=%s company=%r role=%r — linked CL %s",
+                    user_id,
+                    company,
+                    role,
+                    cover_letter_id,
+                )
+                return
+
+            job_app = JobApplication(
+                user_id=user_id,
+                company=company,
+                role=role,
+                status="wishlist",
+                source="auto",
+                cover_letter_id=cover_letter_id,
+            )
+            session.add(job_app)
+            session.commit()
+            logger.info(
+                "Auto-created tracker entry for user=%s company=%r role=%r",
+                user_id,
+                company,
+                role,
+            )
+    except Exception as exc:
+        logger.warning("_create_tracker_entry_bg failed (non-fatal): %s", exc)
 
 
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
@@ -221,6 +293,7 @@ async def generate_cover_letter_endpoint(
         background_tasks.add_task(
             _run_cover_letter_bg,
             str(cover_letter.id),
+            str(current_user.id),
             resume.raw_text,
             sanitize_text(payload.job_description),
         )
