@@ -9,7 +9,6 @@ import streamlit as st
 
 from api_client import API_URL, api, safe_json
 from auth import page_auth
-from components import show_error, show_success
 from pages.dashboard import page_dashboard
 from pages.resumes import page_resumes
 from pages.cover_letter import page_cover_letter
