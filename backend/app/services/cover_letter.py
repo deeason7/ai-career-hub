@@ -4,6 +4,8 @@ import logging
 
 from pydantic import ValidationError
 
+from app.core.utils import _sanitize_jd_for_prompt  # noqa: PLC0415
+
 logger = logging.getLogger(__name__)
 
 # Resumes are typically 2–5 K chars; 6 K is generous while well within Groq's 128 K token window.
@@ -114,6 +116,7 @@ def generate_cover_letter(resume_text: str, job_description: str) -> dict:
     """
     from app.core.config import settings  # noqa: PLC0415
 
+    job_description = _sanitize_jd_for_prompt(job_description)
     if not settings.USE_GROQ:
         return _generate_via_ollama(resume_text, job_description)
 
@@ -217,6 +220,7 @@ def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
     """Identify missing skills and generate prioritised learning recommendations."""
     from app.services.ats_scorer import PRIORITY_KEYWORDS, calculate_ats_score  # noqa: PLC0415
 
+    job_description = _sanitize_jd_for_prompt(job_description)
     ats = calculate_ats_score(resume_text, job_description)
     missing = ats.missing_keywords[:15]
     priority_gaps = [kw for kw in missing if kw in PRIORITY_KEYWORDS][:5]
@@ -280,6 +284,7 @@ def generate_interview_questions(resume_text: str, job_description: str) -> list
     """Generate tailored interview questions."""
     from app.core.config import settings  # noqa: PLC0415
 
+    job_description = _sanitize_jd_for_prompt(job_description)
     if settings.USE_GROQ:
         return _interview_via_instructor(resume_text, job_description)
     return _interview_via_langchain(resume_text, job_description)
