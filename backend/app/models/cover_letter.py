@@ -28,6 +28,7 @@ class CoverLetter(CoverLetterBase, table=True):
     task_id: str | None = Field(default=None, max_length=255)
     status: str = Field(default="pending", max_length=50)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime | None = Field(default=None)
 
     # QA review scores
     qa_score_honesty: int | None = Field(default=None)
@@ -64,6 +65,7 @@ class CoverLetterRead(CoverLetterBase):
     task_id: str | None
     status: str
     created_at: datetime
+    expires_at: datetime | None = None
     qa_score_honesty: int | None = None
     qa_score_tone: int | None = None
     qa_flags: str | None = None
