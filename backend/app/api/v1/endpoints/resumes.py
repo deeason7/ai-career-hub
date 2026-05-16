@@ -14,6 +14,7 @@ from app.core.db import get_async_session
 from app.models.resume import Resume, ResumeRead, ResumeReadWithText
 from app.models.user import User
 from app.services.file_extractor import extract_text_from_upload
+from app.services.lifecycle import set_resume_expiry
 from app.services.resume_parser import parse_resume
 
 router = APIRouter()
@@ -69,6 +70,7 @@ async def upload_resume(
     is_first = len(existing) == 0
 
     safe_filename = os.path.basename(file.filename or "resume")[:255]
+    existing_count = len(existing)
 
     resume = Resume(
         user_id=current_user.id,
@@ -78,6 +80,7 @@ async def upload_resume(
         parsed_json=parsed_json,
         is_active=is_first,
     )
+    set_resume_expiry(resume, existing_count)
     session.add(resume)
     await session.commit()
     await session.refresh(resume)
