@@ -67,7 +67,7 @@ async def cover_letter_id(client: AsyncClient, auth_headers: dict):
     # Upload a resume first
     resume_content = b"Python developer with 3 years of experience in FastAPI and PostgreSQL."
     response = await client.post(
-        "/api/v1/resumes/",
+        "/api/v1/resumes/upload",
         files={"file": ("resume.txt", io.BytesIO(resume_content), "text/plain")},
         data={"name": "Test Resume"},
         headers=auth_headers,
