@@ -3,8 +3,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Text
-from sqlmodel import Column, Field, Relationship, SQLModel
+from sqlalchemy import Column, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from app.models.cover_letter import CoverLetter
@@ -15,9 +16,12 @@ class CoverLetterRevision(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     cover_letter_id: uuid.UUID = Field(
-        foreign_key="cover_letters.id",
-        index=True,
-        sa_column_kwargs={"ondelete": "CASCADE"},
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey("cover_letters.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
     )
     version_number: int
     generated_text: str = Field(sa_column=Column(Text))
