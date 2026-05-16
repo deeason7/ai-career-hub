@@ -20,6 +20,7 @@ from app.core.security import (
     verify_refresh_token,
 )
 from app.models.user import User, UserCreate, UserRead
+from app.services import audit_logger
 
 router = APIRouter()
 
@@ -89,6 +90,7 @@ async def login(
         path="/api/v1/auth",
     )
 
+    audit_logger.emit("auth.login", user_id=user.id, request=request)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
