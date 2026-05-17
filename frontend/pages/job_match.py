@@ -1,39 +1,12 @@
 """Job match analysis page — ATS score, skill gap, interview prep."""
 
+import html
+
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from components import show_error
+from components import job_url_import, show_error
 
-
-def _job_url_import_jm(key_prefix: str) -> str:
-    fetched_jd = ""
-    with st.expander("🔗 Import Job from URL (LinkedIn, Greenhouse, Lever…)"):
-        st.caption(
-            "Paste any public job posting URL. LinkedIn may require login — "
-            "in that case paste the text manually."
-        )
-        job_url_input = st.text_input(
-            "Job Posting URL",
-            placeholder="https://www.linkedin.com/jobs/view/...",
-            key=f"{key_prefix}_url_input",
-        )
-        if st.button("🚀 Fetch Job Description", key=f"{key_prefix}_fetch_btn"):
-            if not job_url_input.strip():
-                show_error("Please enter a URL.")
-            else:
-                with st.spinner("Fetching job description…"):
-                    resp = api("post", "/ai/fetch-job", json={"url": job_url_input.strip()})
-                data = safe_json(resp, {})
-                if resp.status_code == 200 and data.get("success"):
-                    fetched_jd = data.get("job_description", "")
-                    st.session_state[f"{key_prefix}_prefilled_jd"] = fetched_jd
-                    st.success("Job description fetched! Scroll down — it's pre-filled below.")
-                    if data.get("warning"):
-                        st.warning(data["warning"])
-                else:
-                    show_error(detail(resp, "Could not fetch job description."))
-    return st.session_state.get(f"{key_prefix}_prefilled_jd", "")
 
 
 def page_job_match() -> None:
@@ -57,7 +30,7 @@ def page_job_match() -> None:
     )
     selected_id = resume_options[selected_name]
 
-    prefilled_jd = _job_url_import_jm("job_match")
+    prefilled_jd = job_url_import("job_match")
     jd = st.text_area(
         "Job Description", value=prefilled_jd, height=260,
         placeholder="Paste the full job posting here, or import from URL above.",
@@ -120,7 +93,9 @@ def page_job_match() -> None:
                 if matched:
                     st.markdown(
                         " ".join(
-                            f'<span style="background:#1e7e34;color:#fff;padding:2px 8px;border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">{kw}</span>'
+                            f'<span style="background:#1e7e34;color:#fff;padding:2px 8px;'
+                            f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
+                            f"{html.escape(str(kw))}</span>"
                             for kw in matched[:30]
                         ),
                         unsafe_allow_html=True,
@@ -133,7 +108,9 @@ def page_job_match() -> None:
                 if missing:
                     st.markdown(
                         " ".join(
-                            f'<span style="background:#b02a37;color:#fff;padding:2px 8px;border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">{kw}</span>'
+                            f'<span style="background:#b02a37;color:#fff;padding:2px 8px;'
+                            f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
+                            f"{html.escape(str(kw))}</span>"
                             for kw in missing[:20]
                         ),
                         unsafe_allow_html=True,

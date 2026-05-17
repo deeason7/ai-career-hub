@@ -9,7 +9,6 @@ import streamlit as st
 
 from api_client import API_URL, api, safe_json
 from auth import page_auth
-from components import show_error, show_success
 from pages.dashboard import page_dashboard
 from pages.resumes import page_resumes
 from pages.cover_letter import page_cover_letter
@@ -113,15 +112,14 @@ def sidebar():
         dark = st.toggle("🌙 Dark Mode", value=st.session_state["dark_mode"])
         st.session_state["dark_mode"] = dark
         if dark:
-            st.markdown(
-                """<style>
-                [data-testid="stAppViewContainer"] { background-color: #0e1117; color: #fafafa; }
-                [data-testid="stSidebar"] { background-color: #161b22; }
-                [data-testid="stHeader"] { background-color: #0e1117; }
-                .stTextInput input, .stTextArea textarea, .stSelectbox select {
-                    background-color: #1e2530 !important; color: #fafafa !important; }
-                </style>""",
-                unsafe_allow_html=True,
+            st.html(
+                "<style>"
+                "[data-testid='stAppViewContainer'] { background-color: #0e1117; color: #fafafa; }"
+                "[data-testid='stSidebar'] { background-color: #161b22; }"
+                "[data-testid='stHeader'] { background-color: #0e1117; }"
+                ".stTextInput input, .stTextArea textarea, .stSelectbox select {"
+                "    background-color: #1e2530 !important; color: #fafafa !important; }"
+                "</style>"
             )
 
         st.divider()

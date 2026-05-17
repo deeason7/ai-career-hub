@@ -49,7 +49,7 @@ test: add tests for lifecycle cleanup service
 - Subject line ≤ 72 characters
 - Imperative mood ("add", not "added")
 - No period at end of subject line
-- No needless verbosity — write like a senior engineer wrote it
+- Write like a senior engineer: concise, imperative, no filler.
 
 ---
 
@@ -100,7 +100,7 @@ Before opening a PR to `develop`:
 - [ ] `ruff format --check backend/` passes
 - [ ] New endpoints have corresponding tests in `backend/tests/`
 - [ ] No secrets, credentials, or internal identifiers committed
-- [ ] No docstring padding or verbose inline comments
+- [ ] No padding comments. Only write comments that explain non-obvious logic.
 
 ---
 
