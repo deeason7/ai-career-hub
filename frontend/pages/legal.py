@@ -64,8 +64,9 @@ def page_legal() -> None:
         - Data loss or security incidents in self-hosted deployments
         - Downtime, service suspension, or data reset on the free-tier demo
 
-        The live demo is hosted on Render.com free tier and may be suspended or reset
-        at any time without notice.
+        The live demo is hosted on AWS EC2 (free-tier EC2 t3.small) and may be paused
+        outside business hours. During off-hours, the platform boots automatically on
+        first visit (~90 seconds).
         """)
 
     with tab_ai:
@@ -91,8 +92,8 @@ def page_legal() -> None:
 
         | Platform | Role | Privacy Policy |
         |----------|------|----------------|
-        | Render.com | API & frontend hosting | [render.com/privacy](https://render.com/privacy) |
-        | Supabase | PostgreSQL database | [supabase.com/privacy](https://supabase.com/privacy) |
+        | AWS EC2 | API & frontend hosting | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
+        | AWS RDS PostgreSQL | Database | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
         | Groq | AI inference | [groq.com/privacy-policy](https://groq.com/privacy-policy/) |
 
         **What is stored:**

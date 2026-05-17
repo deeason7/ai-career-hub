@@ -34,6 +34,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Skill Gap Analysis** | Identify missing skills with AI-powered upskilling recommendations |
 | **Interview Question Generator** | 10 tailored questions generated from your resume and the job description |
 | **Application Tracker** | Full pipeline tracking with deadline management and urgency indicators |
+| **Auto-Tracker** | Cover letter generation automatically creates a wishlist tracker entry — no manual logging required |
 
 ---
 
@@ -257,6 +258,14 @@ Off-Hours:
 ---
 
 ## Release History
+
+### v4.0.0 — OWASP Hardening, Auto-Tracker & Modular Frontend
+- 15-day document lifecycle management with expiry badges and nightly cleanup (F1)
+- Application tracker auto-populated from cover letter generation via LLM metadata extraction (F4)
+- OWASP A03/A07/A09 hardening: prompt injection sanitization, rate limiting, audit logging with SHA-256 IP hashing (F5)
+- Dependency scanning via `pip-audit` in CI (F5)
+- Streamlit frontend refactored from a 1235-line monolith into a modular `pages/` architecture (F6)
+- Dark mode toggle, toast notifications, shared `components.py` utility layer (F6)
 
 ### v3.0 — Structured Output & Orchestration
 - Structured LLM output via `instructor` + Pydantic v2 (typed schemas, validated contracts)

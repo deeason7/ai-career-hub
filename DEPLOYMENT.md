@@ -1,6 +1,6 @@
 # Deployment Guide — AI Career Hub
 
-Production deployment on AWS. Platform version: **v3.0**.
+Production deployment on AWS. Platform version: **v4.0.0**.
 
 ---
 
