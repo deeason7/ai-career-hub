@@ -25,6 +25,8 @@ class Resume(ResumeBase, table=True):
     parsed_json: str | None = Field(
         default=None, sa_column=Column(Text)
     )  # JSON string of structured data
+    is_permanent: bool = Field(default=False)
+    expires_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -40,6 +42,8 @@ class ResumeCreate(SQLModel):
 class ResumeRead(ResumeBase):
     id: uuid.UUID
     user_id: uuid.UUID
+    is_permanent: bool
+    expires_at: datetime | None = None
     created_at: datetime
     parsed_json: str | None = None
 

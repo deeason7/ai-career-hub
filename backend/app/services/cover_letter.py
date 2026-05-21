@@ -4,6 +4,8 @@ import logging
 
 from pydantic import ValidationError
 
+from app.core.utils import _sanitize_jd_for_prompt  # noqa: PLC0415
+
 logger = logging.getLogger(__name__)
 
 # Resumes are typically 2–5 K chars; 6 K is generous while well within Groq's 128 K token window.
@@ -32,6 +34,15 @@ _SKILL_GAP_SYSTEM_PROMPT = (
     "You are a career development advisor. For a job seeker missing certain skills, "
     "provide specific, actionable learning recommendations. Include the skill name, "
     "a concrete resource (course name and platform), and a realistic timeline."
+)
+_REFINE_SYSTEM_PROMPT = (
+    "You are editing an existing cover letter based on a specific user command.\n\n"
+    "COMMAND: {command}\n\n"
+    "RULES:\n"
+    "- Apply only the change the command requests. Do not rewrite unaffected sections.\n"
+    "- Never add skills, experience, or metrics not present in the resume facts.\n"
+    "- Preserve the overall structure unless the command explicitly asks to change it.\n"
+    "- Return only the full revised cover letter text, no preamble or commentary."
 )
 
 
@@ -105,6 +116,7 @@ def generate_cover_letter(resume_text: str, job_description: str) -> dict:
     """
     from app.core.config import settings  # noqa: PLC0415
 
+    job_description = _sanitize_jd_for_prompt(job_description)
     if not settings.USE_GROQ:
         return _generate_via_ollama(resume_text, job_description)
 
@@ -134,10 +146,81 @@ def generate_cover_letter(resume_text: str, job_description: str) -> dict:
         return _generate_via_ollama(resume_text, job_description)
 
 
+def refine_cover_letter(
+    original_text: str,
+    resume_text: str,
+    job_description: str,
+    user_command: str,
+) -> dict:
+    """Apply a targeted edit command to an existing cover letter."""
+    from app.core.config import settings  # noqa: PLC0415
+
+    if settings.USE_GROQ:
+        return _refine_via_instructor(original_text, resume_text, job_description, user_command)
+    return _refine_via_ollama(original_text, resume_text, job_description, user_command)
+
+
+def _refine_via_instructor(
+    original_text: str,
+    resume_text: str,
+    job_description: str,
+    user_command: str,
+) -> dict:
+    from app.services.llm_client import call_structured  # noqa: PLC0415
+    from app.services.llm_schemas import CoverLetterOutput  # noqa: PLC0415
+
+    system_prompt = _REFINE_SYSTEM_PROMPT.format(command=user_command)
+    user_prompt = (
+        f"=== ORIGINAL COVER LETTER ===\n{original_text}\n\n"
+        f"=== VERIFIED RESUME FACTS ===\n{resume_text[:_GROQ_RESUME_MAX_CHARS]}\n\n"
+        f"=== JOB DESCRIPTION ===\n{job_description[:2000]}\n\n"
+        "Return the full revised cover letter."
+    )
+    try:
+        result = call_structured(
+            response_model=CoverLetterOutput,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+        return {"cover_letter": result.cover_letter, "chunks_used": 1}
+    except ValidationError:
+        logger.warning("Refine structured output failed, falling back to Ollama")
+        return _refine_via_ollama(original_text, resume_text, job_description, user_command)
+
+
+def _refine_via_ollama(
+    original_text: str,
+    resume_text: str,
+    job_description: str,
+    user_command: str,
+) -> dict:
+    from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
+
+    llm = _build_ollama_llm()
+    prompt = PromptTemplate.from_template(
+        _REFINE_SYSTEM_PROMPT.format(command="{command}") + "\n\n"
+        "=== ORIGINAL COVER LETTER ===\n{original}\n\n"
+        "=== VERIFIED RESUME FACTS ===\n{resume}\n\n"
+        "=== JOB DESCRIPTION ===\n{jd}\n\n"
+        "Revised cover letter:"
+    )
+    result = (prompt | llm).invoke(
+        {
+            "command": user_command,
+            "original": original_text,
+            "resume": resume_text[:3000],
+            "jd": job_description[:1500],
+        }
+    )
+    text = result.content if hasattr(result, "content") else str(result)
+    return {"cover_letter": text.strip(), "chunks_used": 0}
+
+
 def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
     """Identify missing skills and generate prioritised learning recommendations."""
     from app.services.ats_scorer import PRIORITY_KEYWORDS, calculate_ats_score  # noqa: PLC0415
 
+    job_description = _sanitize_jd_for_prompt(job_description)
     ats = calculate_ats_score(resume_text, job_description)
     missing = ats.missing_keywords[:15]
     priority_gaps = [kw for kw in missing if kw in PRIORITY_KEYWORDS][:5]
@@ -201,6 +284,7 @@ def generate_interview_questions(resume_text: str, job_description: str) -> list
     """Generate tailored interview questions."""
     from app.core.config import settings  # noqa: PLC0415
 
+    job_description = _sanitize_jd_for_prompt(job_description)
     if settings.USE_GROQ:
         return _interview_via_instructor(resume_text, job_description)
     return _interview_via_langchain(resume_text, job_description)

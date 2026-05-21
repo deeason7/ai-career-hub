@@ -27,6 +27,13 @@ if settings.SENTRY_DSN:
         send_default_pii=False,  # Never send passwords, tokens, or PII
     )
 
+# Warn at startup if admin endpoint will be permanently locked (misconfiguration guard).
+if settings.PRODUCTION and not settings.ADMIN_SECRET:
+    logger.warning(
+        "[startup] ADMIN_SECRET is not set — /admin/* endpoints will reject all requests. "
+        "Set ADMIN_SECRET via SSM if lifecycle management is required."
+    )
+
 
 async def _run_migrations_when_db_ready() -> None:
     """Wait for the DB to accept connections, then run alembic upgrade head.
