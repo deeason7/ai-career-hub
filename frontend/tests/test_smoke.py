@@ -1,0 +1,86 @@
+"""Smoke tests — verify all page modules and shared utilities import cleanly."""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+def _mock_st():
+    """Return a minimal streamlit mock so imports don't need a running Streamlit."""
+    return MagicMock()
+
+
+@pytest.fixture(autouse=True)
+def mock_streamlit(monkeypatch):
+    """Patch streamlit before any module-level st.* calls fire."""
+    st_mock = _mock_st()
+    monkeypatch.setattr("streamlit.session_state", {"token": None, "user": None}, raising=False)
+    return st_mock
+
+
+class TestModuleImports:
+    """All page modules and shared utilities must be importable without a Streamlit runtime."""
+
+    def test_api_client_imports(self):
+        with patch.dict("os.environ", {"API_URL": "http://localhost:8000/api/v1"}):
+            from api_client import API_URL, api, detail, safe_json  # noqa: F401
+
+            assert API_URL == "http://localhost:8000/api/v1"
+
+    def test_components_imports(self):
+        from components import (  # noqa: F401
+            lifecycle_badge,
+            loading_spinner,
+            show_error,
+            show_success,
+            toast_error,
+            toast_success,
+        )
+
+    def test_lifecycle_badge_expired(self):
+        from components import lifecycle_badge
+
+        result = lifecycle_badge("2020-01-01T00:00:00Z")
+        assert "expired" in result or "🔴" in result
+
+    def test_lifecycle_badge_permanent(self):
+        from components import lifecycle_badge
+
+        result = lifecycle_badge(None, is_permanent=True)
+        assert "permanent" in result
+
+    def test_lifecycle_badge_no_expiry(self):
+        from components import lifecycle_badge
+
+        result = lifecycle_badge(None)
+        assert result == ""
+
+    def test_pages_dashboard_importable(self):
+        import importlib
+
+        importlib.import_module("pages.dashboard")
+
+    def test_pages_resumes_importable(self):
+        import importlib
+
+        importlib.import_module("pages.resumes")
+
+    def test_pages_cover_letter_importable(self):
+        import importlib
+
+        importlib.import_module("pages.cover_letter")
+
+    def test_pages_job_match_importable(self):
+        import importlib
+
+        importlib.import_module("pages.job_match")
+
+    def test_pages_job_tracker_importable(self):
+        import importlib
+
+        importlib.import_module("pages.job_tracker")
+
+    def test_pages_legal_importable(self):
+        import importlib
+
+        importlib.import_module("pages.legal")

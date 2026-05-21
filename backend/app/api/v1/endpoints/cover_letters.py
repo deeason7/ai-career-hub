@@ -17,9 +17,16 @@ from app.core.db import get_async_session, sync_engine
 from app.core.limiter import rate_limit
 from app.core.utils import sanitize_text
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
+from app.models.cover_letter_revision import (
+    CoverLetterRevision,
+    CoverLetterRevisionCreate,
+    CoverLetterRevisionRead,
+)
 from app.models.resume import Resume
 from app.models.user import User
-from app.services.cover_letter import generate_cover_letter
+from app.services import audit_logger
+from app.services.cover_letter import generate_cover_letter, refine_cover_letter
+from app.services.lifecycle import set_cover_letter_expiry
 from app.services.pdf_generator import generate_cover_letter_pdf
 from app.services.qa_service import HALLUCINATION_THRESHOLD
 
@@ -72,7 +79,9 @@ async def _dispatch_to_n8n(cover_letter_id: str, resume_text: str, job_descripti
     return False
 
 
-def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description: str) -> None:
+def _run_cover_letter_bg(
+    cover_letter_id: str, user_id: str, resume_text: str, job_description: str
+) -> None:
     """Generate a cover letter, run QA review, and persist the result."""
     from app.services.qa_service import (  # noqa: PLC0415
         HALLUCINATION_THRESHOLD,
@@ -148,6 +157,11 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                     verdict.honesty_score if verdict else "N/A",
                     retries,
                 )
+                _create_tracker_entry_bg(
+                    user_id=uuid.UUID(user_id),
+                    cover_letter_id=uuid.UUID(cover_letter_id),
+                    job_description=job_description,
+                )
 
     except Exception as exc:
         logger.error("Cover letter background task failed: %s", exc, exc_info=True)
@@ -160,6 +174,71 @@ def _run_cover_letter_bg(cover_letter_id: str, resume_text: str, job_description
                     session.commit()
         except Exception as inner_exc:
             logger.error("Failed to persist failure status for %s: %s", cover_letter_id, inner_exc)
+
+
+def _create_tracker_entry_bg(
+    user_id: uuid.UUID,
+    cover_letter_id: uuid.UUID,
+    job_description: str,
+) -> None:
+    """Auto-create a JobApplication row in wishlist state after a cover letter is generated.
+
+    Deduplicates by (user_id, company, role) within 7 days.
+    Failures are logged and swallowed — must not affect CL generation result.
+    """
+    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
+
+    from app.models.job_application import JobApplication  # noqa: PLC0415
+    from app.services.job_tracker_service import extract_job_metadata  # noqa: PLC0415
+
+    try:
+        meta = extract_job_metadata(job_description)
+        company = meta["company"]
+        role = meta["role"]
+        cutoff = datetime.now(UTC) - timedelta(days=7)
+
+        with Session(sync_engine) as session:
+            existing = session.exec(
+                select(JobApplication).where(
+                    JobApplication.user_id == user_id,
+                    JobApplication.company == company,
+                    JobApplication.role == role,
+                    JobApplication.created_at >= cutoff,
+                )
+            ).first()
+
+            if existing:
+                if existing.cover_letter_id is None:
+                    existing.cover_letter_id = cover_letter_id
+                    session.add(existing)
+                    session.commit()
+                logger.info(
+                    "Tracker dedup hit for user=%s company=%r role=%r — linked CL %s",
+                    user_id,
+                    company,
+                    role,
+                    cover_letter_id,
+                )
+                return
+
+            job_app = JobApplication(
+                user_id=user_id,
+                company=company,
+                role=role,
+                status="wishlist",
+                source="auto",
+                cover_letter_id=cover_letter_id,
+            )
+            session.add(job_app)
+            session.commit()
+            logger.info(
+                "Auto-created tracker entry for user=%s company=%r role=%r",
+                user_id,
+                company,
+                role,
+            )
+    except Exception as exc:
+        logger.warning("_create_tracker_entry_bg failed (non-fatal): %s", exc)
 
 
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
@@ -198,9 +277,17 @@ async def generate_cover_letter_endpoint(
         task_id=task_id,
         status="processing",
     )
+    set_cover_letter_expiry(cover_letter)
     session.add(cover_letter)
     await session.commit()
     await session.refresh(cover_letter)
+
+    audit_logger.emit(
+        "cover_letter.generate",
+        user_id=current_user.id,
+        request=request,
+        metadata={"cover_letter_id": str(cover_letter.id)},
+    )
 
     dispatched = False
     if settings.N8N_ENABLED:
@@ -214,6 +301,7 @@ async def generate_cover_letter_endpoint(
         background_tasks.add_task(
             _run_cover_letter_bg,
             str(cover_letter.id),
+            str(current_user.id),
             resume.raw_text,
             sanitize_text(payload.job_description),
         )
@@ -313,3 +401,158 @@ async def download_cover_letter_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def _run_refine_bg(
+    revision_id: str,
+    cover_letter_id: str,
+    original_text: str,
+    resume_text: str,
+    job_description: str,
+    user_command: str,
+) -> None:
+    from app.services.qa_service import review_cover_letter  # noqa: PLC0415
+
+    logger.info("Background: refining cover letter %s (revision %s)", cover_letter_id, revision_id)
+    try:
+        result = refine_cover_letter(original_text, resume_text, job_description, user_command)
+        refined_text = result["cover_letter"]
+
+        try:
+            verdict = review_cover_letter(
+                cover_letter=refined_text,
+                resume_text=resume_text,
+                job_description=job_description,
+            )
+        except Exception as exc:
+            logger.warning("QA review failed for revision %s: %s", revision_id, exc)
+            verdict = None
+
+        with Session(sync_engine) as session:
+            rev = session.get(CoverLetterRevision, uuid.UUID(revision_id))
+            if rev:
+                rev.generated_text = refined_text
+                if verdict:
+                    rev.qa_score_honesty = verdict.honesty_score
+                    rev.qa_score_tone = verdict.tone_score
+                    rev.set_qa_flags(verdict.flags)
+                session.add(rev)
+                session.commit()
+    except Exception as exc:
+        logger.error(
+            "Refine background task failed for revision %s: %s", revision_id, exc, exc_info=True
+        )
+
+
+@router.post(
+    "/{cover_letter_id}/refine",
+    response_model=CoverLetterRevisionRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@rate_limit("5/minute")
+async def refine_cover_letter_endpoint(
+    request: Request,
+    cover_letter_id: uuid.UUID,
+    payload: CoverLetterRevisionCreate,
+    background_tasks: BackgroundTasks,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    """Queue a targeted refinement of an existing cover letter. Returns the new revision (202)."""
+    cl = await session.get(CoverLetter, cover_letter_id)
+    if not cl or cl.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover letter not found.")
+    if not cl.generated_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cover letter has not been generated yet.",
+        )
+
+    resume = await session.get(Resume, cl.resume_id)
+    if not resume:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
+
+    # Determine next version number
+    from sqlalchemy import func  # noqa: PLC0415
+
+    conn = await session.connection()
+    count_result = await conn.execute(
+        select(func.count()).where(CoverLetterRevision.cover_letter_id == cover_letter_id)
+    )
+    next_version = (count_result.scalar_one() or 0) + 1
+
+    revision = CoverLetterRevision(
+        cover_letter_id=cover_letter_id,
+        version_number=next_version,
+        generated_text=cl.generated_text,  # placeholder until bg task completes
+        user_command=sanitize_text(payload.command),
+    )
+    session.add(revision)
+    await session.commit()
+    await session.refresh(revision)
+
+    background_tasks.add_task(
+        _run_refine_bg,
+        str(revision.id),
+        str(cover_letter_id),
+        cl.generated_text,
+        resume.raw_text,
+        cl.job_description,
+        sanitize_text(payload.command),
+    )
+    return revision
+
+
+@router.get("/{cover_letter_id}/revisions", response_model=list[CoverLetterRevisionRead])
+async def list_revisions(
+    cover_letter_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    """List all refinement revisions for a cover letter, newest first."""
+    cl = await session.get(CoverLetter, cover_letter_id)
+    if not cl or cl.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover letter not found.")
+
+    result = await session.exec(
+        select(CoverLetterRevision)
+        .where(CoverLetterRevision.cover_letter_id == cover_letter_id)
+        .order_by(CoverLetterRevision.version_number.desc())
+    )
+    return result.all()
+
+
+@router.post(
+    "/{cover_letter_id}/revisions/{version_number}/activate",
+    response_model=CoverLetterRead,
+)
+async def activate_revision(
+    cover_letter_id: uuid.UUID,
+    version_number: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+):
+    """Promote a revision to the canonical cover letter text."""
+    cl = await session.get(CoverLetter, cover_letter_id)
+    if not cl or cl.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover letter not found.")
+
+    result = await session.exec(
+        select(CoverLetterRevision).where(
+            CoverLetterRevision.cover_letter_id == cover_letter_id,
+            CoverLetterRevision.version_number == version_number,
+        )
+    )
+    revision = result.first()
+    if not revision:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revision not found.")
+
+    cl.generated_text = revision.generated_text
+    if revision.qa_score_honesty is not None:
+        cl.qa_score_honesty = revision.qa_score_honesty
+        cl.qa_score_tone = revision.qa_score_tone
+        cl.set_qa_flags(revision.get_qa_flags())
+    session.add(cl)
+    await session.commit()
+    await session.refresh(cl)
+    return cl

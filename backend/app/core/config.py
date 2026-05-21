@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     BASE_URL: str = "http://localhost:8000"
     SENTRY_DSN: str = ""
+    ADMIN_SECRET: str = ""  # Required to call /admin/* endpoints; set via SSM in production
 
     @field_validator("SECRET_KEY")
     @classmethod

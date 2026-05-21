@@ -13,7 +13,9 @@ from app.api.v1.deps import get_current_user
 from app.core.db import get_async_session
 from app.models.resume import Resume, ResumeRead, ResumeReadWithText
 from app.models.user import User
+from app.services import audit_logger
 from app.services.file_extractor import extract_text_from_upload
+from app.services.lifecycle import set_resume_expiry
 from app.services.resume_parser import parse_resume
 
 router = APIRouter()
@@ -63,10 +65,10 @@ async def upload_resume(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
-    # parse_resume is sync and LLM-bound — run in thread pool to avoid blocking
     parsed = await asyncio.to_thread(parse_resume, raw_text)
     parsed_json = parsed.model_dump_json()
-    is_first = len(existing) == 0
+    existing_count = len(existing)
+    is_first = existing_count == 0
 
     safe_filename = os.path.basename(file.filename or "resume")[:255]
 
@@ -78,9 +80,16 @@ async def upload_resume(
         parsed_json=parsed_json,
         is_active=is_first,
     )
+    set_resume_expiry(resume, existing_count)
     session.add(resume)
     await session.commit()
     await session.refresh(resume)
+    audit_logger.emit(
+        "resume.upload",
+        user_id=current_user.id,
+        request=None,
+        metadata={"resume_id": str(resume.id)},
+    )
     return resume
 
 

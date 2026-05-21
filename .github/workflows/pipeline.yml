@@ -48,6 +48,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.dev.txt
 
+      - name: Audit Python dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt \
+            --ignore-vuln CVE-2026-41481 \
+            --ignore-vuln CVE-2026-1839
+
       - name: Lint
         run: ruff check backend/
 
