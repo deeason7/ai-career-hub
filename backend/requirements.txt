@@ -38,9 +38,10 @@ sentence-transformers==3.0.1
 # PYSEC-2025-211..218 (transformers Perceiver/model deserialization RCEs):
 #   Require loading an attacker-controlled model file. We only load all-MiniLM-L6-v2
 #   from Hugging Face Hub at startup. No user-controlled model paths.
-# PYSEC-2025-189..197, PYSEC-2025-210 (torch profiler/training code):
-#   Affect torch profiler tuple handler and training-only code paths. This codebase
-#   does inference only and never calls torch.ops.profiler or training APIs.
+# PYSEC-2025-189..197, PYSEC-2025-210, PYSEC-2026-139 (torch profiler/training/pt2 handler):
+#   Affect torch profiler tuple handler, training-only code paths, and pt2 loading handler.
+#   PYSEC-2026-139 (CVE-2026-4538) is local-access-only (AV:L) — requires loading a
+#   malicious local file. This codebase does inference only; no user-controlled model paths.
 # PYSEC-2024-277 / CVE-2024-34997 (joblib NumpyArrayWrapper deserialization):
 #   Disputed by joblib maintainers — only triggered when caching trusted content.
 #   We do not serialize/deserialize joblib caches from untrusted sources.
