@@ -101,7 +101,7 @@ def page_job_tracker() -> None:
     )
     params = {} if filter_status == "All" else {"status_filter": filter_status}
     apps_resp = api("get", "/jobs/", params=params)
-    apps = apps_resp.json() if apps_resp.status_code == 200 else []
+    apps = safe_json(apps_resp, []) if apps_resp.status_code == 200 else []
 
     if not apps:
         st.info("No applications yet. Add one above!")

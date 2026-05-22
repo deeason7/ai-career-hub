@@ -221,16 +221,22 @@ def page_cover_letter() -> None:
                         key=f"txt_{cl['id']}",
                         use_container_width=True,
                     )
-                    pdf_resp = api("get", f"/cover-letters/{cl['id']}/pdf")
-                    if pdf_resp.status_code == 200:
-                        hc2.download_button(
-                            "📄 PDF",
-                            pdf_resp.content,
-                            file_name="cover_letter.pdf",
-                            mime="application/pdf",
-                            key=f"pdf_{cl['id']}",
-                            use_container_width=True,
-                            type="primary",
-                        )
+                    if hc2.button(
+                        "📄 PDF",
+                        key=f"pdf_btn_{cl['id']}",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        pdf_resp = api("get", f"/cover-letters/{cl['id']}/pdf")
+                        if pdf_resp.status_code == 200:
+                            st.download_button(
+                                "⬇ Save PDF",
+                                pdf_resp.content,
+                                file_name="cover_letter.pdf",
+                                mime="application/pdf",
+                                key=f"pdf_save_{cl['id']}",
+                            )
+                        else:
+                            show_error("Could not generate PDF.")
     else:
         st.info("No cover letters generated yet.")

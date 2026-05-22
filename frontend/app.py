@@ -20,10 +20,25 @@ st.set_page_config(
     page_title="AI Career Hub",
     page_icon="🚀",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 cookie_manager = CookieController()
+
+# CookieController is a headless JS bridge — hide its iframe placeholder and
+# the yellow "trouble loading" banner Streamlit shows while it hydrates.
+st.html(
+    "<style>"
+    "[data-testid='stCustomComponentV1'] {"
+    "  display:none !important;"
+    "  height:0 !important;"
+    "  min-height:0 !important;"
+    "  margin:0 !important;"
+    "  padding:0 !important;"
+    "  overflow:hidden !important;"
+    "}"
+    "</style>"
+)
 
 # ─── Session State Init ───────────────────────────────────────────────────────
 for key in ["token", "user"]:
@@ -124,7 +139,10 @@ def sidebar():
         if st.button("🚪 Logout"):
             cookie_manager.remove("auth_token")
             try:
-                requests.post(f"{API_URL}/auth/logout", timeout=3)
+                _headers = {}
+                if st.session_state.token:
+                    _headers["Authorization"] = f"Bearer {st.session_state.token}"
+                requests.post(f"{API_URL}/auth/logout", headers=_headers, timeout=3)
             except Exception:
                 pass
             st.session_state.token = None
@@ -135,8 +153,13 @@ def sidebar():
 
 
 # ─── Session Restore from Cookie ────────────────────────────────────────────
+# CookieController.get() raises TypeError when cookies dict is None during
+# the first render before browser JS has hydrated. Guard with try/except.
 if not st.session_state.token:
-    _cookie_token = cookie_manager.get("auth_token")
+    try:
+        _cookie_token = cookie_manager.get("auth_token")
+    except TypeError:
+        _cookie_token = None
     if _cookie_token:
         st.session_state.token = _cookie_token
         _me = safe_json(api("get", "/auth/me"), {})
