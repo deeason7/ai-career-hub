@@ -14,22 +14,31 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
 def get_password_hash(password: str) -> str:
+    """Return a bcrypt hash of the given plaintext password."""
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Return True if plaintext matches the stored bcrypt hash."""
     return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
 def create_access_token(subject: Any, expires_delta: timedelta | None = None) -> str:
+    """Mint a short-lived HS256 access token (default: ACCESS_TOKEN_EXPIRE_MINUTES)."""
     expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "type": "access",
+        "jti": str(uuid.uuid4()),
+    }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_refresh_token(subject: Any) -> str:
+    """Mint a 7-day refresh token with a unique JTI for revocation tracking."""
     expire = datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {
         "exp": expire,
@@ -40,13 +49,17 @@ def create_refresh_token(subject: Any) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
-def verify_token(token: str, token_type: str = "access") -> str | None:
-    """Decode and validate a JWT; return the subject (user ID) or None."""
+def verify_token(token: str, token_type: str = "access") -> tuple[str, str] | None:
+    """Decode and validate a JWT; return (subject, jti) or None."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != token_type:
             return None
-        return payload.get("sub")
+        sub = payload.get("sub")
+        jti = payload.get("jti")
+        if not sub or not jti:
+            return None
+        return sub, jti
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 
@@ -66,25 +79,37 @@ def verify_refresh_token(token: str) -> tuple[str, str] | None:
         return None
 
 
-def _get_redis_client() -> aioredis.Redis | None:
+_redis: aioredis.Redis | None = None
+
+
+def _get_redis() -> aioredis.Redis | None:
+    """Return the module-level Redis client, initialised lazily on first call."""
+    global _redis
+    if _redis is not None:
+        return _redis
     host = os.getenv("REDIS_HOST", "")
     if not host:
         return None
     port = int(os.getenv("REDIS_PORT", "6379"))
     password = os.getenv("REDIS_PASSWORD") or None
-    return aioredis.Redis(host=host, port=port, password=password, db=1, decode_responses=True)
+    auth = f":{password}@" if password else ""
+    _redis = aioredis.from_url(
+        f"redis://{auth}{host}:{port}/1",
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=5,
+    )
+    return _redis
 
 
 async def revoke_token(jti: str, ttl_seconds: int) -> None:
-    client = _get_redis_client()
+    client = _get_redis()
     if client:
-        async with client:
-            await client.setex(f"revoked:{jti}", ttl_seconds, "1")
+        await client.setex(f"revoked:{jti}", ttl_seconds, "1")
 
 
 async def is_token_revoked(jti: str) -> bool:
-    client = _get_redis_client()
+    client = _get_redis()
     if not client:
         return False
-    async with client:
-        return await client.exists(f"revoked:{jti}") == 1
+    return await client.exists(f"revoked:{jti}") == 1

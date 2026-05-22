@@ -4,7 +4,7 @@ import logging
 
 from pydantic import ValidationError
 
-from app.core.utils import _sanitize_jd_for_prompt  # noqa: PLC0415
+from app.core.utils import _sanitize_jd_for_prompt
 
 logger = logging.getLogger(__name__)
 

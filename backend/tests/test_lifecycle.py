@@ -29,7 +29,6 @@ class _CoverLetter:
 
 
 def _mock_session(resume_rows=None, cl_rows=None):
-    """Return a patched Session context manager yielding controlled query results."""
     session = MagicMock()
     session.__enter__ = lambda s: s
     session.__exit__ = MagicMock(return_value=False)

@@ -1,12 +1,4 @@
-"""Tests for n8n webhook callback endpoint.
-
-Tests verify:
-  1. Valid callback with correct secret updates the DB record
-  2. Invalid/missing webhook secret returns 401
-  3. Callback for non-existent cover letter returns 404
-  4. Duplicate callback (already processed) is handled idempotently
-  5. Fallback behavior when n8n is not configured
-"""
+"""Tests for the n8n webhook callback endpoint — auth, validation, and idempotency."""
 
 import uuid
 
@@ -29,8 +21,6 @@ _FAKE_CL_ID = str(uuid.uuid4())
 
 
 class TestWebhookAuth:
-    """Test webhook secret validation."""
-
     @pytest.mark.asyncio
     async def test_missing_secret_returns_422(self, client: AsyncClient):
         """Request without X-Webhook-Secret header is rejected."""
@@ -54,8 +44,6 @@ class TestWebhookAuth:
 
 
 class TestCallbackPayloadValidation:
-    """Test payload validation for the callback endpoint."""
-
     @pytest.mark.asyncio
     async def test_rejects_empty_generated_text(self, client: AsyncClient):
         """Payload with generated_text too short is rejected."""

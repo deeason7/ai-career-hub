@@ -1,17 +1,4 @@
-"""Add lifecycle fields to resumes and cover_letters tables.
-
-Revision ID: 007_add_lifecycle_fields
-Revises: 006_add_cover_letter_revisions
-Create Date: 2026-05-16
-
-Resumes: is_permanent, expires_at
-  - Most recent resume per user is marked permanent on upload.
-  - Older resumes receive expires_at = upload_time + 15 days.
-
-Cover letters: expires_at
-  - Cover letters expire 15 days after creation unless their
-    linked resume is permanent.
-"""
+"""Add lifecycle fields (is_permanent, expires_at) to resumes and cover_letters."""
 
 import sqlalchemy as sa
 from alembic import op
