@@ -1,16 +1,10 @@
-"""
-Resume Parser Service
-
-Extracts structured information from raw resume text using an LLM.
-Auto-detects: uses Groq (free cloud API) if GROQ_API_KEY is set, otherwise falls back to Ollama (local).
-All heavy imports are lazy so this module is importable without langchain installed.
-"""
+"""Parse resume text into structured data using the active LLM backend."""
 
 import json
 import logging
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +19,16 @@ class ParsedResume(BaseModel):
     linkedin_url: str | None = None
     github_url: str | None = None
     summary: str | None = None
-    skills: list[str] = []
-    programming_languages: list[str] = []
-    frameworks: list[str] = []
-    tools: list[str] = []
-    experience: list[dict] = []  # [{title, company, duration, description}]
-    education: list[dict] = []  # [{degree, institution, year, gpa}]
-    certifications: list[str] = []
-    projects: list[dict] = []  # [{name, description, tech_stack}]
+    skills: list[str] = Field(default_factory=list)
+    programming_languages: list[str] = Field(default_factory=list)
+    frameworks: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+    experience: list[dict] = Field(
+        default_factory=list
+    )  # [{title, company, duration, description}]
+    education: list[dict] = Field(default_factory=list)  # [{degree, institution, year, gpa}]
+    certifications: list[str] = Field(default_factory=list)
+    projects: list[dict] = Field(default_factory=list)  # [{name, description, tech_stack}]
 
 
 _PARSE_PROMPT_TEMPLATE = """You are an expert resume parser. Extract structured information from the resume text below.
@@ -64,10 +60,6 @@ JSON Output:"""
 
 
 def _build_llm():
-    """
-    Build the LLM client based on available configuration.
-    Priority: Groq (free cloud) > Ollama (local)
-    """
     from app.core.config import settings  # noqa: PLC0415
 
     if settings.USE_GROQ:
@@ -90,10 +82,6 @@ def _build_llm():
 
 
 def parse_resume(raw_text: str) -> ParsedResume:
-    """
-    Parse a resume using LLM (Groq or Ollama) and return a validated ParsedResume.
-    Falls back to an empty ParsedResume on any error.
-    """
     from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
 
     try:

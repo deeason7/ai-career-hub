@@ -23,11 +23,18 @@ router = APIRouter()
 MAX_RESUMES_PER_USER = 10
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
-ALLOWED_MIME_TYPES = {
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
-}
+_PDF_MAGIC = b"%PDF"
+_ZIP_MAGIC = b"PK\x03\x04"  # DOCX is an Open XML ZIP archive
+
+
+def _is_allowed_file_type(content: bytes) -> bool:
+    """Validate file type from magic bytes — client Content-Type is untrusted."""
+    if content[:4] == _PDF_MAGIC:
+        return True
+    if content[:4] == _ZIP_MAGIC:
+        return True
+    # TXT: no null bytes in the first 512 bytes indicates printable text.
+    return b"\x00" not in content[:512]
 
 
 @router.post("/upload", response_model=ResumeRead, status_code=status.HTTP_201_CREATED)
@@ -46,18 +53,20 @@ async def upload_resume(
             detail=f"Maximum of {MAX_RESUMES_PER_USER} resumes per user. Delete one first.",
         )
 
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Unsupported file type. Please upload a PDF, DOCX, or TXT file.",
-        )
-
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="File too large. Maximum size is 5 MB.",
         )
+
+    # Validate actual file bytes — client-supplied Content-Type is untrusted.
+    if not _is_allowed_file_type(contents):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Unsupported file type. Please upload a PDF, DOCX, or TXT file.",
+        )
+
     await file.seek(0)
 
     try:

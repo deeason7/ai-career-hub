@@ -1,9 +1,4 @@
-"""
-ATS Scorer — hybrid semantic + keyword + structure scoring.
-
-Weights: 50% semantic similarity, 30% keyword match, 20% structure heuristics.
-Falls back to 80/20 keyword/structure if the embedding model fails to load.
-"""
+"""Hybrid ATS scorer: 50% semantic similarity, 30% keyword match, 20% structure heuristics."""
 
 import logging
 import re
@@ -21,11 +16,6 @@ MODEL_NAME = "all-MiniLM-L6-v2"
 
 @lru_cache(maxsize=1)
 def _get_model() -> Any:
-    """Load model once and reuse across requests (lru_cache = singleton).
-
-    Import is inside this function so torch only loads on first ATS request,
-    not at app startup. The lru_cache ensures it's loaded at most once.
-    """
     from sentence_transformers import SentenceTransformer  # lazy import
 
     logger.info("Loading sentence-transformers model: %s", MODEL_NAME)
@@ -167,15 +157,7 @@ def _cosine_similarity(a: Any, b: Any) -> float:
 
 
 def _score_semantic(resume_text: str, jd_text: str) -> tuple[float, dict]:
-    """
-    Compute semantic similarity between resume and JD using dense embeddings.
-
-    Also computes section-level scores by extracting named sections from the
-    resume and comparing each against the full JD — tells the user which
-    sections are well-aligned and which need work.
-
-    Returns: (overall_score 0-100, section_scores dict)
-    """
+    """Return (overall_semantic_score 0-100, per-section score dict)."""
     model = _get_model()
 
     # Overall similarity
@@ -288,14 +270,6 @@ def _score_structure(resume_text: str) -> tuple[float, list[str]]:
 
 
 def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
-    """
-    Full ATS score — hybrid semantic + keyword + structure.
-
-    Scoring weights:
-        Semantic similarity   50%  (sentence-transformers, catches synonyms)
-        Keyword match         30%  (exact recall, what literal ATS systems check)
-        Structure heuristics  20%  (section presence, length)
-    """
     try:
         semantic_score, section_scores = _score_semantic(resume_text, job_description)
     except Exception as exc:

@@ -136,7 +136,6 @@ def _run_cover_letter_bg(
                     MAX_QA_RETRIES,
                 )
 
-        # Persist result
         with Session(sync_engine) as session:
             cl = session.get(CoverLetter, uuid.UUID(cover_letter_id))
             if cl:
@@ -484,7 +483,7 @@ async def refine_cover_letter_endpoint(
     revision = CoverLetterRevision(
         cover_letter_id=cover_letter_id,
         version_number=next_version,
-        generated_text=cl.generated_text,  # placeholder until bg task completes
+        generated_text=cl.generated_text,
         user_command=sanitize_text(payload.command),
     )
     session.add(revision)

@@ -1,11 +1,4 @@
-"""Integration tests for the AI-as-a-Judge QA service.
-
-Tests real LLM calls against Ollama (local) to verify that:
-  1. Honest cover letters score high on honesty
-  2. Hallucinated cover letters score low and get flagged
-  3. The passes_qa threshold logic works correctly
-  4. QA review handles edge cases gracefully
-"""
+"""Integration tests for the AI-as-a-Judge QA service (LLM calls, xfail without Groq)."""
 
 import os
 

@@ -6,6 +6,7 @@ Authenticated via X-Webhook-Secret header (shared secret, not JWT).
 
 import logging
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -56,13 +57,8 @@ def _verify_webhook_secret(x_webhook_secret: str = Header(...)) -> str:
 async def n8n_cover_letter_callback(
     cover_letter_id: uuid.UUID,
     payload: N8nCallbackPayload,
-    session: AsyncSession = Depends(get_async_session),
-):
-    """Receive cover letter results from n8n workflow.
-
-    Authenticated via X-Webhook-Secret header (shared secret, not JWT).
-    Updates the CoverLetter record in the database with generated text and QA scores.
-    """
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict:
     cl = await session.get(CoverLetter, cover_letter_id)
     if not cl:
         raise HTTPException(
