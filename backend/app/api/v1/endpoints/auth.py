@@ -144,6 +144,7 @@ async def logout(
     response: Response,
     refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
 ):
+    """Revoke the refresh token and clear the HttpOnly cookie."""
     if refresh_token:
         token_data = verify_refresh_token(refresh_token)
         if token_data:

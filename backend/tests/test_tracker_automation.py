@@ -78,7 +78,6 @@ def test_extract_instructor_returns_fallback_on_empty_fields():
 
 
 def _make_session_mock(existing_app=None):
-    """Return a sync Session mock that exec().first() returns existing_app."""
     session = MagicMock()
     session.__enter__ = lambda s: s
     session.__exit__ = MagicMock(return_value=False)

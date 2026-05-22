@@ -1,7 +1,4 @@
-"""
-File Extractor Service
-Extracts plain text from PDF, DOCX, and TXT files uploaded by users.
-"""
+"""Extract plain text from PDF, DOCX, and TXT uploads."""
 
 import io
 import logging
@@ -12,11 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_text_from_upload(file: UploadFile) -> str:
-    """
-    Extract text from an uploaded file.
-    Supports: PDF (.pdf), DOCX (.docx), plain text (.txt)
-    Raises ValueError for unsupported formats.
-    """
+    """Return plain text extracted from a PDF, DOCX, or TXT upload. Raises ValueError for other types."""
     content = await file.read()
     filename = (file.filename or "").lower()
 

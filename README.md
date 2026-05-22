@@ -26,6 +26,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Multi-Resume Management** | Upload, store, and switch between up to 10 resumes per user (PDF, DOCX, TXT — 5 MB max) |
 | **Semantic ATS Scorer** | `sentence-transformers` dense vector similarity + keyword matching + structure heuristics — catches synonym matches that keyword-only ATS systems miss |
 | **AI Cover Letter Generator** | Structured LLM generation grounded strictly in resume facts — no hallucinations |
+| **Cover Letter Refinement** | Apply targeted edit commands to any generated letter; full revision history with one-click rollback |
 | **AI-as-a-Judge QA** | Second LLM pass scores every cover letter for honesty (1–10) and tone (1–10) — auto-regenerates up to 2× if honesty score falls below threshold |
 | **Structured LLM Output** | All LLM responses return Pydantic v2-validated JSON via `instructor` — no regex parsing, deterministic contracts |
 | **Workflow Orchestration** | Event-driven cover letter pipeline via n8n Cloud webhooks — graceful fallback to local `BackgroundTasks` |
@@ -35,6 +36,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Interview Question Generator** | 10 tailored questions generated from your resume and the job description |
 | **Application Tracker** | Full pipeline tracking with deadline management and urgency indicators |
 | **Auto-Tracker** | Cover letter generation automatically creates a wishlist tracker entry — no manual logging required |
+| **Document Lifecycle** | 15-day TTL on resumes and cover letters with expiry badges; nightly cleanup via `/admin/lifecycle/run` |
 
 ---
 
@@ -91,23 +93,25 @@ Upload your resume, score it against job descriptions, generate honest cover let
 |---|---|
 | **Authentication** | JWT (PyJWT, HS256) with `is_active` check on every protected request |
 | **Session Management** | Short-lived access tokens + HttpOnly refresh cookie — inaccessible to JavaScript |
-| **Rate Limiting** | `slowapi` — registration: 5/min · login: 10/min · AI endpoints: 20/min · cover letters: 5/min |
+| **Rate Limiting** | `slowapi` — registration: 3/min · login: 5/min · refresh: 20/min · AI endpoints: 20/min · cover letters: 5/min · fetch-job: 10/min |
 | **Password Hashing** | `bcrypt` — minimum 8 characters enforced at model level |
 | **CORS** | Restricted to known origins — no wildcard `*` with credentials |
 | **File Uploads** | 5 MB limit · MIME type allowlist (PDF/DOCX/TXT) · filename sanitisation |
+| **SSRF Protection** | Job URL import enforces `AnyHttpUrl` (http/https only) — blocks `file://`, `ftp://`, and AWS IMDS endpoint |
 | **Security Headers** | `X-Content-Type-Options` · `X-Frame-Options: DENY` · `Referrer-Policy` · `Permissions-Policy` |
 | **HSTS** | Enabled in production — 1-year max-age, includeSubDomains |
 | **API Documentation** | Hidden when `PRODUCTION=true` |
 | **Input Validation** | All request payloads validated by Pydantic v2 — field-level length constraints |
 | **Error Monitoring** | Sentry SDK with PII disabled (`send_default_pii=False`) |
 | **LLM Output Validation** | `instructor` enforces Pydantic v2 contracts — retries up to 3× on validation failure |
+| **Prompt Injection Guard** | Job descriptions stripped of fenced code blocks and role-injection tokens before any LLM call |
 | **Webhook Auth** | n8n callback endpoint authenticated via shared secret header |
 | **IAM Least Privilege** | Custom scoped policies — no wildcards, no unused permissions |
 | **EC2 IMDS** | IMDSv2 required — instance metadata not accessible via SSRF |
 | **Secrets Management** | AWS SSM Parameter Store — SecureString for all sensitive values |
 | **Audit Logs** | CloudWatch 30-day retention on all container logs |
 | **Cost Controls** | Daily budget alerting + Lambda auto-stop at spend threshold |
-| **Dependency Scanning** | Dependabot configured for weekly pip + monthly GitHub Actions updates |
+| **Dependency Scanning** | `pip-audit` in CI + Dependabot for weekly pip + monthly GitHub Actions updates |
 
 ---
 
@@ -136,7 +140,74 @@ Upload your resume, score it against job descriptions, generate honest cover let
 
 ---
 
-## Quick Start (Local Development)
+## API Routes
+
+| Method | Path | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| POST | `/api/v1/auth/register` | — | 3/min | Create account |
+| POST | `/api/v1/auth/login` | — | 5/min | JWT + refresh cookie |
+| POST | `/api/v1/auth/refresh` | Cookie | 20/min | Renew access token |
+| POST | `/api/v1/auth/logout` | Cookie | — | Revoke refresh token |
+| GET | `/api/v1/auth/me` | JWT | — | Current user profile |
+| POST | `/api/v1/resumes/upload` | JWT | — | Upload resume (PDF/DOCX/TXT) |
+| GET | `/api/v1/resumes/` | JWT | — | List resumes |
+| GET | `/api/v1/resumes/{id}` | JWT | — | Get resume with raw text |
+| PUT | `/api/v1/resumes/{id}/activate` | JWT | — | Set active resume |
+| DELETE | `/api/v1/resumes/{id}` | JWT | — | Delete resume |
+| GET | `/api/v1/resumes/{id}/analysis` | JWT | — | Structured parsed analysis |
+| POST | `/api/v1/cover-letters/generate` | JWT | 5/min | Dispatch generation (async 202) |
+| GET | `/api/v1/cover-letters/` | JWT | — | List cover letters |
+| GET | `/api/v1/cover-letters/task/{task_id}` | JWT | — | Poll generation status |
+| GET | `/api/v1/cover-letters/{id}` | JWT | — | Get cover letter |
+| GET | `/api/v1/cover-letters/{id}/pdf` | JWT | — | Download PDF |
+| POST | `/api/v1/cover-letters/{id}/refine` | JWT | 5/min | Queue targeted refinement (202) |
+| GET | `/api/v1/cover-letters/{id}/revisions` | JWT | — | List revision history |
+| POST | `/api/v1/cover-letters/{id}/revisions/{v}/activate` | JWT | — | Promote revision to canonical |
+| POST | `/api/v1/ai/ats-score` | JWT | 20/min | ATS score against JD |
+| POST | `/api/v1/ai/skill-gap` | JWT | 20/min | Skill gap analysis |
+| POST | `/api/v1/ai/interview-questions` | JWT | 20/min | Generate interview questions |
+| POST | `/api/v1/ai/fetch-job` | JWT | 10/min | Fetch JD from URL |
+| POST | `/api/v1/analysis/job-match` | JWT | 20/min | ATS + skill gap + interview in one call |
+| GET | `/api/v1/tracker/` | JWT | — | List job applications |
+| POST | `/api/v1/tracker/` | JWT | — | Create application |
+| GET | `/api/v1/tracker/stats` | JWT | — | Breakdown by status |
+| PATCH | `/api/v1/tracker/{id}` | JWT | — | Update application fields |
+| DELETE | `/api/v1/tracker/{id}` | JWT | — | Delete application |
+| POST | `/api/v1/admin/lifecycle/run` | Secret header | — | Trigger document cleanup |
+| PUT | `/api/v1/webhooks/n8n/cover-letters/{id}/callback` | Webhook secret | — | n8n result callback |
+| GET | `/health` | — | — | Liveness check |
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POSTGRES_SERVER` | ✅ | — | DB host (Docker: `db`) |
+| `POSTGRES_USER` | ✅ | — | DB username |
+| `POSTGRES_PASSWORD` | ✅ | — | DB password |
+| `POSTGRES_DB` | ✅ | — | Database name |
+| `POSTGRES_PORT` | — | `5432` | DB port |
+| `SECRET_KEY` | ✅ | — | JWT signing key (min 32 chars) |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | — | `60` | Access token lifetime |
+| `REDIS_HOST` | — | `redis` | Redis host (blank = in-memory) |
+| `REDIS_PORT` | — | `6379` | Redis port |
+| `REDIS_PASSWORD` | — | `""` | Redis auth password |
+| `GROQ_API_KEY` | — | `""` | Groq API key — takes priority over Ollama when set |
+| `GROQ_LLM_MODEL` | — | `llama-3.1-8b-instant` | Groq model ID |
+| `OLLAMA_BASE_URL` | — | `http://ollama:11434` | Ollama endpoint (local dev) |
+| `OLLAMA_LLM_MODEL` | — | `llama3.2:3b` | Ollama LLM model |
+| `OLLAMA_EMBED_MODEL` | — | `nomic-embed-text` | Ollama embedding model |
+| `N8N_WEBHOOK_URL` | — | `""` | n8n Cloud trigger URL |
+| `N8N_WEBHOOK_SECRET` | — | `""` | Shared secret for n8n callbacks |
+| `ALLOWED_ORIGINS` | — | `http://localhost:8501` | Comma-separated CORS origins |
+| `BASE_URL` | — | `http://localhost:8000` | Public API base URL (used in n8n callbacks) |
+| `PRODUCTION` | — | `false` | Set `true` to hide `/docs` and enable HSTS |
+| `TESTING` | — | `false` | Set `true` in CI to disable rate limiting |
+| `SENTRY_DSN` | — | `""` | Sentry project DSN (opt-in) |
+| `ADMIN_SECRET` | — | `""` | Required to call `/admin/*` endpoints |
+
+---
 
 ### Prerequisites
 
@@ -259,10 +330,12 @@ Off-Hours:
 
 ## Release History
 
-### v4.0.0 — OWASP Hardening, Auto-Tracker & Modular Frontend
+### v4.0.0 — OWASP Hardening, Auto-Tracker, Refinement System & Modular Frontend
 - 15-day document lifecycle management with expiry badges and nightly cleanup (F1)
 - Application tracker auto-populated from cover letter generation via LLM metadata extraction (F4)
+- Cover letter refinement system: targeted edit commands, full revision history, one-click rollback (F4)
 - OWASP A03/A07/A09 hardening: prompt injection sanitization, rate limiting, audit logging with SHA-256 IP hashing (F5)
+- SSRF protection: `AnyHttpUrl` enforcement on job URL import endpoint (F5)
 - Dependency scanning via `pip-audit` in CI (F5)
 - Streamlit frontend refactored from a 1235-line monolith into a modular `pages/` architecture (F6)
 - Dark mode toggle, toast notifications, shared `components.py` utility layer (F6)

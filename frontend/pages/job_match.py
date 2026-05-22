@@ -8,7 +8,6 @@ from api_client import api, detail, safe_json
 from components import job_url_import, show_error
 
 
-
 def page_job_match() -> None:
     st.title("🎯 Job Match Analysis")
     st.markdown(
@@ -25,14 +24,17 @@ def page_job_match() -> None:
         (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
     )
     selected_name = st.selectbox(
-        "Resume", list(resume_options.keys()),
+        "Resume",
+        list(resume_options.keys()),
         index=list(resume_options.keys()).index(active),
     )
     selected_id = resume_options[selected_name]
 
     prefilled_jd = job_url_import("job_match")
     jd = st.text_area(
-        "Job Description", value=prefilled_jd, height=260,
+        "Job Description",
+        value=prefilled_jd,
+        height=260,
         placeholder="Paste the full job posting here, or import from URL above.",
     )
 
@@ -40,8 +42,14 @@ def page_job_match() -> None:
         if not jd.strip():
             show_error("Please paste a job description.")
             return
-        with st.spinner("Running ATS scoring, skill gap analysis, and interview prep in parallel…"):
-            resp = api("post", "/analysis/job-match", json={"resume_id": selected_id, "job_description": jd})
+        with st.spinner(
+            "Running ATS scoring, skill gap analysis, and interview prep in parallel…"
+        ):
+            resp = api(
+                "post",
+                "/analysis/job-match",
+                json={"resume_id": selected_id, "job_description": jd},
+            )
 
         if resp.status_code == 429:
             show_error("Too many requests. Please wait 1 minute and try again.")
@@ -58,7 +66,9 @@ def page_job_match() -> None:
         skill_gap = data.get("skill_gap", {})
         questions = data.get("interview_questions", [])
 
-        tab_ats, tab_gap, tab_interview = st.tabs(["🎯 ATS Score", "🔍 Skill Gap", "🎙️ Interview Prep"])
+        tab_ats, tab_gap, tab_interview = st.tabs(
+            ["🎯 ATS Score", "🔍 Skill Gap", "🎙️ Interview Prep"]
+        )
 
         with tab_ats:
             score = ats.get("score", 0)
@@ -67,24 +77,49 @@ def page_job_match() -> None:
             struct_score = ats.get("structure_score", 0)
             color = "🟢" if score >= 70 else "🟡" if score >= 45 else "🔴"
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric(f"{color} ATS Score", f"{score}%", help="Composite: 50% semantic + 30% keyword + 20% structure")
-            c2.metric("🧠 Semantic Match", f"{sem_score}%", help="Sentence-transformer cosine similarity — catches synonyms")
-            c3.metric("🔑 Keywords", f"{kw_score}%", help="Exact + bigram keyword overlap")
-            c4.metric("📐 Structure", f"{struct_score}%", help="Section presence and resume length")
+            c1.metric(
+                f"{color} ATS Score",
+                f"{score}%",
+                help="Composite: 50% semantic + 30% keyword + 20% structure",
+            )
+            c2.metric(
+                "🧠 Semantic Match",
+                f"{sem_score}%",
+                help="Sentence-transformer cosine similarity — catches synonyms",
+            )
+            c3.metric(
+                "🔑 Keywords", f"{kw_score}%", help="Exact + bigram keyword overlap"
+            )
+            c4.metric(
+                "📐 Structure",
+                f"{struct_score}%",
+                help="Section presence and resume length",
+            )
             st.progress(int(score) / 100)
             if sem_score >= 70:
-                st.success("🧠 High semantic alignment — your resume language closely matches the JD.")
+                st.success(
+                    "🧠 High semantic alignment — your resume language closely matches the JD."
+                )
             elif sem_score >= 45:
-                st.warning("🧠 Moderate semantic alignment — consider mirroring more of the JD's phrasing.")
+                st.warning(
+                    "🧠 Moderate semantic alignment — consider mirroring more of the JD's phrasing."
+                )
             elif sem_score > 0:
-                st.error("🧠 Low semantic alignment — your resume may not address what this role requires.")
+                st.error(
+                    "🧠 Low semantic alignment — your resume may not address what this role requires."
+                )
             section_scores = ats.get("section_scores", {})
             if section_scores:
                 st.subheader("📊 Section Alignment with JD")
                 sec_cols = st.columns(len(section_scores))
                 for col, (sec, sec_score) in zip(sec_cols, section_scores.items()):
-                    sec_color = "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
-                    col.metric(f"{sec_color} {sec.title()}", f"{sec_score}%" if sec_score > 0 else "—")
+                    sec_color = (
+                        "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
+                    )
+                    col.metric(
+                        f"{sec_color} {sec.title()}",
+                        f"{sec_score}%" if sec_score > 0 else "—",
+                    )
             st.divider()
             col_l, col_r = st.columns(2)
             with col_l:
@@ -161,4 +196,6 @@ def page_job_match() -> None:
                 for i, q in enumerate(questions, 1):
                     st.markdown(f"**{i}.** {q}")
             else:
-                st.info("No interview questions generated. Try again with a more detailed JD.")
+                st.info(
+                    "No interview questions generated. Try again with a more detailed JD."
+                )

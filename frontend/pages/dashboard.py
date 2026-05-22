@@ -3,7 +3,6 @@
 import streamlit as st
 
 from api_client import api, safe_json
-from components import show_error, show_success
 
 
 def page_dashboard() -> None:
@@ -33,7 +32,7 @@ def page_dashboard() -> None:
             "wishlist": "⭐",
             "applied": "📨",
             "phone_screen": "📞",
-            "interview": "🎤",
+            "interview": "🎯",
             "offer": "🎉",
             "rejected": "❌",
             "accepted": "✅",
