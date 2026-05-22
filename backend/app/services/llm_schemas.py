@@ -48,8 +48,6 @@ class SkillRecommendation(BaseModel):
 class SkillGapResult(BaseModel):
     """Skill gap analysis output."""
 
-    missing_skills: list[str] = Field(default_factory=list)
-    priority_gaps: list[str] = Field(default_factory=list)
     recommendations: list[SkillRecommendation] = Field(default_factory=list)
 
 

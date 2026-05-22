@@ -13,6 +13,7 @@ feature/*  <- new features
 fix/*      <- bug fixes
 chore/*    <- maintenance (deps, docs, config)
 security/* <- security hardening
+docs/*     <- documentation-only changes
 ```
 
 **Flow:**
@@ -75,6 +76,11 @@ docker compose run --rm backend pytest backend/tests/ -v
 ```
 
 Tests run against a real PostgreSQL container (defined in `docker-compose.yml`).
+
+> `TESTING=true` is set automatically in CI — it disables rate limiting so
+> slowapi doesn't interfere with test assertions. Do **not** set it in
+> production.
+
 
 ### Run linter
 ```bash

@@ -1,7 +1,4 @@
-"""
-Real integration tests for the ATS Scorer service.
-No mocks — tests the actual algorithmic scoring logic.
-"""
+"""Integration tests for the ATS scorer — real algorithmic scoring, no mocks."""
 
 from app.services.ats_scorer import ATSResult, calculate_ats_score
 

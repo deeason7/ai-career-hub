@@ -52,7 +52,10 @@ def page_cover_letter() -> None:
             )
         if resp.status_code != 202:
             show_error(
-                detail(resp, f"API error (HTTP {resp.status_code}). Is the backend running?")
+                detail(
+                    resp,
+                    f"API error (HTTP {resp.status_code}). Is the backend running?",
+                )
             )
             return
 
@@ -76,12 +79,26 @@ def page_cover_letter() -> None:
                 cover_text = cl_detail.get("generated_text", "")
                 show_success("Cover letter generated!")
                 st.session_state["active_cl_id"] = cl_id
-                st.text_area("📝 Your Cover Letter", cover_text, height=450, key="cl_generated")
+                st.text_area(
+                    "📝 Your Cover Letter", cover_text, height=450, key="cl_generated"
+                )
                 dl1, dl2 = st.columns(2)
-                dl1.download_button("⬇ Download TXT", cover_text, file_name="cover_letter.txt", use_container_width=True)
+                dl1.download_button(
+                    "⬇ Download TXT",
+                    cover_text,
+                    file_name="cover_letter.txt",
+                    use_container_width=True,
+                )
                 pdf_resp = api("get", f"/cover-letters/{cl_id}/pdf")
                 if pdf_resp.status_code == 200:
-                    dl2.download_button("📄 Download PDF", pdf_resp.content, file_name="cover_letter.pdf", mime="application/pdf", use_container_width=True, type="primary")
+                    dl2.download_button(
+                        "📄 Download PDF",
+                        pdf_resp.content,
+                        file_name="cover_letter.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary",
+                    )
                 break
             elif status == "FAILURE":
                 show_error("Task failed. Check the backend worker logs.")
@@ -94,7 +111,9 @@ def page_cover_letter() -> None:
     if active_cl_id:
         st.divider()
         st.subheader("✏️ Refine This Cover Letter")
-        st.caption("Give a specific edit instruction. The AI applies only the change you request.")
+        st.caption(
+            "Give a specific edit instruction. The AI applies only the change you request."
+        )
         command = st.text_input(
             "Refinement command",
             placeholder="e.g. 'Make the opening paragraph more confident'",
@@ -105,25 +124,56 @@ def page_cover_letter() -> None:
                 show_error("Enter an instruction first.")
             else:
                 with st.spinner("Applying refinement…"):
-                    resp = api("post", f"/cover-letters/{active_cl_id}/refine", json={"command": command.strip()})
+                    resp = api(
+                        "post",
+                        f"/cover-letters/{active_cl_id}/refine",
+                        json={"command": command.strip()},
+                    )
                 if resp.status_code == 202:
-                    show_success("Refinement queued — check the version history below in a few seconds.")
+                    show_success(
+                        "Refinement queued — check the version history below in a few seconds."
+                    )
                     st.rerun()
                 else:
                     show_error(detail(resp, "Refinement failed."))
 
-        revisions = safe_json(api("get", f"/cover-letters/{active_cl_id}/revisions"), [])
+        revisions = safe_json(
+            api("get", f"/cover-letters/{active_cl_id}/revisions"), []
+        )
         if isinstance(revisions, list) and revisions:
-            st.subheader(f"📋 Version History ({len(revisions)} revision{'s' if len(revisions) != 1 else ''})")
+            st.subheader(
+                f"📋 Version History ({len(revisions)} revision{'s' if len(revisions) != 1 else ''})"
+            )
             for rev in revisions:
                 v = rev["version_number"]
-                cmd_label = rev["user_command"][:60] + ("…" if len(rev["user_command"]) > 60 else "")
-                with st.expander(f"v{v} — \"{cmd_label}\"  |  {rev['created_at'][:10]}"):
-                    st.text_area("Revised text", rev["generated_text"], height=300, key=f"rev_text_{rev['id']}")
+                cmd_label = rev["user_command"][:60] + (
+                    "…" if len(rev["user_command"]) > 60 else ""
+                )
+                with st.expander(f'v{v} — "{cmd_label}"  |  {rev["created_at"][:10]}'):
+                    st.text_area(
+                        "Revised text",
+                        rev["generated_text"],
+                        height=300,
+                        key=f"rev_text_{rev['id']}",
+                    )
                     rc1, rc2 = st.columns(2)
-                    rc1.download_button("⬇ TXT", rev["generated_text"], file_name=f"cover_letter_v{v}.txt", key=f"rev_dl_{rev['id']}", use_container_width=True)
-                    if rc2.button("⭐ Activate this version", key=f"activate_rev_{rev['id']}", use_container_width=True, type="primary"):
-                        act_resp = api("post", f"/cover-letters/{active_cl_id}/revisions/{v}/activate")
+                    rc1.download_button(
+                        "⬇ TXT",
+                        rev["generated_text"],
+                        file_name=f"cover_letter_v{v}.txt",
+                        key=f"rev_dl_{rev['id']}",
+                        use_container_width=True,
+                    )
+                    if rc2.button(
+                        "⭐ Activate this version",
+                        key=f"activate_rev_{rev['id']}",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        act_resp = api(
+                            "post",
+                            f"/cover-letters/{active_cl_id}/revisions/{v}/activate",
+                        )
                         if act_resp.status_code == 200:
                             show_success(f"v{v} is now the active cover letter.")
                             st.rerun()
@@ -138,7 +188,9 @@ def page_cover_letter() -> None:
             cl_expiry_tag = ""
             if cl.get("expires_at"):
                 try:
-                    exp = datetime.fromisoformat(cl["expires_at"].replace("Z", "+00:00"))
+                    exp = datetime.fromisoformat(
+                        cl["expires_at"].replace("Z", "+00:00")
+                    )
                     days_left = (exp - datetime.now(UTC)).days
                     if days_left < 0:
                         cl_expiry_tag = "  🔴 expired"
@@ -151,16 +203,34 @@ def page_cover_letter() -> None:
                 except (ValueError, AttributeError):
                     pass
             status_label = cl.get("status", "")
-            with st.expander(f"Cover Letter — {cl['created_at'][:10]}{cl_expiry_tag} | Status: `{status_label}`"):
+            with st.expander(
+                f"Cover Letter — {cl['created_at'][:10]}{cl_expiry_tag} | Status: `{status_label}`"
+            ):
                 if cl.get("generated_text"):
-                    st.text_area("", cl["generated_text"], height=250, key=f"hist_{cl['id']}")
+                    st.text_area(
+                        "", cl["generated_text"], height=250, key=f"hist_{cl['id']}"
+                    )
                     if st.button("✏️ Refine this letter", key=f"load_refine_{cl['id']}"):
                         st.session_state["active_cl_id"] = cl["id"]
                         st.rerun()
                     hc1, hc2 = st.columns(2)
-                    hc1.download_button("⬇ TXT", cl["generated_text"], file_name="cover_letter.txt", key=f"txt_{cl['id']}", use_container_width=True)
+                    hc1.download_button(
+                        "⬇ TXT",
+                        cl["generated_text"],
+                        file_name="cover_letter.txt",
+                        key=f"txt_{cl['id']}",
+                        use_container_width=True,
+                    )
                     pdf_resp = api("get", f"/cover-letters/{cl['id']}/pdf")
                     if pdf_resp.status_code == 200:
-                        hc2.download_button("📄 PDF", pdf_resp.content, file_name="cover_letter.pdf", mime="application/pdf", key=f"pdf_{cl['id']}", use_container_width=True, type="primary")
+                        hc2.download_button(
+                            "📄 PDF",
+                            pdf_resp.content,
+                            file_name="cover_letter.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_{cl['id']}",
+                            use_container_width=True,
+                            type="primary",
+                        )
     else:
         st.info("No cover letters generated yet.")

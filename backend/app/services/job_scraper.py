@@ -1,10 +1,4 @@
-"""Job description scraper.
-
-Fetches job postings from public URLs and extracts the job description text.
-Supports LinkedIn, Greenhouse, Lever, Workday, and generic job boards.
-LinkedIn increasingly requires login for full pages; the scraper returns
-whatever it can extract and signals partial results.
-"""
+"""Fetch job postings from public URLs and extract the job description text."""
 
 import json
 import re
@@ -36,7 +30,6 @@ def _extract_json_ld(soup: BeautifulSoup) -> str | None:
     for tag in soup.find_all("script", type="application/ld+json"):
         try:
             data = json.loads(tag.string or "")
-            # Handle both single object and list
             items = data if isinstance(data, list) else [data]
             for item in items:
                 if item.get("@type") in ("JobPosting", "jobPosting"):
@@ -51,7 +44,6 @@ def _extract_json_ld(soup: BeautifulSoup) -> str | None:
                     if company:
                         parts.append(f"Company: {company}")
                     if desc:
-                        # Strip HTML tags inside the description
                         clean = BeautifulSoup(desc, "html.parser").get_text(separator="\n")
                         parts.append(clean)
                     if parts:
@@ -176,7 +168,7 @@ async def fetch_job_description(url: str) -> dict:
 
     if not text or len(text.strip()) < 50:
         raise JobFetchError(
-            "Could not extract job description from this URL. " "Please paste the text manually."
+            "Could not extract job description from this URL. Please paste the text manually."
         )
 
     # Normalize whitespace

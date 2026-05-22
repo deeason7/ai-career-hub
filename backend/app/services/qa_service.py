@@ -1,9 +1,4 @@
-"""AI-as-a-Judge QA Service.
-
-After cover letter generation, this service runs a second LLM pass with a
-"Reviewer" persona that scores the letter against the original resume for
-honesty (are claims traceable?) and tone (professional, not sycophantic?).
-"""
+"""AI-as-a-Judge QA service — second-pass honesty and tone review for cover letters."""
 
 import logging
 
@@ -64,19 +59,6 @@ def review_cover_letter(
     resume_text: str,
     job_description: str,
 ) -> QAVerdict:
-    """Run the AI reviewer on a generated cover letter.
-
-    Args:
-        cover_letter: The generated cover letter text to review.
-        resume_text: The original resume text (source of truth).
-        job_description: The JD the letter was tailored to.
-
-    Returns:
-        QAVerdict with honesty/tone scores, flags, and reasoning.
-
-    Raises:
-        ValidationError: If the reviewer LLM can't produce valid structured output.
-    """
     user_prompt = _REVIEWER_USER_TEMPLATE.format(
         resume_text=resume_text[:4000],
         cover_letter=cover_letter,
@@ -101,5 +83,4 @@ def review_cover_letter(
 
 
 def passes_qa(verdict: QAVerdict) -> bool:
-    """Check if a cover letter passes the honesty threshold."""
     return verdict.honesty_score >= HALLUCINATION_THRESHOLD

@@ -1,9 +1,4 @@
-"""Tests for LLM output schemas (Pydantic v2 validation contracts).
-
-Verifies that the schemas enforce the constraints we rely on to prevent
-bad LLM output from reaching the database or frontend.  No LLM calls —
-these are pure unit tests on the Pydantic models.
-"""
+"""Unit tests for LLM output schemas — Pydantic validation contracts, no LLM calls."""
 
 import pytest
 from pydantic import ValidationError
@@ -100,18 +95,12 @@ class TestSkillGapResult:
             resource="CKA on Linux Foundation",
             timeline="6 weeks",
         )
-        result = SkillGapResult(
-            missing_skills=["Kubernetes", "Terraform"],
-            priority_gaps=["Kubernetes"],
-            recommendations=[rec],
-        )
-        assert len(result.missing_skills) == 2
+        result = SkillGapResult(recommendations=[rec])
+        assert len(result.recommendations) == 1
         assert result.recommendations[0].skill == "Kubernetes"
 
     def test_empty_defaults(self):
         result = SkillGapResult()
-        assert result.missing_skills == []
-        assert result.priority_gaps == []
         assert result.recommendations == []
 
 

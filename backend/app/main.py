@@ -36,11 +36,7 @@ if settings.PRODUCTION and not settings.ADMIN_SECRET:
 
 
 async def _run_migrations_when_db_ready() -> None:
-    """Wait for the DB to accept connections, then run alembic upgrade head.
-
-    Runs as a background task so uvicorn starts immediately without waiting
-    for RDS. Retries every 5s for up to 10 minutes.
-    """
+    """Wait for the DB then run alembic upgrade head; retries every 5s for up to 10 min."""
     from alembic import command as alembic_command
     from alembic.config import Config as AlembicConfig
     from sqlalchemy import text
@@ -111,8 +107,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
@@ -157,15 +153,8 @@ async def add_security_headers(request: Request, call_next) -> Response:
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     if settings.PRODUCTION:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Streamlit requires 'unsafe-inline' for scripts and styles.
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none';"
-    )
+    # The backend is a pure JSON API — no HTML, scripts, or styles served.
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
     return response
 
 

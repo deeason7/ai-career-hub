@@ -23,11 +23,35 @@ router = APIRouter()
 MAX_RESUMES_PER_USER = 10
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
-ALLOWED_MIME_TYPES = {
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "text/plain",
-}
+_PDF_MAGIC = b"%PDF"
+_ZIP_MAGIC = b"PK\x03\x04"  # DOCX is an Open XML ZIP archive
+
+# Known binary magic sequences that must be rejected even if they contain no null bytes.
+_BINARY_SIGNATURES = (
+    b"\x89PNG",  # PNG
+    b"\xff\xd8",  # JPEG
+    b"GIF8",  # GIF
+    b"MZ",  # PE/EXE (Windows executable)
+    b"\x7fELF",  # ELF binary (Linux executable)
+    b"BM",  # BMP
+    b"\x1f\x8b",  # gzip
+    b"Rar!",  # RAR
+)
+
+
+def _is_allowed_file_type(content: bytes) -> bool:
+    """Validate file type from magic bytes — client Content-Type is untrusted."""
+    head = content[:8]
+    if head[:4] == _PDF_MAGIC:
+        return True
+    if head[:4] == _ZIP_MAGIC:
+        return True
+    # Reject known binary signatures before the text heuristic.
+    if any(head.startswith(sig) for sig in _BINARY_SIGNATURES):
+        return False
+    # TXT: no null bytes and no high-byte sequences in the first 512 bytes.
+    sample = content[:512]
+    return b"\x00" not in sample and not any(b > 127 for b in sample)
 
 
 @router.post("/upload", response_model=ResumeRead, status_code=status.HTTP_201_CREATED)
@@ -46,18 +70,20 @@ async def upload_resume(
             detail=f"Maximum of {MAX_RESUMES_PER_USER} resumes per user. Delete one first.",
         )
 
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Unsupported file type. Please upload a PDF, DOCX, or TXT file.",
-        )
-
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="File too large. Maximum size is 5 MB.",
         )
+
+    # Validate actual file bytes — client-supplied Content-Type is untrusted.
+    if not _is_allowed_file_type(contents):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Unsupported file type. Please upload a PDF, DOCX, or TXT file.",
+        )
+
     await file.seek(0)
 
     try:

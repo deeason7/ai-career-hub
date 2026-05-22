@@ -55,8 +55,17 @@ Please include:
 
 ### Rate Limiting
 - Redis-backed rate limiting on all authenticated and auth endpoints
-- `/auth/login`: 5 requests/minute per IP (OWASP A07)
 - `/auth/register`: 3 requests/minute per IP
+- `/auth/login`: 5 requests/minute per IP (OWASP A07)
+- `/auth/refresh`: 20 requests/minute per IP
+- AI endpoints (`/ai/*`, `/analysis/*`): 20 requests/minute per IP
+- `/cover-letters/generate`, `/cover-letters/{id}/refine`: 5 requests/minute per IP
+- `/ai/fetch-job`: 10 requests/minute per IP (external scraping throttle)
+
+### SSRF Mitigation
+- Job URL import (`POST /ai/fetch-job`) validates the URL with Pydantic's `AnyHttpUrl` field, enforcing `http` or `https` schemes only
+- Blocks `file://`, `ftp://`, and requests to private ranges such as the AWS EC2 IMDS endpoint (`169.254.169.254`)
+- IMDSv2 is enforced at the EC2 instance level — even if a request reaches the metadata service, it requires a session token that is not accessible from inside the app containers
 
 ### Input Validation
 - All user-submitted text sanitized before persistence and LLM prompt injection
@@ -71,7 +80,8 @@ Please include:
 - Sensitive actions logged: `auth.login`, `resume.upload`, `cover_letter.generate`
 - Raw IP addresses are **never stored** — only SHA-256 hashes
 - No PII (email, name, resume content) in audit metadata
-- Audit log stored in `audit_logs` PostgreSQL table
+- Audit log stored in `audit_logs` PostgreSQL table with fields: `id`, `user_id`, `event`, `ip_hash`, `event_metadata` (JSON), `created_at`
+- CloudWatch log retention: 30 days
 
 ### Dependency Scanning
 - `pip-audit` runs on every CI build against `requirements.txt`

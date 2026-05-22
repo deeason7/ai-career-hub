@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Career Hub"
-    VERSION: str = "3.0.0"
+    VERSION: str = "4.0.0"
     API_V1_STR: str = "/api/v1"
     PRODUCTION: bool = False  # Set to True via env var in production to hide /docs
 
@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     def validate_secret_key(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters")
+        return v
+
+    @field_validator("ADMIN_SECRET")
+    @classmethod
+    def validate_admin_secret(cls, v: str) -> str:
+        if v and len(v) < 32:
+            raise ValueError("ADMIN_SECRET must be at least 32 characters or left empty to disable")
         return v
 
     # CORS — comma-separated list of allowed origins.
