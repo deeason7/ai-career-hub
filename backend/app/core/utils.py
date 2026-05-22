@@ -13,11 +13,7 @@ _INJECTION_TOKENS = re.compile(
 
 
 def sanitize_text(text: str) -> str:
-    """Strip HTML tags, null bytes, control characters, and collapse whitespace.
-
-    Applied to all user-supplied free-text fields (job descriptions, commands)
-    before they are stored in the database or passed to an LLM prompt.
-    """
+    """Strip HTML tags, null bytes, control characters, and collapse whitespace."""
     text = re.sub(r"<[^>]+>", " ", text)
     text = _CONTROL_CHARS.sub("", text)
     return re.sub(r"\s+", " ", text).strip()

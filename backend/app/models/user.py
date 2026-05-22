@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -9,6 +10,8 @@ if TYPE_CHECKING:
     from app.models.cover_letter import CoverLetter
     from app.models.job_application import JobApplication
     from app.models.resume import Resume
+
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 
 class UserBase(SQLModel):
@@ -41,6 +44,21 @@ class User(UserBase, table=True):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8, description="Minimum 8 characters")
+
+    @classmethod
+    def __get_validators__(cls):
+        yield from super().__get_validators__()
+
+    def model_post_init(self, __context) -> None:  # noqa: ANN001
+        if not _EMAIL_RE.match(self.email):
+            raise ValueError(f"Invalid email address: {self.email!r}")
+        pwd = self.password
+        if not any(c.isdigit() for c in pwd):
+            raise ValueError("Password must contain at least one digit.")
+        if not any(not c.islower() for c in pwd):
+            raise ValueError("Password must contain at least one uppercase letter or symbol.")
+        if pwd.lower() == self.email.lower():
+            raise ValueError("Password must not match your email address.")
 
 
 class UserRead(UserBase):
