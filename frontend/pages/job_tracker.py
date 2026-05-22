@@ -15,13 +15,21 @@ STATUS_EMOJIS = {
     "accepted": "✅",
 }
 
-_STATUS_ORDER = ["wishlist", "applied", "phone_screen", "interview", "offer", "accepted"]
+_STATUS_ORDER = [
+    "wishlist",
+    "applied",
+    "phone_screen",
+    "interview",
+    "offer",
+    "accepted",
+]
 
 
 def _deadline_badge(deadline_str: str | None) -> str:
     if not deadline_str:
         return ""
     from datetime import date
+
     try:
         dl = date.fromisoformat(deadline_str)
     except ValueError:
@@ -61,10 +69,14 @@ def page_job_tracker() -> None:
             notes = st.text_area("Notes", height=80)
             if st.form_submit_button("Add Application", type="primary"):
                 resp = api(
-                    "post", "/jobs/",
+                    "post",
+                    "/jobs/",
                     json={
-                        "company": company, "role": role, "status": status,
-                        "job_url": job_url or None, "notes": notes or None,
+                        "company": company,
+                        "role": role,
+                        "status": status,
+                        "job_url": job_url or None,
+                        "notes": notes or None,
                         "deadline": deadline.isoformat() if deadline else None,
                     },
                 )
@@ -79,10 +91,14 @@ def page_job_tracker() -> None:
         st.subheader(f"📈 Pipeline — {stats['total']} Applications")
         cols = st.columns(7)
         for col, (s, count) in zip(cols, stats["by_status"].items()):
-            col.metric(f"{STATUS_EMOJIS.get(s, '')} {s.replace('_', ' ').title()}", count)
+            col.metric(
+                f"{STATUS_EMOJIS.get(s, '')} {s.replace('_', ' ').title()}", count
+            )
 
     st.divider()
-    filter_status = st.selectbox("Filter by Status", ["All"] + list(STATUS_EMOJIS.keys()))
+    filter_status = st.selectbox(
+        "Filter by Status", ["All"] + list(STATUS_EMOJIS.keys())
+    )
     params = {} if filter_status == "All" else {"status_filter": filter_status}
     apps_resp = api("get", "/jobs/", params=params)
     apps = apps_resp.json() if apps_resp.status_code == 200 else []
@@ -105,7 +121,9 @@ def page_job_tracker() -> None:
                     st.caption("🤖 Auto-created when your cover letter was generated.")
                 st.markdown(f"**Applied:** {app.get('applied_at', 'N/A')}")
                 if app.get("deadline"):
-                    st.markdown(f"**Deadline:** `{app['deadline']}`{_deadline_badge(app['deadline'])}")
+                    st.markdown(
+                        f"**Deadline:** `{app['deadline']}`{_deadline_badge(app['deadline'])}"
+                    )
                 if app.get("job_url"):
                     st.markdown(f"**URL:** [{app['job_url']}]({app['job_url']})")
                 if app.get("cover_letter_id"):
@@ -123,12 +141,15 @@ def page_job_tracker() -> None:
                         st.rerun()
             with col2:
                 new_status = st.selectbox(
-                    "Update Status", list(STATUS_EMOJIS.keys()),
+                    "Update Status",
+                    list(STATUS_EMOJIS.keys()),
                     index=list(STATUS_EMOJIS.keys()).index(app["status"]),
                     key=f"status_{app['id']}",
                 )
                 new_deadline = st.date_input(
-                    "Deadline", value=None, key=f"dl_{app['id']}",
+                    "Deadline",
+                    value=None,
+                    key=f"dl_{app['id']}",
                     help="Leave empty to keep existing deadline",
                 )
                 if st.button("Save", key=f"save_{app['id']}"):

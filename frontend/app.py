@@ -4,8 +4,8 @@ Thin routing layer — all page logic lives in pages/.
 """
 
 import requests
-import extra_streamlit_components as stx
 import streamlit as st
+from streamlit_cookies_controller import CookieController
 
 from api_client import API_URL, api, safe_json
 from auth import page_auth
@@ -23,9 +23,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Cookie manager — must be instantiated at module level (not in cache).
-# Streamlit cannot replay widget calls from cache → CachedWidgetWarning crash.
-cookie_manager = stx.CookieManager(key="careerhub_session")
+cookie_manager = CookieController()
 
 # ─── Session State Init ───────────────────────────────────────────────────────
 for key in ["token", "user"]:
@@ -59,7 +57,7 @@ def show_disclaimer_modal():
     The author accepts no liability for outcomes arising from your use of this tool.
 
     🔒 **Your Data**
-    Resume text is stored in a hosted database (Supabase). AI requests are sent
+    Resume text is stored in a hosted database (AWS RDS PostgreSQL). AI requests are sent
     to Groq's API. Do **not** upload documents with passport numbers, government
     IDs, or financial details.
 
@@ -124,7 +122,7 @@ def sidebar():
 
         st.divider()
         if st.button("🚪 Logout"):
-            cookie_manager.delete("auth_token")
+            cookie_manager.remove("auth_token")
             try:
                 requests.post(f"{API_URL}/auth/logout", timeout=3)
             except Exception:
@@ -145,7 +143,7 @@ if not st.session_state.token:
         if _me and _me.get("email"):
             st.session_state.user = _me
         else:
-            cookie_manager.delete("auth_token")
+            cookie_manager.remove("auth_token")
             st.session_state.token = None
 
 # ─── Page Routing ────────────────────────────────────────────────────────────

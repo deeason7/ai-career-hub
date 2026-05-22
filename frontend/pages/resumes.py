@@ -16,14 +16,18 @@ def page_resumes() -> None:
                 "Resume Label (e.g. 'ML Engineer Resume')",
                 placeholder="ML Engineer 2026",
             )
-            file = st.file_uploader("File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
+            file = st.file_uploader(
+                "File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"]
+            )
             if st.form_submit_button("Upload & Parse", type="primary"):
                 if not label.strip():
                     show_error("Please provide a label.")
                 elif not file:
                     show_error("Please select a file.")
                 else:
-                    with loading_spinner("Extracting text and parsing resume with AI..."):
+                    with loading_spinner(
+                        "Extracting text and parsing resume with AI..."
+                    ):
                         resp = api(
                             "post",
                             "/resumes/upload",
@@ -49,7 +53,9 @@ def page_resumes() -> None:
     st.subheader(f"Your Resumes ({len(resumes)})")
     for r in resumes:
         active_tag = "🟢 **ACTIVE**" if r["is_active"] else "⚪ inactive"
-        lifecycle_tag = lifecycle_badge(r.get("expires_at"), r.get("is_permanent", False))
+        lifecycle_tag = lifecycle_badge(
+            r.get("expires_at"), r.get("is_permanent", False)
+        )
 
         with st.expander(
             f"{active_tag}{lifecycle_tag} — {r['name']}  |  `{r['original_filename']}`"
@@ -57,9 +63,12 @@ def page_resumes() -> None:
             col1, col2, col3 = st.columns(3)
             if not r["is_active"]:
                 if col1.button("✅ Set as Active", key=f"activate_{r['id']}"):
-                    api("put", f"/resumes/{r['id']}/activate")
-                    show_success(f"'{r['name']}' is now your active resume.")
-                    st.rerun()
+                    resp = api("put", f"/resumes/{r['id']}/activate")
+                    if resp.status_code == 200:
+                        show_success(f"'{r['name']}' is now your active resume.")
+                        st.rerun()
+                    else:
+                        show_error(detail(resp, "Could not activate resume."))
             if col2.button("🔍 View Analysis", key=f"analysis_{r['id']}"):
                 analysis_resp = api("get", f"/resumes/{r['id']}/analysis")
                 if analysis_resp.status_code == 200:
@@ -67,6 +76,9 @@ def page_resumes() -> None:
                 else:
                     show_error("No analysis available.")
             if col3.button("🗑️ Delete", key=f"delete_{r['id']}"):
-                api("delete", f"/resumes/{r['id']}")
-                show_success("Deleted.")
-                st.rerun()
+                resp = api("delete", f"/resumes/{r['id']}")
+                if resp.status_code == 204:
+                    show_success("Deleted.")
+                    st.rerun()
+                else:
+                    show_error(detail(resp, "Could not delete resume."))

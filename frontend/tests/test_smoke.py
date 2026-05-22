@@ -5,22 +5,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-def _mock_st():
-    """Return a minimal streamlit mock so imports don't need a running Streamlit."""
-    return MagicMock()
-
-
 @pytest.fixture(autouse=True)
 def mock_streamlit(monkeypatch):
-    """Patch streamlit before any module-level st.* calls fire."""
-    st_mock = _mock_st()
-    monkeypatch.setattr("streamlit.session_state", {"token": None, "user": None}, raising=False)
-    return st_mock
+    monkeypatch.setattr(
+        "streamlit.session_state", {"token": None, "user": None}, raising=False
+    )
+    monkeypatch.setattr(
+        "streamlit_cookies_controller.CookieController", MagicMock, raising=False
+    )
 
 
 class TestModuleImports:
-    """All page modules and shared utilities must be importable without a Streamlit runtime."""
-
     def test_api_client_imports(self):
         with patch.dict("os.environ", {"API_URL": "http://localhost:8000/api/v1"}):
             from api_client import API_URL, api, detail, safe_json  # noqa: F401
