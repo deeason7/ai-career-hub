@@ -88,7 +88,10 @@ All parameters under `/portfolio/careerhub/`. The EC2 instance role has read-onl
 /portfolio/careerhub/GROQ_API_KEY          (SecureString)
 /portfolio/careerhub/ALLOWED_ORIGINS
 /portfolio/careerhub/PRODUCTION
+/portfolio/careerhub/ADMIN_SECRET          (SecureString — required for /admin/* lifecycle endpoints)
 /portfolio/careerhub/SENTRY_DSN            (optional)
+/portfolio/careerhub/N8N_WEBHOOK_URL       (optional)
+/portfolio/careerhub/N8N_WEBHOOK_SECRET    (SecureString, optional)
 ```
 
 ### DNS
@@ -212,6 +215,24 @@ bash infra/scripts/setup-business-hours.sh --remove
 ```
 
 **Cost impact:** ~$7.50/month for business hours only vs ~$27/month for 24/7.
+
+---
+
+## Document Lifecycle Cleanup
+
+Expired resumes and cover letters (15-day TTL) are deleted by calling the admin endpoint. Wire this to EC2 cron for nightly cleanup:
+
+```bash
+# Run on EC2 as ubuntu — add to crontab with: crontab -e
+# Runs at 2 AM UTC every day
+0 2 * * * curl -s -X POST http://localhost:8000/api/v1/admin/lifecycle/run \
+  -H "X-Admin-Secret: $ADMIN_SECRET" \
+  >> /var/log/lifecycle-cleanup.log 2>&1
+```
+
+The endpoint returns `{"status": "ok", "deleted_resumes": N, "deleted_cover_letters": N}`. All output is also written to CloudWatch via the container's `awslogs` driver.
+
+> `ADMIN_SECRET` must be set in SSM and pulled into `.env.prod` at deploy time. If it is not set, all `/admin/*` requests will return 403.
 
 ---
 
