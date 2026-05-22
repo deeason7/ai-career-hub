@@ -1,7 +1,5 @@
 """Auth page — login and register tabs."""
 
-from datetime import datetime, timedelta
-
 import requests
 import streamlit as st
 
@@ -10,7 +8,6 @@ from components import show_error, show_success
 
 
 def page_auth(cookie_manager) -> None:
-    """Render the login/register page. Receives cookie_manager from app.py."""
     st.title("🚀 AI Career Hub")
     st.markdown(
         "An AI-powered platform for job seekers — multi-resume management, "
@@ -36,7 +33,7 @@ def page_auth(cookie_manager) -> None:
                     cookie_manager.set(
                         "auth_token",
                         st.session_state.token,
-                        expires_at=datetime.now() + timedelta(hours=1),
+                        max_age=3600,
                     )
                     me = safe_json(api("get", "/auth/me"), {})
                     st.session_state.user = me
@@ -48,7 +45,9 @@ def page_auth(cookie_manager) -> None:
                         "Please wait **~30 seconds** and try again."
                     )
                 elif resp.status_code == 429:
-                    show_error("Too many login attempts. Please wait 1 minute and try again.")
+                    show_error(
+                        "Too many login attempts. Please wait 1 minute and try again."
+                    )
                 else:
                     show_error(detail(resp, "Login failed."))
 

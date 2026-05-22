@@ -13,6 +13,7 @@ def api(method: str, path: str, **kwargs) -> requests.Response:
     headers = kwargs.pop("headers", {})
     if st.session_state.get("token"):
         headers["Authorization"] = f"Bearer {st.session_state.token}"
+    kwargs.setdefault("timeout", 30)
     return getattr(requests, method)(f"{API_URL}{path}", headers=headers, **kwargs)
 
 
@@ -24,7 +25,9 @@ def safe_json(resp: requests.Response, fallback=None):
         return fallback
 
 
-def detail(resp: requests.Response, default: str = "An unexpected error occurred.") -> str:
+def detail(
+    resp: requests.Response, default: str = "An unexpected error occurred."
+) -> str:
     """Extract error detail string from an error response, safely."""
     data = safe_json(resp, {})
     if isinstance(data, dict):

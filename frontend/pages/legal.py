@@ -7,7 +7,13 @@ def page_legal() -> None:
     st.title("📜 Legal & Info")
 
     tab_use, tab_terms, tab_disclaimer, tab_ai, tab_privacy = st.tabs(
-        ["📖 How to Use", "📄 Terms of Use", "⚠️ Disclaimer", "🤖 AI Notice", "🔒 Privacy"]
+        [
+            "📖 How to Use",
+            "📄 Terms of Use",
+            "⚠️ Disclaimer",
+            "🤖 AI Notice",
+            "🔒 Privacy",
+        ]
     )
 
     with tab_use:

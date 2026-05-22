@@ -28,6 +28,7 @@ def lifecycle_badge(expires_at: str | None, is_permanent: bool = False) -> str:
     if not expires_at:
         return ""
     from datetime import UTC, datetime
+
     try:
         exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
         days_left = (exp - datetime.now(UTC)).days
@@ -49,11 +50,7 @@ def loading_spinner(label: str = "Working…"):
 
 
 def job_url_import(key_prefix: str) -> str:
-    """Collapsible 'Import from URL' expander used on Cover Letter and Job Match pages.
-
-    Returns the fetched job description text, or the previously fetched value
-    stored in session state (empty string if never fetched).
-    """
+    """Render a collapsible 'Import from URL' expander; return the fetched JD text or ''."""
     from api_client import api, detail, safe_json
 
     with st.expander("🔗 Import Job from URL (LinkedIn, Greenhouse, Lever…)"):
@@ -71,11 +68,17 @@ def job_url_import(key_prefix: str) -> str:
                 show_error("Please enter a URL.")
             else:
                 with loading_spinner("Fetching job description…"):
-                    resp = api("post", "/ai/fetch-job", json={"url": job_url_input.strip()})
+                    resp = api(
+                        "post", "/ai/fetch-job", json={"url": job_url_input.strip()}
+                    )
                 data = safe_json(resp, {})
                 if resp.status_code == 200 and data.get("success"):
-                    st.session_state[f"{key_prefix}_prefilled_jd"] = data.get("job_description", "")
-                    show_success("Job description fetched! Scroll down — it's pre-filled below.")
+                    st.session_state[f"{key_prefix}_prefilled_jd"] = data.get(
+                        "job_description", ""
+                    )
+                    show_success(
+                        "Job description fetched! Scroll down — it's pre-filled below."
+                    )
                     if data.get("warning"):
                         st.warning(data["warning"])
                 else:
