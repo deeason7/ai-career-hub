@@ -11,13 +11,10 @@ from collections.abc import Callable
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# When TESTING=true (CI), return a no-op decorator so @limiter.limit()
-# per-endpoint limits don't fire — default_limits doesn't override them.
+# TESTING=true (CI): bypass per-endpoint limits so slowapi doesn't interfere with assertions.
 _testing = os.getenv("TESTING", "false").lower() == "true"
 
-# ── Redis storage URI ──────────────────────────────────────────────────────────
-# Assembled from individual env vars so we don't import the full Settings object
-# here (which would create a circular dependency with config.py).
+# Redis storage URI assembled from env vars to avoid circular import with config.py.
 _redis_host = os.getenv("REDIS_HOST", "")
 _redis_port = os.getenv("REDIS_PORT", "6379")
 _redis_password = os.getenv("REDIS_PASSWORD", "")
