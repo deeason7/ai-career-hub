@@ -21,8 +21,7 @@ class AuditLog(SQLModel, table=True):
     user_id: uuid.UUID | None = Field(default=None, index=True)
     event: str = Field(max_length=100)
     ip_hash: str | None = Field(default=None, max_length=64)
-    # "metadata" is reserved by SQLAlchemy's Declarative API — use "event_metadata"
-    # as the Python attribute; the DB column stays named "metadata" via sa_column.
+    # "metadata" is reserved by SQLAlchemy Declarative API; column aliased to event_metadata.
     event_metadata: str | None = Field(
         default=None, sa_column=Column("metadata", Text(), nullable=True)
     )

@@ -77,7 +77,6 @@ async def upload_resume(
             detail="File too large. Maximum size is 5 MB.",
         )
 
-    # Validate actual file bytes — client-supplied Content-Type is untrusted.
     if not _is_allowed_file_type(contents):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,

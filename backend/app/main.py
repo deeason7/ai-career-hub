@@ -19,12 +19,11 @@ from app.core.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
-# Initialise Sentry — no-op when SENTRY_DSN is empty (local / CI)
 if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
-        traces_sample_rate=0.1,  # 10% of requests get performance traces
-        send_default_pii=False,  # Never send passwords, tokens, or PII
+        traces_sample_rate=0.1,
+        send_default_pii=False,
     )
 
 # Warn at startup if admin endpoint will be permanently locked (misconfiguration guard).
@@ -83,7 +82,6 @@ async def lifespan(app: FastAPI):
     yield
 
 
-# Show docs only in development (hide attack surface in prod)
 _docs_url = "/docs" if not settings.PRODUCTION else None
 _redoc_url = "/redoc" if not settings.PRODUCTION else None
 
@@ -112,9 +110,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
-
-# Return a clean 503 with Retry-After during DB cold-start.
 
 
 @app.exception_handler(OperationalError)

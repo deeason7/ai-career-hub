@@ -20,10 +20,5 @@ def sanitize_text(text: str) -> str:
 
 
 def _sanitize_jd_for_prompt(text: str) -> str:
-    """Strip prompt-injection patterns before JD text enters any LLM call.
-
-    Removes fenced code blocks and role-injection tokens (Human/Assistant/System
-    delimiters, </s>, <|im_start|>) that adversarial job descriptions may embed
-    to hijack the model's instruction context.
-    """
+    """Strip prompt-injection patterns before JD text enters any LLM call."""
     return _INJECTION_TOKENS.sub(" ", text).strip()
