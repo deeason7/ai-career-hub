@@ -7,7 +7,10 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 # Fenced code blocks and role-injection tokens that adversarial JD text may embed.
 _INJECTION_TOKENS = re.compile(
-    r"```.*?```|\nHuman:|\nAssistant:|\nSystem:|</s>|<\|im_start\|>",
+    r"```.*?```"
+    r"|\nHuman:|\nAssistant:|\nSystem:"
+    r"|</s>|<\|im_start\|>|<\|im_end\|>"
+    r"|\[INST\]|\[/INST\]|<<SYS>>|<</SYS>>",
     re.DOTALL | re.IGNORECASE,
 )
 
