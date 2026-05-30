@@ -36,14 +36,13 @@ class User(UserBase, table=True):
         ),
     )
 
-    # Relationships
     resumes: list["Resume"] = Relationship(back_populates="user")
     cover_letters: list["CoverLetter"] = Relationship(back_populates="user")
     job_applications: list["JobApplication"] = Relationship(back_populates="user")
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8, description="Minimum 8 characters")
+    password: str = Field(min_length=12, description="Minimum 12 characters")
 
     @classmethod
     def __get_validators__(cls):
