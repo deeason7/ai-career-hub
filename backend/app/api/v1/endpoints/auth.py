@@ -49,6 +49,7 @@ async def register(
     session.add(user)
     await session.commit()
     await session.refresh(user)
+    audit_logger.emit("auth.register", user_id=user.id, request=request)
     return user
 
 
@@ -64,6 +65,7 @@ async def login(
     result = await session.exec(select(User).where(User.email == form_data.username))
     user = result.first()
     if not user or not verify_password(form_data.password, user.hashed_password):
+        audit_logger.emit("auth.login.failed", request=request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
