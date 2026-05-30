@@ -75,7 +75,7 @@ async def test_register_duplicate_email(client: AsyncClient):
         json={
             "email": "dup@example.com",
             "full_name": "Dup User",
-            "password": "Pass1234!",
+            "password": "Passw0rd1234!",
         },
     )
     response = await client.post(
@@ -83,7 +83,7 @@ async def test_register_duplicate_email(client: AsyncClient):
         json={
             "email": "dup@example.com",
             "full_name": "Another",
-            "password": "Pass5678!",
+            "password": "Passw0rd5678!",
         },
     )
     assert response.status_code == 409
@@ -96,14 +96,14 @@ async def test_login_success(client: AsyncClient):
         json={
             "email": "login_test@example.com",
             "full_name": "Login Test",
-            "password": "Securepass1!",
+            "password": "SecurePass12!",
         },
     )
     response = await client.post(
         "/api/v1/auth/login",
         data={
             "username": "login_test@example.com",
-            "password": "Securepass1!",
+            "password": "SecurePass12!",
         },
     )
     assert response.status_code == 200
@@ -117,14 +117,14 @@ async def test_login_wrong_password(client: AsyncClient):
         json={
             "email": "badpass@example.com",
             "full_name": "Bad Pass",
-            "password": "Rightpass1!",
+            "password": "RightPass12!",
         },
     )
     response = await client.post(
         "/api/v1/auth/login",
         data={
             "username": "badpass@example.com",
-            "password": "Wrongpass1!",
+            "password": "WrongPass12!",
         },
     )
     assert response.status_code == 401
@@ -137,14 +137,14 @@ async def test_get_me_authenticated(client: AsyncClient):
         json={
             "email": "me@example.com",
             "full_name": "Me User",
-            "password": "Mepassword1!",
+            "password": "Mepassword12!",
         },
     )
     login = await client.post(
         "/api/v1/auth/login",
         data={
             "username": "me@example.com",
-            "password": "Mepassword1!",
+            "password": "Mepassword12!",
         },
     )
     token = login.json()["access_token"]
@@ -167,11 +167,11 @@ async def auth_token(client: AsyncClient):
         json={
             "email": email,
             "full_name": "ATS User",
-            "password": "Atspass1!",
+            "password": "AtsPassword1!",
         },
     )
     login = await client.post(
-        "/api/v1/auth/login", data={"username": email, "password": "Atspass1!"}
+        "/api/v1/auth/login", data={"username": email, "password": "AtsPassword1!"}
     )
     return login.json()["access_token"]
 
