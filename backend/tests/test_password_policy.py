@@ -49,7 +49,7 @@ def test_password_with_digit_accepted() -> None:
 
 def test_password_all_lowercase_rejected() -> None:
     with pytest.raises(ValidationError):
-        _make("abcdefghij1!")
+        _make("abcdefghijkl1")  # no uppercase, no symbol
 
 
 def test_password_with_uppercase_accepted() -> None:
