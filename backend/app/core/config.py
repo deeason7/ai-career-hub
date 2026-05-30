@@ -37,28 +37,25 @@ class Settings(BaseSettings):
     # Defaults to the Docker Compose service name; override in non-Docker environments.
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str = ""  # Set when Redis requires auth; empty for local/EC2 Docker Redis
+    REDIS_PASSWORD: str = ""
 
     # AI — Ollama (local dev default)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_LLM_MODEL: str = "llama3.2:3b"
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
 
-    # AI — Groq (free cloud alternative; takes priority over Ollama when set)
-    # Get a free key at: https://console.groq.com
+    # AI — Groq (takes priority over Ollama when set; get a key at console.groq.com)
     GROQ_API_KEY: str = ""
     GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"
 
     @computed_field
     def USE_GROQ(self) -> bool:
-        """True when GROQ_API_KEY is configured — used in cloud deployments."""
+        """True when GROQ_API_KEY is set."""
         return bool(self.GROQ_API_KEY)
 
-    # n8n Workflow Orchestration — replaces in-process BackgroundTasks with
-    # event-driven webhooks when configured. Falls back to local background
-    # tasks when n8n is not available or misconfigured.
-    N8N_WEBHOOK_URL: str = ""  # n8n Cloud webhook trigger URL
-    N8N_WEBHOOK_SECRET: str = ""  # Shared secret for callback auth
+    # n8n workflow orchestration (optional — falls back to local BackgroundTasks)
+    N8N_WEBHOOK_URL: str = ""
+    N8N_WEBHOOK_SECRET: str = ""
 
     @computed_field
     def N8N_ENABLED(self) -> bool:
@@ -86,18 +83,12 @@ class Settings(BaseSettings):
             raise ValueError("ADMIN_SECRET must be at least 32 characters or left empty to disable")
         return v
 
-    # CORS — comma-separated list of allowed origins.
-    # Locally defaults to Streamlit dev server; in production set via env/SSM.
-    # Example: "https://careerhub.deeason.com.np,http://localhost:8501"
+    # comma-separated allowed CORS origins, e.g. "https://careerhub.example.com,http://localhost:8501"
     ALLOWED_ORIGINS: str = "http://localhost:8501"
 
     @computed_field
     def CORS_ORIGINS(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
-
-    # Storage — reserved for future S3 resume file storage.
-    # Uncomment and configure when implementing S3 upload support.
-    # S3_BUCKET: str = ""  # Set in production via env/SSM
 
     model_config = SettingsConfigDict(
         env_file="backend/.env",

@@ -49,6 +49,7 @@ async def register(
     session.add(user)
     await session.commit()
     await session.refresh(user)
+    audit_logger.emit("auth.register", user_id=user.id, request=request)
     return user
 
 
@@ -60,14 +61,11 @@ async def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
-    """Authenticate and return a JWT access token. Rate limited: 5 requests/min per IP.
-
-    Also sets an HttpOnly ``refresh_token`` cookie (7 days) so the frontend
-    can silently renew the 60-min access token via ``POST /auth/refresh``.
-    """
+    """Authenticate and return a JWT access token."""
     result = await session.exec(select(User).where(User.email == form_data.username))
     user = result.first()
     if not user or not verify_password(form_data.password, user.hashed_password):
+        audit_logger.emit("auth.login.failed", request=request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
@@ -79,7 +77,6 @@ async def login(
     access_token = create_access_token(subject=str(user.id))
     refresh_token = create_refresh_token(subject=str(user.id))
 
-    # Store refresh token in an HttpOnly cookie — inaccessible to JavaScript.
     response.set_cookie(
         key=_REFRESH_COOKIE,
         value=refresh_token,
@@ -101,11 +98,7 @@ async def refresh_access_token(
     session: Annotated[AsyncSession, Depends(get_async_session)],
     refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
 ):
-    """Issue a new 60-min access token from a valid 7-day refresh token cookie.
-
-    Rate limited: 20 requests/min per IP.
-    The refresh token must be present in the HttpOnly cookie set by ``/login``.
-    """
+    """Issue a new access token from a valid refresh token cookie."""
     if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -330,6 +330,19 @@ Off-Hours:
 
 ## Release History
 
+### v4.0.2 — AI Trace Removal + Security Hardening
+- Stripped verbose AI-generated comments and multi-line docstrings that restated code across 7 backend files
+- Password minimum raised from 8 to 12 characters
+- Three new security headers: `X-Permitted-Cross-Domain-Policies`, `Cross-Origin-Resource-Policy`, `Cross-Origin-Opener-Policy`
+- Audit log expanded: `auth.register` and `auth.login.failed` events now captured (brute-force detection)
+- Prompt injection regex expanded to cover LLaMA 2 / Mixtral delimiters: `[INST]`, `[/INST]`, `<<SYS>>`, `<</SYS>>`, `<|im_end|>`
+- New test files: `test_security_headers.py`, `test_password_policy.py`
+
+### v4.0.1 — Auth Fix + Branch Sync
+- Fixed `verify_token` tuple unpack in `deps.py` (`AttributeError` in production)
+- Synced `develop` with `main` (was 5 commits behind after v4.0.0)
+- 7 frontend bugs fixed: cookie TypeError crash, sidebar visible to guests, logout token revocation, PDF N+1 requests, 502 crash, register hint, yellow component banner
+
 ### v4.0.0 — OWASP Hardening, Auto-Tracker, Refinement System & Modular Frontend
 - 15-day document lifecycle management with expiry badges and nightly cleanup (F1)
 - Application tracker auto-populated from cover letter generation via LLM metadata extraction (F4)
