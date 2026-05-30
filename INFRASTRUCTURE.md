@@ -1,6 +1,6 @@
 # AI Career Hub — Infrastructure Reference
 
-> Last updated: 2026-05-01 | Platform version: v3.0 | Region: `us-east-1`
+> Last updated: 2026-05-30 | Platform version: v4.0.2 | Region: `us-east-1`
 
 ---
 

@@ -43,6 +43,8 @@ Please include:
 - JWT access tokens (60-minute expiry)
 - Refresh tokens with `jti` UUID claims, blacklisted in Redis on logout
 - `bcrypt` password hashing
+- Minimum password length: 12 characters; requires at least 1 digit and 1 uppercase letter or symbol
+- Password must not match the account email address
 
 ### Transport
 - HTTPS enforced. HTTP → HTTPS redirect at the Nginx layer.
@@ -52,6 +54,17 @@ Please include:
 - All production secrets stored in AWS SSM Parameter Store
 - No secrets committed to the repository
 - CI/CD authenticates via OIDC (no long-lived AWS keys)
+
+### Security Headers
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: geolocation=(), microphone=(), camera=()`
+- `X-Permitted-Cross-Domain-Policies: none`
+- `Cross-Origin-Resource-Policy: same-origin`
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` (backend JSON API — no browser resources served)
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains` (production only)
 
 ### Rate Limiting
 - Redis-backed rate limiting on all authenticated and auth endpoints
@@ -68,20 +81,21 @@ Please include:
 - IMDSv2 is enforced at the EC2 instance level — even if a request reaches the metadata service, it requires a session token that is not accessible from inside the app containers
 
 ### Input Validation
-- All user-submitted text sanitized before persistence and LLM prompt injection
-- Job description inputs are stripped of prompt-injection tokens before entering any LLM
-  call (fenced code blocks, role delimiters such as `\nHuman:`, `\nAssistant:`,
-  `\nSystem:`) (OWASP A03)
-- `sanitize_text()` strips HTML tags, null bytes, and control characters from all
-  user free-text fields before storage
+- All user-submitted text sanitized before persistence and before entering any LLM prompt
+- Job description inputs are stripped of prompt-injection tokens before LLM calls:
+  - Fenced code blocks (` ``` `)
+  - Role delimiters: `\nHuman:`, `\nAssistant:`, `\nSystem:`
+  - ChatML tokens: `<|im_start|>`, `<|im_end|>`, `</s>`
+  - LLaMA 2 / Mixtral instruction wrappers: `[INST]`, `[/INST]`, `<<SYS>>`, `<</SYS>>`
+- `sanitize_text()` strips HTML tags, null bytes, and control characters from all user free-text fields before storage
 - `AnyHttpUrl` validation on job URL fields (blocks SSRF vectors)
 
 ### Audit Logging (OWASP A09)
-- Sensitive actions logged: `auth.login`, `resume.upload`, `cover_letter.generate`
+- Sensitive actions logged: `auth.register`, `auth.login`, `auth.login.failed`, `resume.upload`, `cover_letter.generate`
+- `auth.login.failed` captures IP hash on every failed credential attempt — primary signal for brute-force detection
 - Raw IP addresses are **never stored** — only SHA-256 hashes
 - No PII (email, name, resume content) in audit metadata
-- Audit log stored in `audit_logs` PostgreSQL table with fields: `id`, `user_id`, `event`, `ip_hash`, `event_metadata` (JSON), `created_at`
-- CloudWatch log retention: 30 days
+- Audit log stored in `audit_logs` PostgreSQL table
 
 ### Dependency Scanning
 - `pip-audit` runs on every CI build against `requirements.txt`
