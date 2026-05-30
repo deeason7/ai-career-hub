@@ -57,7 +57,7 @@ def page_auth(cookie_manager) -> None:
             r_email = st.text_input("Email")
             r_password = st.text_input("Password", type="password")
             st.caption(
-                "🔒 Min 8 characters · at least 1 digit · at least 1 uppercase letter or symbol"
+                "🔒 Min 12 characters · at least 1 digit · at least 1 uppercase letter or symbol"
             )
             if st.form_submit_button("Create Account", type="primary"):
                 resp = requests.post(
