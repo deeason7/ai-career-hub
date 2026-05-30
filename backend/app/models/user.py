@@ -54,7 +54,7 @@ class UserCreate(UserBase):
         pwd = self.password
         if not any(c.isdigit() for c in pwd):
             raise ValueError("Password must contain at least one digit.")
-        if not any(not c.islower() for c in pwd):
+        if not any(c.isupper() or not c.isalnum() for c in pwd):
             raise ValueError("Password must contain at least one uppercase letter or symbol.")
         if pwd.lower() == self.email.lower():
             raise ValueError("Password must not match your email address.")
