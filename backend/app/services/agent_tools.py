@@ -298,7 +298,10 @@ def tool_write_cover_letter(state: dict) -> dict:
 
     start = time.perf_counter()
     try:
-        result = generate_cover_letter(state["resume_text"], state["job_description"])
+        user_id = state.get("user_id")
+        result = generate_cover_letter(
+            state["resume_text"], state["job_description"], user_id=user_id
+        )
         elapsed = int((time.perf_counter() - start) * 1000)
         letter = result.get("cover_letter", "")
         logger.info("write_cover_letter: %d chars in %dms", len(letter), elapsed)
