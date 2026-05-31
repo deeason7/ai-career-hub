@@ -4,7 +4,17 @@ import os
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy import update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -39,6 +49,34 @@ _BINARY_SIGNATURES = (
 )
 
 
+def _embed_resume_bg(user_id: uuid.UUID, resume_id: uuid.UUID, raw_text: str) -> None:
+    """Index resume text into ChromaDB (non-blocking background task)."""
+    import logging  # noqa: PLC0415
+
+    from app.services.embedding_service import embed_document  # noqa: PLC0415
+
+    logger = logging.getLogger(__name__)
+    try:
+        chunks = embed_document(user_id, "resume", resume_id, raw_text)
+        logger.info("Embedded resume %s: %d chunks", str(resume_id)[:8], chunks)
+    except Exception as exc:
+        logger.warning("Resume embedding failed (non-fatal): %s", exc)
+
+
+def _delete_embeddings_bg(user_id: uuid.UUID, resume_id: uuid.UUID) -> None:
+    """Remove resume embeddings from ChromaDB."""
+    import logging  # noqa: PLC0415
+
+    from app.services.embedding_service import delete_embeddings  # noqa: PLC0415
+
+    logger = logging.getLogger(__name__)
+    try:
+        count = delete_embeddings(user_id, resume_id)
+        logger.info("Deleted %d embedding chunks for resume %s", count, str(resume_id)[:8])
+    except Exception as exc:
+        logger.warning("Embedding deletion failed (non-fatal): %s", exc)
+
+
 def _is_allowed_file_type(content: bytes) -> bool:
     """Validate file type from magic bytes — client Content-Type is untrusted."""
     head = content[:8]
@@ -58,6 +96,7 @@ def _is_allowed_file_type(content: bytes) -> bool:
 async def upload_resume(
     name: Annotated[str, Form(max_length=100)],
     file: Annotated[UploadFile, File()],
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
@@ -115,6 +154,7 @@ async def upload_resume(
         request=None,
         metadata={"resume_id": str(resume.id)},
     )
+    background_tasks.add_task(_embed_resume_bg, current_user.id, resume.id, raw_text)
     return resume
 
 
@@ -179,6 +219,7 @@ async def delete_resume(
     resume = await session.get(Resume, resume_id)
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
+    _delete_embeddings_bg(current_user.id, resume_id)
     await session.delete(resume)
     await session.commit()
 
