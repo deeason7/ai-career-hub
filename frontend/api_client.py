@@ -28,8 +28,26 @@ def safe_json(resp: requests.Response, fallback=None):
 def detail(
     resp: requests.Response, default: str = "An unexpected error occurred."
 ) -> str:
-    """Extract error detail string from an error response, safely."""
+    """Extract a human-readable error string from an API error response.
+
+    Handles both FastAPI's standard {"detail": "string"} and Pydantic 422
+    validation errors where detail is a list of dicts. Never returns raw
+    input data (which may contain passwords).
+    """
     data = safe_json(resp, {})
     if isinstance(data, dict):
-        return data.get("detail", default)
+        d = data.get("detail", default)
+        if isinstance(d, list):
+            msgs = []
+            for err in d:
+                if isinstance(err, dict) and "msg" in err:
+                    msg = err["msg"]
+                    # Strip Pydantic's "Value error, " prefix for cleaner display.
+                    if msg.startswith("Value error, "):
+                        msg = msg[len("Value error, "):]
+                    msgs.append(msg)
+            return "; ".join(msgs) if msgs else default
+        if isinstance(d, str):
+            return d
+        return default
     return f"API error (HTTP {resp.status_code})"
