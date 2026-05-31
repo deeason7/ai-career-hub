@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     admin,
+    agent,
     ai_tools,
     analysis,
     auth,
@@ -20,3 +21,4 @@ api_router.include_router(analysis.router, prefix="/analysis", tags=["Analysis"]
 api_router.include_router(job_tracker.router, prefix="/jobs", tags=["Job Tracker"])
 api_router.include_router(n8n_webhook.router, prefix="/webhooks/n8n", tags=["n8n Webhooks"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
+api_router.include_router(agent.router, prefix="/agent", tags=["Agent"])
