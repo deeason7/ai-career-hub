@@ -26,17 +26,22 @@ st.set_page_config(
 
 cookie_manager = CookieController()
 
-# CookieController is a headless JS bridge — hide its iframe placeholder and
-# the yellow "trouble loading" banner Streamlit shows while it hydrates.
+# CookieController renders an invisible JS bridge iframe. Hide it and any
+# wrapper elements that Streamlit creates around it (the "trouble loading"
+# yellow banner, empty div placeholders, and the st.html container itself).
 st.html(
     "<style>"
-    "[data-testid='stCustomComponentV1'] {"
+    "iframe[title='streamlit_cookies_controller.CookieController'],"
+    "[data-testid='stCustomComponentV1'],"
+    "[data-testid='stCustomComponentV1'] ~ div,"
+    ".element-container:has(iframe[title*='CookieController']) {"
     "  display:none !important;"
     "  height:0 !important;"
     "  min-height:0 !important;"
     "  margin:0 !important;"
     "  padding:0 !important;"
     "  overflow:hidden !important;"
+    "  position:absolute !important;"
     "}"
     "</style>"
 )
@@ -173,6 +178,15 @@ if not st.session_state.token:
 
 # ─── Page Routing ────────────────────────────────────────────────────────────
 if not st.session_state.token:
+    # Hide the sidebar collapse toggle — no sidebar content for unauthenticated users.
+    st.html(
+        "<style>"
+        "[data-testid='stSidebar'],"
+        "[data-testid='collapsedControl'] {"
+        "  display:none !important;"
+        "}"
+        "</style>"
+    )
     page_auth(cookie_manager)
 else:
     if (
