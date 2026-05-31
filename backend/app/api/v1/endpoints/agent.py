@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.api.v1.deps import get_current_user
-from app.core.db import engine
+from app.core.db import sync_engine
 from app.models.resume import Resume
 from app.models.user import User
 
@@ -31,7 +31,7 @@ class AgentResponse(BaseModel):
 
 def _get_resume_text(resume_id: uuid.UUID, user_id: uuid.UUID) -> str:
     """Fetch resume text from DB, verifying ownership."""
-    with Session(engine) as session:
+    with Session(sync_engine) as session:
         resume = session.exec(
             select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
         ).first()
