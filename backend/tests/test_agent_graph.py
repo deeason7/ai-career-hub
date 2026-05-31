@@ -3,6 +3,9 @@
 from unittest.mock import MagicMock, patch
 
 # --- Tool wrapper tests ---
+# All tools use lazy imports inside each function body, so we patch at the
+# SOURCE module rather than at agent_tools (where the names don't exist as
+# module-level attributes).
 
 
 class TestToolScrapeJob:
@@ -16,11 +19,14 @@ class TestToolScrapeJob:
             "warning": None,
         }
 
-        with patch("app.services.agent_tools.fetch_job_description", return_value=mock_result):
-            with patch("app.services.agent_tools.asyncio") as mock_asyncio:
+        with patch("app.services.job_scraper.fetch_job_description"):
+            # fetch_job_description is async — tool_scrape_job calls it via
+            # asyncio.get_event_loop().run_until_complete().  Patch asyncio to
+            # avoid actually creating an event loop in tests.
+            with patch("asyncio.get_event_loop") as mock_get_loop:
                 mock_loop = MagicMock()
                 mock_loop.run_until_complete.return_value = mock_result
-                mock_asyncio.get_event_loop.return_value = mock_loop
+                mock_get_loop.return_value = mock_loop
 
                 result = tool_scrape_job({"job_url": "https://example.com/job/123"})
 
@@ -32,10 +38,10 @@ class TestToolScrapeJob:
         from app.services.agent_tools import tool_scrape_job
         from app.services.job_scraper import JobFetchError
 
-        with patch("app.services.agent_tools.asyncio") as mock_asyncio:
+        with patch("asyncio.get_event_loop") as mock_get_loop:
             mock_loop = MagicMock()
             mock_loop.run_until_complete.side_effect = JobFetchError("Timed out")
-            mock_asyncio.get_event_loop.return_value = mock_loop
+            mock_get_loop.return_value = mock_loop
 
             result = tool_scrape_job({"job_url": "https://example.com/bad"})
 
@@ -50,7 +56,10 @@ class TestToolExtractMetadata:
         from app.services.agent_tools import tool_extract_metadata
 
         mock_metadata = {"company": "Acme Corp", "role": "ML Engineer"}
-        with patch("app.services.agent_tools.extract_job_metadata", return_value=mock_metadata):
+        with patch(
+            "app.services.job_tracker_service.extract_job_metadata",
+            return_value=mock_metadata,
+        ):
             result = tool_extract_metadata(
                 {"job_description": "We need an ML engineer at Acme Corp..."}
             )
@@ -79,7 +88,10 @@ class TestToolScoreAts:
         mock_result.missing_keywords = ["kubernetes"]
         mock_result.recommendations = ["Add Docker experience"]
 
-        with patch("app.services.agent_tools.calculate_ats_score", return_value=mock_result):
+        with patch(
+            "app.services.ats_scorer.calculate_ats_score",
+            return_value=mock_result,
+        ):
             result = tool_score_ats(
                 {
                     "resume_text": "Python developer with FastAPI experience",
@@ -105,7 +117,7 @@ class TestToolSearchCompany:
             {"title": "Acme Corp", "body": "Leading tech company", "href": "https://example.com"},
         ]
 
-        with patch("app.services.agent_tools.DDGS") as MockDDGS:
+        with patch("ddgs.DDGS") as MockDDGS:
             mock_ddgs = MagicMock()
             mock_ddgs.__enter__ = MagicMock(return_value=mock_ddgs)
             mock_ddgs.__exit__ = MagicMock(return_value=False)
@@ -137,7 +149,10 @@ class TestToolWriteCoverLetter:
         from app.services.agent_tools import tool_write_cover_letter
 
         mock_result = {"cover_letter": "Dear Hiring Manager...", "chunks_used": 1}
-        with patch("app.services.agent_tools.generate_cover_letter", return_value=mock_result):
+        with patch(
+            "app.services.cover_letter.generate_cover_letter",
+            return_value=mock_result,
+        ):
             result = tool_write_cover_letter(
                 {
                     "resume_text": "Experienced developer...",
@@ -155,7 +170,7 @@ class TestToolGenerateQuestions:
 
         mock_questions = ["Tell me about your Python experience", "Describe a difficult bug"]
         with patch(
-            "app.services.agent_tools.generate_interview_questions",
+            "app.services.cover_letter.generate_interview_questions",
             return_value=mock_questions,
         ):
             result = tool_generate_questions(
@@ -192,13 +207,23 @@ class TestAgentGraph:
         mock_extract = {
             "job_metadata": {"company": "TestCo", "role": "ML Engineer"},
             "steps_completed": [
-                {"name": "extract_metadata", "status": "success", "duration_ms": 50, "detail": "ok"}
+                {
+                    "name": "extract_metadata",
+                    "status": "success",
+                    "duration_ms": 50,
+                    "detail": "ok",
+                }
             ],
         }
         mock_search = {
             "company_research": "TestCo is a leading company",
             "steps_completed": [
-                {"name": "search_company", "status": "success", "duration_ms": 200, "detail": "ok"}
+                {
+                    "name": "search_company",
+                    "status": "success",
+                    "duration_ms": 200,
+                    "detail": "ok",
+                }
             ],
         }
         mock_ats = {
