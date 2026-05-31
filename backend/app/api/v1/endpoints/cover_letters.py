@@ -97,7 +97,7 @@ def _run_cover_letter_bg(
         retries = 0
 
         for attempt in range(1 + MAX_QA_RETRIES):
-            result = generate_cover_letter(resume_text, job_description)
+            result = generate_cover_letter(resume_text, job_description, user_id=uuid.UUID(user_id))
             cover_letter_text = result["cover_letter"]
 
             try:
@@ -159,6 +159,12 @@ def _run_cover_letter_bg(
                 _create_tracker_entry_bg(
                     user_id=uuid.UUID(user_id),
                     cover_letter_id=uuid.UUID(cover_letter_id),
+                    job_description=job_description,
+                )
+                _embed_cover_letter_bg(
+                    user_id=uuid.UUID(user_id),
+                    cover_letter_id=uuid.UUID(cover_letter_id),
+                    generated_text=cover_letter_text,
                     job_description=job_description,
                 )
 
@@ -238,6 +244,22 @@ def _create_tracker_entry_bg(
             )
     except Exception as exc:
         logger.warning("_create_tracker_entry_bg failed (non-fatal): %s", exc)
+
+
+def _embed_cover_letter_bg(
+    user_id: uuid.UUID,
+    cover_letter_id: uuid.UUID,
+    generated_text: str,
+    job_description: str,
+) -> None:
+    """Index the generated cover letter and its JD into ChromaDB."""
+    from app.services.embedding_service import embed_document  # noqa: PLC0415
+
+    try:
+        embed_document(user_id, "cover_letter", cover_letter_id, generated_text)
+        embed_document(user_id, "job_description", cover_letter_id, job_description)
+    except Exception as exc:
+        logger.warning("Cover letter embedding failed (non-fatal): %s", exc)
 
 
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
