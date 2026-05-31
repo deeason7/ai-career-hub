@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     cover_letters,
     job_tracker,
     n8n_webhook,
+    rag,
     resumes,
 )
 
@@ -22,3 +23,4 @@ api_router.include_router(job_tracker.router, prefix="/jobs", tags=["Job Tracker
 api_router.include_router(n8n_webhook.router, prefix="/webhooks/n8n", tags=["n8n Webhooks"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Admin"])
 api_router.include_router(agent.router, prefix="/agent", tags=["Agent"])
+api_router.include_router(rag.router, prefix="/rag", tags=["RAG"])
