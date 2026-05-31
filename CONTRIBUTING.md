@@ -1,6 +1,6 @@
 # Contributing to AI Career Hub
 
-Thank you for your interest. This is a personal portfolio project, but external contributions are welcome under the following guidelines.
+This is a personal portfolio project, but external contributions are welcome under the following guidelines.
 
 ---
 
@@ -107,6 +107,7 @@ Before opening a PR to `develop`:
 - [ ] New endpoints have corresponding tests in `backend/tests/`
 - [ ] No secrets, credentials, or internal identifiers committed
 - [ ] No padding comments. Only write comments that explain non-obvious logic.
+- [ ] Test passwords must satisfy the registration policy: min 12 characters, 1 digit, 1 uppercase or symbol
 
 ---
 

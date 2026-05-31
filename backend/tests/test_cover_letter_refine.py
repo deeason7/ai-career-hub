@@ -46,10 +46,10 @@ async def auth_headers(client: AsyncClient):
     email = f"refine_{uuid.uuid4().hex[:8]}@example.com"
     await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "full_name": "Refine User", "password": "Testpass99!"},
+        json={"email": email, "full_name": "Refine User", "password": "Testpassword99!"},
     )
     login = await client.post(
-        "/api/v1/auth/login", data={"username": email, "password": "Testpass99!"}
+        "/api/v1/auth/login", data={"username": email, "password": "Testpassword99!"}
     )
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
