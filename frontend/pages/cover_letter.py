@@ -9,6 +9,32 @@ from api_client import api, detail, safe_json
 from components import job_url_import, loading_spinner, show_error, show_success
 
 
+def _show_rag_context() -> None:
+    """Display RAG pipeline stats and recent retrieval in an expander."""
+    stats = safe_json(api("get", "/rag/stats"), {})
+    total = stats.get("total_chunks", 0)
+    by_type = stats.get("chunks_by_type", {})
+
+    with st.expander("🔍 RAG Context (Vector Store)", expanded=False):
+        if total == 0:
+            st.info(
+                "No embeddings stored yet. Upload a resume to start "
+                "building your vector store."
+            )
+            return
+
+        cols = st.columns(len(by_type) + 1)
+        cols[0].metric("Total Chunks", total)
+        for i, (source_type, count) in enumerate(sorted(by_type.items()), 1):
+            label = source_type.replace("_", " ").title()
+            cols[i].metric(label, count)
+
+        st.caption(
+            "Your documents are chunked and embedded for semantic retrieval. "
+            "The AI uses the most relevant chunks when generating cover letters."
+        )
+
+
 def page_cover_letter() -> None:
     st.title("✉️ AI Cover Letter Generator")
     st.markdown(
@@ -99,6 +125,7 @@ def page_cover_letter() -> None:
                         use_container_width=True,
                         type="primary",
                     )
+                _show_rag_context()
                 break
             elif status == "FAILURE":
                 show_error("Task failed. Check the backend worker logs.")
