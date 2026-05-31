@@ -15,6 +15,7 @@ from pages.cover_letter import page_cover_letter
 from pages.job_match import page_job_match
 from pages.job_tracker import page_job_tracker
 from pages.legal import page_legal
+from pages.agent import page_agent
 
 st.set_page_config(
     page_title="AI Career Hub",
@@ -99,6 +100,7 @@ def sidebar():
         "✉️ Cover Letter",
         "🎯 Job Match Analysis",
         "📊 Job Tracker",
+        "🤖 AI Agent",
         "📜 Legal & Info",
     ]
     with st.sidebar:
@@ -191,5 +193,7 @@ else:
         page_job_match()
     elif page == "📊 Job Tracker":
         page_job_tracker()
+    elif page == "🤖 AI Agent":
+        page_agent()
     elif page == "📜 Legal & Info":
         page_legal()
