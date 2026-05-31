@@ -58,6 +58,7 @@ services:
       REDIS_HOST: redis
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_LLM_MODEL: llama3.2:3b
+      CHROMA_PERSIST_DIR: /app/chroma_data
     ports:
       - "8000:8000"
     depends_on:
@@ -65,6 +66,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend/app:/app/app
+      - chroma_data:/app/chroma_data
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # ─── Streamlit Frontend ───────────────────────────────────
@@ -110,6 +112,7 @@ services:
       TESTING: "true"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      CHROMA_PERSIST_DIR: /tmp/chroma_test
     depends_on:
       db:
         condition: service_healthy
@@ -128,3 +131,4 @@ services:
 volumes:
   postgres_data:
   ollama_data:
+  chroma_data:
