@@ -85,11 +85,38 @@ def _rag_retrieve(resume_text: str, job_description: str) -> tuple[str, int]:
     return context, len(relevant_docs)
 
 
-def _generate_via_ollama(resume_text: str, job_description: str) -> dict:
-    """Ollama path: LangChain RAG pipeline with FAISS retrieval."""
+def _chroma_retrieve(user_id, job_description: str, top_k: int = 6) -> tuple[str, int] | None:
+    """ChromaDB retrieval — returns (context, chunks_used) or None if unavailable."""
+    try:
+        from app.services.embedding_service import retrieve_context  # noqa: PLC0415
+
+        results = retrieve_context(
+            user_id=user_id,
+            query=job_description,
+            top_k=top_k,
+            source_types=["resume"],
+        )
+        if not results:
+            return None
+        context = "\n\n---\n\n".join(r["chunk_text"] for r in results)
+        return context, len(results)
+    except Exception as exc:
+        logger.warning("ChromaDB retrieval failed, will fall back: %s", exc)
+        return None
+
+
+def _generate_via_ollama(resume_text: str, job_description: str, user_id=None) -> dict:
+    """Ollama path: LangChain RAG pipeline with ChromaDB or FAISS retrieval."""
     from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
 
-    context, chunks_used = _rag_retrieve(resume_text, job_description)
+    chroma_result = _chroma_retrieve(user_id, job_description) if user_id else None
+    if chroma_result:
+        context, chunks_used = chroma_result
+        rag_source = "chromadb"
+    else:
+        context, chunks_used = _rag_retrieve(resume_text, job_description)
+        rag_source = "faiss"
+
     llm = _build_ollama_llm()
     prompt = PromptTemplate.from_template(
         _COVER_LETTER_SYSTEM_PROMPT + "\n\n"
@@ -105,25 +132,36 @@ def _generate_via_ollama(resume_text: str, job_description: str) -> dict:
         "cover_letter": text.strip(),
         "rag_context": context[:500] + "..." if len(context) > 500 else context,
         "chunks_used": chunks_used,
+        "rag_source": rag_source,
     }
 
 
-def generate_cover_letter(resume_text: str, job_description: str) -> dict:
+def generate_cover_letter(resume_text: str, job_description: str, user_id=None) -> dict:
     """Generate a cover letter grounded in resume facts.
 
     Groq path: uses instructor for validated structured output.
     Ollama path: falls back to LangChain RAG pipeline.
+    Both paths use ChromaDB retrieval when available.
     """
     from app.core.config import settings  # noqa: PLC0415
 
     job_description = _sanitize_jd_for_prompt(job_description)
     if not settings.USE_GROQ:
-        return _generate_via_ollama(resume_text, job_description)
+        return _generate_via_ollama(resume_text, job_description, user_id=user_id)
 
     from app.services.llm_client import call_structured  # noqa: PLC0415
     from app.services.llm_schemas import CoverLetterOutput  # noqa: PLC0415
 
-    context = resume_text[:_GROQ_RESUME_MAX_CHARS]
+    # Try ChromaDB retrieval for the Groq path too
+    chroma_result = _chroma_retrieve(user_id, job_description) if user_id else None
+    if chroma_result:
+        context, chunks_used = chroma_result
+        rag_source = "chromadb"
+    else:
+        context = resume_text[:_GROQ_RESUME_MAX_CHARS]
+        chunks_used = 1
+        rag_source = "truncated"
+
     user_prompt = (
         f"=== VERIFIED CANDIDATE FACTS (from resume) ===\n{context}\n\n"
         f"=== JOB DESCRIPTION ===\n{job_description}\n\n"
@@ -139,11 +177,12 @@ def generate_cover_letter(resume_text: str, job_description: str) -> dict:
         return {
             "cover_letter": result.cover_letter,
             "rag_context": context[:500] + "..." if len(context) > 500 else context,
-            "chunks_used": 1,
+            "chunks_used": chunks_used,
+            "rag_source": rag_source,
         }
     except ValidationError:
         logger.warning("Structured output failed validation, falling back to raw generation")
-        return _generate_via_ollama(resume_text, job_description)
+        return _generate_via_ollama(resume_text, job_description, user_id=user_id)
 
 
 def refine_cover_letter(

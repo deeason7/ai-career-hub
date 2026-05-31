@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"
 
+    # ChromaDB — persistent vector store for RAG
+    CHROMA_PERSIST_DIR: str = "/app/chroma_data"
+
     @computed_field
     def USE_GROQ(self) -> bool:
         """True when GROQ_API_KEY is set."""
