@@ -1,20 +1,26 @@
 # LOCAL DEVELOPMENT ONLY — do NOT use in production.
 # Production stack: docker-compose.prod.yml (ECR images, awslogs, no ports exposed)
+#
+# Quick reference:
+#   docker compose up -d              Start all services
+#   docker compose run --rm test      Run lint + tests
+#   docker compose exec api bash      Shell into running API container
+#   docker compose logs -f api        Tail API logs
 services:
   # ─── PostgreSQL ───────────────────────────────────────────
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-careerhub_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-4oJ7TDoGIXsEgC7Pw748gXQT75UU3JBT}
+      POSTGRES_DB: ${POSTGRES_DB:-careerhub}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-careerhub_admin} -d ${POSTGRES_DB:-careerhub}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,7 +50,7 @@ services:
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     restart: unless-stopped
     env_file: ./backend/.env
     environment:
@@ -58,8 +64,6 @@ services:
       db:
         condition: service_healthy
     volumes:
-      # Mount only the app source code for hot-reload — NOT the whole backend dir
-      # This avoids shadowing /app/site-packages installed inside the container
       - ./backend/app:/app/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -87,6 +91,39 @@ services:
     depends_on:
       - api
       - frontend
+
+  # ─── Test Runner ──────────────────────────────────────────
+  # Usage: docker compose run --rm test
+  # Runs ruff lint, ruff format check, then pytest inside the container.
+  test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    profiles: ["test"]
+    environment:
+      POSTGRES_SERVER: db
+      POSTGRES_USER: careerhub_admin
+      POSTGRES_PASSWORD: 4oJ7TDoGIXsEgC7Pw748gXQT75UU3JBT
+      POSTGRES_DB: careerhub
+      POSTGRES_PORT: "5432"
+      SECRET_KEY: test-only-key-not-for-production
+      TESTING: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "
+        echo '=== Ruff lint ===' &&
+        ruff check app/ tests/ &&
+        echo '=== Ruff format ===' &&
+        ruff format --check app/ tests/ &&
+        echo '=== Pytest ===' &&
+        pytest tests/ -v --tb=short
+      "
 
 volumes:
   postgres_data:
