@@ -51,6 +51,12 @@ ddgs>=9.0.0
 #   Training-only code path. Inference-only usage. Fix (5.0.0rc3) is pre-release.
 # CVE-2026-41481 (langchain-text-splitters SSRF):
 #   HTMLHeaderTextSplitter.split_text_from_url() not used. Fix blocked by M5.3.
+# PYSEC-2026-83 (langgraph 0.3.x checkpoint deserialization):
+#   Fix requires langgraph>=1.0.10rc1. Blocked by M5.3 (langchain-core<1.0.0).
+#   No user-controlled checkpoint data in this codebase.
+# CVE-2025-64439, CVE-2026-27794 (langgraph-checkpoint 2.1.x):
+#   Fix requires langgraph-checkpoint>=3.0.0/4.0.0. Blocked by M5.3.
+#   Checkpoint store not exposed to untrusted inputs.
 groq>=0.9.0,<1.0.0
 instructor>=1.3.0
 
