@@ -217,7 +217,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["sudo su - ubuntu -c \"cd ~/ai-career-hub && git pull origin main && bash infra/scripts/deploy.sh\""]' \
+            --parameters 'commands=["sudo su - ubuntu -c \"cd ~/ai-career-hub && git fetch origin main && git reset --hard FETCH_HEAD && bash infra/scripts/deploy.sh\""]' \
             --timeout-seconds 600 \
             --region "${{ env.AWS_REGION }}" \
             --query "Command.CommandId" \
