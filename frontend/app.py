@@ -26,15 +26,17 @@ st.set_page_config(
 
 cookie_manager = CookieController()
 
-# CookieController renders an invisible JS bridge iframe. Hide it and any
-# wrapper elements that Streamlit creates around it (the "trouble loading"
-# yellow banner, empty div placeholders, and the st.html container itself).
+# CookieController renders an invisible JS bridge iframe. Hide it and the
+# Streamlit wrapper that contains it (incl. the "trouble loading" banner),
+# scoped via :has() to the cookie iframe so other components and sibling
+# layout are untouched — the previous "~ div" rule could hide real content.
 st.html(
     "<style>"
-    "iframe[title='streamlit_cookies_controller.CookieController'],"
-    "[data-testid='stCustomComponentV1'],"
-    "[data-testid='stCustomComponentV1'] ~ div,"
-    ".element-container:has(iframe[title*='CookieController']) {"
+    "iframe[title*='cookies_controller' i],"
+    "iframe[title*='CookieController' i],"
+    "[data-testid='stCustomComponentV1']:has(iframe[title*='cookie' i]),"
+    "[data-testid='stElementContainer']:has(iframe[title*='cookie' i]),"
+    ".element-container:has(iframe[title*='cookie' i]) {"
     "  display:none !important;"
     "  height:0 !important;"
     "  min-height:0 !important;"
