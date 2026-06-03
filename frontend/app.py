@@ -49,7 +49,7 @@ st.html(
 )
 
 # ─── Session State Init ───────────────────────────────────────────────────────
-for key in ["token", "user"]:
+for key in ["token", "user", "refresh_token"]:
     if key not in st.session_state:
         st.session_state[key] = None
 if "current_page" not in st.session_state:
@@ -151,11 +151,21 @@ def sidebar():
                 _headers = {}
                 if st.session_state.token:
                     _headers["Authorization"] = f"Bearer {st.session_state.token}"
-                requests.post(f"{API_URL}/auth/logout", headers=_headers, timeout=3)
+                # Send the refresh token so the backend revokes it server-side.
+                _cookies = {}
+                if st.session_state.get("refresh_token"):
+                    _cookies["refresh_token"] = st.session_state["refresh_token"]
+                requests.post(
+                    f"{API_URL}/auth/logout",
+                    headers=_headers,
+                    cookies=_cookies,
+                    timeout=3,
+                )
             except Exception:
                 pass
             st.session_state.token = None
             st.session_state.user = None
+            st.session_state.refresh_token = None
             st.session_state["current_page"] = "📋 Dashboard"
             st.rerun()
     return page

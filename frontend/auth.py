@@ -41,6 +41,11 @@ def page_auth(cookie_manager) -> None:
                         if not st.session_state.token:
                             show_error("Login failed: no token received.")
                             return
+                        # Keep the refresh token in server-side session only
+                        # (never a browser cookie) so api() can refresh on 401.
+                        st.session_state["refresh_token"] = resp.cookies.get(
+                            "refresh_token"
+                        )
                         cookie_manager.set(
                             "auth_token",
                             st.session_state.token,
