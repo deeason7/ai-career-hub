@@ -32,7 +32,12 @@ async def cover_letter_id(client: AsyncClient, auth_headers: dict):
     # Generate a cover letter
     gen = await client.post(
         "/api/v1/cover-letters/generate",
-        json={"job_description": "We need a Python backend engineer.", "resume_id": resume_id},
+        json={
+            "job_description": (
+                "We need a senior Python backend engineer with FastAPI and PostgreSQL."
+            ),
+            "resume_id": resume_id,
+        },
         headers=auth_headers,
     )
     assert gen.status_code == 202

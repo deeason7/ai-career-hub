@@ -8,6 +8,9 @@ from sqlmodel import Session, select
 logger = logging.getLogger(__name__)
 
 LIFECYCLE_DAYS = 15
+# A cover letter still "processing" after this long was orphaned mid-generation
+# (deploy/restart or EC2 sleep) — the reaper fails it so clients stop polling forever.
+MAX_PROCESSING_MINUTES = 15
 
 
 def set_resume_expiry(resume, existing_count: int) -> None:
@@ -76,3 +79,28 @@ def run_lifecycle_cleanup(engine) -> dict:
         deleted_cover_letters,
     )
     return {"deleted_resumes": deleted_resumes, "deleted_cover_letters": deleted_cover_letters}
+
+
+def reap_stuck_cover_letters(engine, max_age_minutes: int = MAX_PROCESSING_MINUTES) -> int:
+    """Fail cover letters stuck in 'processing' past the cutoff. Returns the count reaped."""
+    from app.models.cover_letter import CoverLetter  # noqa: PLC0415
+
+    cutoff = datetime.now(UTC) - timedelta(minutes=max_age_minutes)
+    reaped = 0
+
+    with Session(engine) as session:
+        stuck = session.exec(
+            select(CoverLetter).where(
+                CoverLetter.status == "processing",
+                CoverLetter.started_at < cutoff,
+            )
+        ).all()
+        for cl in stuck:
+            cl.status = "failure"
+            session.add(cl)
+            reaped += 1
+        session.commit()
+
+    if reaped:
+        logger.info("Reaped %d cover letter(s) stuck in processing.", reaped)
+    return reaped

@@ -28,6 +28,8 @@ class CoverLetter(CoverLetterBase, table=True):
     task_id: str | None = Field(default=None, max_length=255)
     status: str = Field(default="pending", max_length=50)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # When generation began — lets the lifecycle reaper fail rows stuck in "processing".
+    started_at: datetime | None = Field(default=None)
     expires_at: datetime | None = Field(default=None)
 
     # QA review scores
@@ -53,7 +55,7 @@ class CoverLetter(CoverLetterBase, table=True):
 
 
 class CoverLetterCreate(SQLModel):
-    job_description: str = Field(..., max_length=10_000)
+    job_description: str = Field(..., min_length=50, max_length=10_000)
     resume_id: uuid.UUID | None = None
 
 
