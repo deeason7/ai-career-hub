@@ -1,5 +1,6 @@
 """Tests for the agentic workflow graph and tool wrappers."""
 
+import uuid
 from unittest.mock import MagicMock, patch
 
 # --- Tool wrapper tests ---
@@ -19,15 +20,10 @@ class TestToolScrapeJob:
             "warning": None,
         }
 
-        with patch("app.services.job_scraper.fetch_job_description"):
-            # fetch_job_description is async — tool_scrape_job calls it via
-            # asyncio.get_event_loop().run_until_complete().  Patch asyncio to
-            # avoid actually creating an event loop in tests.
-            with patch("asyncio.get_event_loop") as mock_get_loop:
-                mock_loop = MagicMock()
-                mock_loop.run_until_complete.return_value = mock_result
-                mock_get_loop.return_value = mock_loop
-
+        # tool_scrape_job runs the async fetch via asyncio.run(); patch it so the
+        # test neither spins a real event loop nor hits the network.
+        with patch("app.services.job_scraper.fetch_job_description", new=MagicMock()):
+            with patch("asyncio.run", return_value=mock_result):
                 result = tool_scrape_job({"job_url": "https://example.com/job/123"})
 
         assert result["job_description"] == "We are looking for a Python developer..."
@@ -38,17 +34,41 @@ class TestToolScrapeJob:
         from app.services.agent_tools import tool_scrape_job
         from app.services.job_scraper import JobFetchError
 
-        with patch("asyncio.get_event_loop") as mock_get_loop:
-            mock_loop = MagicMock()
-            mock_loop.run_until_complete.side_effect = JobFetchError("Timed out")
-            mock_get_loop.return_value = mock_loop
-
-            result = tool_scrape_job({"job_url": "https://example.com/bad"})
+        with patch("app.services.job_scraper.fetch_job_description", new=MagicMock()):
+            with patch("asyncio.run", side_effect=JobFetchError("Timed out")):
+                result = tool_scrape_job({"job_url": "https://example.com/bad"})
 
         assert "job_description" not in result
         assert len(result["errors"]) == 1
         assert "Timed out" in result["errors"][0]
         assert result["steps_completed"][0]["status"] == "failed"
+
+
+class TestGetResumeText:
+    """Regression: analyze endpoint must read Resume.raw_text, not extracted_text."""
+
+    def test_returns_resume_raw_text(self):
+        from app.api.v1.endpoints import agent as agent_ep
+        from app.models.resume import Resume
+
+        rid, uid = uuid.uuid4(), uuid.uuid4()
+        resume = Resume(
+            id=rid,
+            user_id=uid,
+            name="SWE Resume",
+            original_filename="resume.pdf",
+            raw_text="Senior Python engineer with FastAPI and AWS experience.",
+            is_active=True,
+        )
+        session = MagicMock()
+        session.exec.return_value.first.return_value = resume
+        session.__enter__.return_value = session
+        session.__exit__.return_value = False
+
+        with patch.object(agent_ep, "Session", return_value=session):
+            text = agent_ep._get_resume_text(rid, uid)
+
+        assert "Senior Python engineer" in text
 
 
 class TestToolExtractMetadata:
