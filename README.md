@@ -97,7 +97,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Password Hashing** | `bcrypt` — minimum 8 characters enforced at model level |
 | **CORS** | Restricted to known origins — no wildcard `*` with credentials |
 | **File Uploads** | 5 MB limit · MIME type allowlist (PDF/DOCX/TXT) · filename sanitisation |
-| **SSRF Protection** | Job URL import enforces `AnyHttpUrl` (http/https only) — blocks `file://`, `ftp://`, and AWS IMDS endpoint |
+| **SSRF Protection** | Job URL import restricted to `http`/`https`; the fetcher resolves the host and rejects private/loopback/link-local IPs (incl. the cloud metadata endpoint) on the initial request and every redirect hop |
 | **Security Headers** | `X-Content-Type-Options` · `X-Frame-Options: DENY` · `Referrer-Policy` · `Permissions-Policy` |
 | **HSTS** | Enabled in production — 1-year max-age, includeSubDomains |
 | **API Documentation** | Hidden when `PRODUCTION=true` |
