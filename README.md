@@ -346,8 +346,8 @@ Off-Hours:
 - **Frontend resilience**: access-token refresh on 401 to prevent silent logouts, dashboard cold-start handling with honest error states, and login/register timeouts
 - Widened the `alembic_version` column so a fresh-from-empty migration run succeeds
 
-### v4.0.2 — AI Trace Removal + Security Hardening
-- Stripped redundant comments and multi-line docstrings that restated code across 7 backend files
+### v4.0.2 — Code Cleanup + Security Hardening
+- Consolidated comments and multi-line docstrings to concise one-line summaries across 7 backend files
 - Password minimum raised from 8 to 12 characters
 - Three new security headers: `X-Permitted-Cross-Domain-Policies`, `Cross-Origin-Resource-Policy`, `Cross-Origin-Opener-Policy`
 - Audit log expanded: `auth.register` and `auth.login.failed` events now captured (brute-force detection)
