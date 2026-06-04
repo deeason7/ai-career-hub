@@ -5,12 +5,18 @@ import re
 # Matches control characters except \t (0x09) and \n (0x0A).
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
-# Fenced code blocks and role-injection tokens that adversarial JD text may embed.
+# Patterns adversarial JD text may embed to hijack the prompt. Replaced with a
+# space before the text reaches any LLM call — defense-in-depth behind the
+# "use only verified facts" system prompt, not a substitute for it.
 _INJECTION_TOKENS = re.compile(
-    r"```.*?```"
-    r"|\nHuman:|\nAssistant:|\nSystem:"
-    r"|</s>|<\|im_start\|>|<\|im_end\|>"
-    r"|\[INST\]|\[/INST\]|<<SYS>>|<</SYS>>",
+    r"```.*?```"  # fenced code blocks
+    r"|(?m:^[ \t]*(?:human|assistant|system|user|ai)[ \t]*:)"  # role labels at any line start
+    r"|</s>|<\|im_start\|>|<\|im_end\|>|<\|im_sep\|>"  # ChatML
+    r"|<\|begin_of_text\|>|<\|eot_id\|>|<\|start_header_id\|>|<\|end_header_id\|>"  # Llama 3
+    r"|\[INST\]|\[/INST\]|<<SYS>>|<</SYS>>"  # Llama 2 / Mistral
+    r"|(?:ignore|disregard|forget)[ \t]+(?:all[ \t]+|the[ \t]+|any[ \t]+)?"
+    r"(?:previous|prior|above|preceding|earlier)[ \t]+"
+    r"(?:instructions?|prompts?|messages?|context)",  # override phrases
     re.DOTALL | re.IGNORECASE,
 )
 
