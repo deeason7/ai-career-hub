@@ -334,6 +334,18 @@ Off-Hours:
 
 ## Release History
 
+### v4.1.0 — Agentic Pipeline, RAG & Release Hardening
+- **Agentic analysis pipeline** (LangGraph): one job URL drives scrape → company research → ATS score → skill-gap → cover letter → interview questions in a single run (`POST /api/v1/agent/analyze`)
+- **Retrieval-augmented generation** (ChromaDB): persistent per-user vector collections; resumes auto-embed on upload, cover letters and job descriptions are indexed after generation, with a FAISS fallback (`/api/v1/rag/stats` · `/search` · `/reindex`)
+- **Prompt-injection guard broadened**: role labels matched at any line start, LLaMA 3 chat-template tokens, and "ignore previous instructions" override phrases — applied on both the local and n8n dispatch paths
+- **Content-Security-Policy scoped** so the strict `default-src 'none'` no longer breaks the API docs in development
+- **Constant-time secret comparison** (`hmac.compare_digest`) for the admin and n8n webhook shared secrets
+- **SSRF hardening** on job-URL import: resolve and validate the target host IP, reject private/loopback/link-local/metadata ranges, and re-validate every redirect hop
+- **Stuck-generation reaper**: a `started_at` timestamp plus a watchdog that fails cover letters orphaned in `processing` by a restart or instance sleep
+- **Concurrency & validation fixes**: refinement version numbers assigned under a row lock; generation poll returns 404 for unknown/expired tasks; job-description minimum length enforced
+- **Frontend resilience**: access-token refresh on 401 to prevent silent logouts, dashboard cold-start handling with honest error states, and login/register timeouts
+- Widened the `alembic_version` column so a fresh-from-empty migration run succeeds
+
 ### v4.0.2 — AI Trace Removal + Security Hardening
 - Stripped redundant comments and multi-line docstrings that restated code across 7 backend files
 - Password minimum raised from 8 to 12 characters
