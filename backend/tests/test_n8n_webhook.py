@@ -4,8 +4,11 @@ import uuid
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
+from app.api.v1.endpoints.n8n_webhook import _verify_webhook_secret
+from app.core.config import settings
 from app.main import app
 
 
@@ -104,3 +107,24 @@ class TestFallbackBehavior:
             N8N_WEBHOOK_SECRET="my-secret",
         )
         assert s2.N8N_ENABLED is True
+
+
+class TestWebhookSecretCompare:
+    """Unit tests for the constant-time secret check (endpoint tests hit the 503 path)."""
+
+    def test_accepts_matching_secret(self, monkeypatch):
+        secret = "webhook-secret-value-123456"
+        monkeypatch.setattr(settings, "N8N_WEBHOOK_SECRET", secret)
+        assert _verify_webhook_secret(secret) == secret
+
+    def test_rejects_wrong_secret(self, monkeypatch):
+        monkeypatch.setattr(settings, "N8N_WEBHOOK_SECRET", "webhook-secret-value-123456")
+        with pytest.raises(HTTPException) as exc:
+            _verify_webhook_secret("wrong")
+        assert exc.value.status_code == 401
+
+    def test_unconfigured_returns_503(self, monkeypatch):
+        monkeypatch.setattr(settings, "N8N_WEBHOOK_SECRET", "")
+        with pytest.raises(HTTPException) as exc:
+            _verify_webhook_secret("anything")
+        assert exc.value.status_code == 503
