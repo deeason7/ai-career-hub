@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -18,6 +18,7 @@ from app.core.security import (
     revoke_token,
     verify_password,
     verify_refresh_token,
+    verify_token,
 )
 from app.models.user import User, UserCreate, UserRead
 from app.services import audit_logger
@@ -25,6 +26,19 @@ from app.services import audit_logger
 router = APIRouter()
 
 _REFRESH_COOKIE = "refresh_token"
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    """Attach the HttpOnly refresh-token cookie, scoped to the auth routes."""
+    response.set_cookie(
+        key=_REFRESH_COOKIE,
+        value=token,
+        httponly=True,
+        secure=settings.PRODUCTION,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+        path="/api/v1/auth",
+    )
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -76,16 +90,7 @@ async def login(
 
     access_token = create_access_token(subject=str(user.id))
     refresh_token = create_refresh_token(subject=str(user.id))
-
-    response.set_cookie(
-        key=_REFRESH_COOKIE,
-        value=refresh_token,
-        httponly=True,
-        secure=settings.PRODUCTION,
-        samesite="lax",
-        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        path="/api/v1/auth",
-    )
+    _set_refresh_cookie(response, refresh_token)
 
     audit_logger.emit("auth.login", user_id=user.id, request=request)
     return {"access_token": access_token, "token_type": "bearer"}
@@ -95,10 +100,11 @@ async def login(
 @rate_limit("20/minute")
 async def refresh_access_token(
     request: Request,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_async_session)],
     refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
 ):
-    """Issue a new access token from a valid refresh token cookie."""
+    """Rotate the refresh token and issue a fresh access token."""
     if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -128,6 +134,13 @@ async def refresh_access_token(
             detail="User account not found or inactive.",
         )
 
+    # Single-use refresh: revoke the presented token and mint a new one, so a
+    # leaked refresh token stops working the moment the legitimate session (or
+    # the attacker) rotates it — reuse of the old token then 401s above.
+    await revoke_token(jti, REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600)
+    new_refresh_token = create_refresh_token(subject=str(user.id))
+    _set_refresh_cookie(response, new_refresh_token)
+
     new_access_token = create_access_token(subject=str(user.id))
     return {"access_token": new_access_token, "token_type": "bearer"}
 
@@ -136,13 +149,25 @@ async def refresh_access_token(
 async def logout(
     response: Response,
     refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+    authorization: Annotated[str | None, Header()] = None,
 ):
-    """Revoke the refresh token and clear the HttpOnly cookie."""
+    """Revoke the refresh token (and the presented access token) and clear the cookie."""
     if refresh_token:
         token_data = verify_refresh_token(refresh_token)
         if token_data:
             _, jti = token_data
             await revoke_token(jti, REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600)
+
+    # Best-effort: deny-list the access token too. Its JTI is checked on every
+    # authenticated request (deps.get_current_user), so this closes the window
+    # where a token stays valid until expiry after logout. A missing or expired
+    # header is fine — logout must still succeed and clear the cookie.
+    if authorization and authorization.lower().startswith("bearer "):
+        access_data = verify_token(authorization[7:], "access")
+        if access_data:
+            _, access_jti = access_data
+            await revoke_token(access_jti, settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
     response.delete_cookie(key=_REFRESH_COOKIE, path="/api/v1/auth")
 
 
