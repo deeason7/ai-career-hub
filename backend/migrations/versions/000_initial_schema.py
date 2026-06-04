@@ -19,6 +19,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic's default alembic_version.version_num is VARCHAR(32), but some revision
+    # ids are longer (e.g. 008_add_tracker_automation_fields is 33 chars), which fails a
+    # fresh-from-empty `upgrade head` with StringDataRightTruncation. Widen it at the base
+    # so new/DR environments provision cleanly; databases already past 000 never re-run it.
+    op.execute("ALTER TABLE IF EXISTS alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)")
+
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
