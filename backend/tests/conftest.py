@@ -65,3 +65,24 @@ async def auth_token(client: AsyncClient) -> str:
 async def auth_headers(auth_token: str) -> dict:
     """Authorization header for a freshly registered user."""
     return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest_asyncio.fixture
+async def active_resume(client: AsyncClient, auth_headers: dict) -> str:
+    """Insert an active resume for the authenticated user and return its id."""
+    from app.models.resume import Resume
+
+    me = await client.get("/api/v1/auth/me", headers=auth_headers)
+    user_id = uuid.UUID(me.json()["id"])
+    async with TestSessionLocal() as session:
+        resume = Resume(
+            user_id=user_id,
+            name="Test Resume",
+            original_filename="resume.pdf",
+            raw_text="Experienced Python engineer with 5 years building APIs.",
+            is_active=True,
+        )
+        session.add(resume)
+        await session.commit()
+        await session.refresh(resume)
+    return str(resume.id)

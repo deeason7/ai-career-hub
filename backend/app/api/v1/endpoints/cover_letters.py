@@ -16,7 +16,7 @@ from app.api.v1.deps import get_current_user
 from app.core.config import settings
 from app.core.db import get_async_session, sync_engine
 from app.core.limiter import rate_limit
-from app.core.utils import sanitize_text
+from app.core.utils import _sanitize_jd_for_prompt, sanitize_text
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
 from app.models.cover_letter_revision import (
     CoverLetterRevision,
@@ -290,10 +290,11 @@ async def generate_cover_letter_endpoint(
             )
 
     task_id = str(uuid.uuid4())
+    sanitized_jd = sanitize_text(payload.job_description)
     cover_letter = CoverLetter(
         user_id=current_user.id,
         resume_id=resume.id,
-        job_description=sanitize_text(payload.job_description),
+        job_description=sanitized_jd,
         task_id=task_id,
         status="processing",
         started_at=datetime.now(UTC),
@@ -315,7 +316,7 @@ async def generate_cover_letter_endpoint(
         dispatched = await _dispatch_to_n8n(
             cover_letter_id=str(cover_letter.id),
             resume_text=resume.raw_text,
-            job_description=payload.job_description,
+            job_description=_sanitize_jd_for_prompt(sanitized_jd),
         )
 
     if not dispatched:
@@ -324,7 +325,7 @@ async def generate_cover_letter_endpoint(
             str(cover_letter.id),
             str(current_user.id),
             resume.raw_text,
-            sanitize_text(payload.job_description),
+            sanitized_jd,
         )
 
     return cover_letter
