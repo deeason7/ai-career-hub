@@ -44,10 +44,6 @@ class User(UserBase, table=True):
 class UserCreate(UserBase):
     password: str = Field(min_length=12, description="Minimum 12 characters")
 
-    @classmethod
-    def __get_validators__(cls):
-        yield from super().__get_validators__()
-
     def model_post_init(self, __context) -> None:  # noqa: ANN001
         if not _EMAIL_RE.match(self.email):
             raise ValueError(f"Invalid email address: {self.email!r}")
