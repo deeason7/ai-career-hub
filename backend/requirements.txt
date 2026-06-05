@@ -27,6 +27,10 @@ faiss-cpu==1.8.0.post1
 tiktoken==0.7.0
 pymupdf==1.24.7
 python-docx==1.1.2
+# CPU-only torch: the default PyPI build pulls ~3.5 GB of CUDA + Triton wheels
+# that this inference-only, CPU-bound app never uses. Pin the CPU wheel instead.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.12.0+cpu
 sentence-transformers==3.0.1
 langgraph>=0.3.30,<0.4.0
 chromadb>=1.0.0
