@@ -5,53 +5,7 @@ from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.core.config import settings
-from app.core.db import get_async_session
-from app.main import app
-
-TEST_ENGINE = create_async_engine(settings.SQLALCHEMY_ASYNC_DATABASE_URI, pool_pre_ping=True)
-TestSessionLocal = async_sessionmaker(bind=TEST_ENGINE, class_=AsyncSession, expire_on_commit=False)
-
-
-async def override_session():
-    async with TestSessionLocal() as session:
-        yield session
-
-
-app.dependency_overrides[get_async_session] = override_session
-
-
-@pytest_asyncio.fixture(scope="module", autouse=True)
-async def setup_db():
-    async with TEST_ENGINE.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    yield
-    async with TEST_ENGINE.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-
-
-@pytest_asyncio.fixture
-async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-
-
-@pytest_asyncio.fixture
-async def auth_headers(client: AsyncClient):
-    email = f"refine_{uuid.uuid4().hex[:8]}@example.com"
-    await client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "full_name": "Refine User", "password": "Testpass99!"},
-    )
-    login = await client.post(
-        "/api/v1/auth/login", data={"username": email, "password": "Testpass99!"}
-    )
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+from httpx import AsyncClient
 
 
 @pytest_asyncio.fixture
@@ -78,7 +32,12 @@ async def cover_letter_id(client: AsyncClient, auth_headers: dict):
     # Generate a cover letter
     gen = await client.post(
         "/api/v1/cover-letters/generate",
-        json={"job_description": "We need a Python backend engineer.", "resume_id": resume_id},
+        json={
+            "job_description": (
+                "We need a senior Python backend engineer with FastAPI and PostgreSQL."
+            ),
+            "resume_id": resume_id,
+        },
         headers=auth_headers,
     )
     assert gen.status_code == 202

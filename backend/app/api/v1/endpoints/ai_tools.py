@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from typing import Annotated
@@ -27,8 +28,9 @@ class AIRequest(BaseModel):
 
 
 class JobUrlRequest(BaseModel):
-    # AnyHttpUrl enforces http/https scheme — blocks SSRF via file://, ftp://, or
-    # internal AWS metadata endpoint (169.254.169.254) on EC2.
+    # AnyHttpUrl only enforces the http/https scheme and URL shape. The actual SSRF
+    # defense — rejecting hosts that resolve to private/loopback/link-local IPs, and
+    # re-checking every redirect hop — lives in job_scraper.fetch_job_description.
     url: AnyHttpUrl = Field(..., max_length=2000)
 
 
@@ -65,7 +67,9 @@ async def ats_score(
 ):
     """Score the resume against a job description. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
-    result = calculate_ats_score(resume_text, sanitize_text(payload.job_description))
+    result = await asyncio.to_thread(
+        calculate_ats_score, resume_text, sanitize_text(payload.job_description)
+    )
     return {
         "score": result.score,
         "semantic_score": result.semantic_score,
@@ -90,7 +94,9 @@ async def skill_gap(
     """Perform a skill gap analysis. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     try:
-        result = generate_skill_gap_analysis(resume_text, sanitize_text(payload.job_description))
+        result = await asyncio.to_thread(
+            generate_skill_gap_analysis, resume_text, sanitize_text(payload.job_description)
+        )
     except Exception as exc:
         logger.error("Skill gap analysis failed: %s", exc, exc_info=True)
         raise HTTPException(
@@ -111,8 +117,8 @@ async def interview_questions(
     """Generate interview questions. Rate limited: 20 req/min per IP."""
     resume_text = await _get_resume_text(payload.resume_id, current_user, session)
     try:
-        questions = generate_interview_questions(
-            resume_text, sanitize_text(payload.job_description)
+        questions = await asyncio.to_thread(
+            generate_interview_questions, resume_text, sanitize_text(payload.job_description)
         )
     except Exception as exc:
         logger.error("Interview question generation failed: %s", exc, exc_info=True)

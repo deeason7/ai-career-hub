@@ -15,6 +15,7 @@ from pages.cover_letter import page_cover_letter
 from pages.job_match import page_job_match
 from pages.job_tracker import page_job_tracker
 from pages.legal import page_legal
+from pages.agent import page_agent
 
 st.set_page_config(
     page_title="AI Career Hub",
@@ -25,23 +26,30 @@ st.set_page_config(
 
 cookie_manager = CookieController()
 
-# CookieController is a headless JS bridge — hide its iframe placeholder and
-# the yellow "trouble loading" banner Streamlit shows while it hydrates.
+# CookieController renders an invisible JS bridge iframe. Hide it and the
+# Streamlit wrapper that contains it (incl. the "trouble loading" banner),
+# scoped via :has() to the cookie iframe so other components and sibling
+# layout are untouched — the previous "~ div" rule could hide real content.
 st.html(
     "<style>"
-    "[data-testid='stCustomComponentV1'] {"
+    "iframe[title*='cookies_controller' i],"
+    "iframe[title*='CookieController' i],"
+    "[data-testid='stCustomComponentV1']:has(iframe[title*='cookie' i]),"
+    "[data-testid='stElementContainer']:has(iframe[title*='cookie' i]),"
+    ".element-container:has(iframe[title*='cookie' i]) {"
     "  display:none !important;"
     "  height:0 !important;"
     "  min-height:0 !important;"
     "  margin:0 !important;"
     "  padding:0 !important;"
     "  overflow:hidden !important;"
+    "  position:absolute !important;"
     "}"
     "</style>"
 )
 
 # ─── Session State Init ───────────────────────────────────────────────────────
-for key in ["token", "user"]:
+for key in ["token", "user", "refresh_token"]:
     if key not in st.session_state:
         st.session_state[key] = None
 if "current_page" not in st.session_state:
@@ -99,6 +107,7 @@ def sidebar():
         "✉️ Cover Letter",
         "🎯 Job Match Analysis",
         "📊 Job Tracker",
+        "🤖 AI Agent",
         "📜 Legal & Info",
     ]
     with st.sidebar:
@@ -142,11 +151,21 @@ def sidebar():
                 _headers = {}
                 if st.session_state.token:
                     _headers["Authorization"] = f"Bearer {st.session_state.token}"
-                requests.post(f"{API_URL}/auth/logout", headers=_headers, timeout=3)
+                # Send the refresh token so the backend revokes it server-side.
+                _cookies = {}
+                if st.session_state.get("refresh_token"):
+                    _cookies["refresh_token"] = st.session_state["refresh_token"]
+                requests.post(
+                    f"{API_URL}/auth/logout",
+                    headers=_headers,
+                    cookies=_cookies,
+                    timeout=3,
+                )
             except Exception:
                 pass
             st.session_state.token = None
             st.session_state.user = None
+            st.session_state.refresh_token = None
             st.session_state["current_page"] = "📋 Dashboard"
             st.rerun()
     return page
@@ -171,6 +190,15 @@ if not st.session_state.token:
 
 # ─── Page Routing ────────────────────────────────────────────────────────────
 if not st.session_state.token:
+    # Hide the sidebar collapse toggle — no sidebar content for unauthenticated users.
+    st.html(
+        "<style>"
+        "[data-testid='stSidebar'],"
+        "[data-testid='collapsedControl'] {"
+        "  display:none !important;"
+        "}"
+        "</style>"
+    )
     page_auth(cookie_manager)
 else:
     if (
@@ -191,5 +219,7 @@ else:
         page_job_match()
     elif page == "📊 Job Tracker":
         page_job_tracker()
+    elif page == "🤖 AI Agent":
+        page_agent()
     elif page == "📜 Legal & Info":
         page_legal()

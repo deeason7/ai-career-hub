@@ -7,47 +7,7 @@ Start services first: docker compose up db -d
 """
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.core.config import settings
-from app.core.db import get_async_session
-from app.main import app
-
-# --- Test Database (uses same postgres, separate test DB ideally) ---
-TEST_ENGINE = create_async_engine(
-    settings.SQLALCHEMY_ASYNC_DATABASE_URI,
-    pool_pre_ping=True,
-)
-TestSessionLocal = async_sessionmaker(bind=TEST_ENGINE, class_=AsyncSession, expire_on_commit=False)
-
-
-async def override_session():
-    async with TestSessionLocal() as session:
-        yield session
-
-
-app.dependency_overrides[get_async_session] = override_session
-
-
-@pytest_asyncio.fixture(scope="module", autouse=True)
-async def setup_db():
-    """Create all tables before tests, drop after."""
-    async with TEST_ENGINE.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    yield
-    async with TEST_ENGINE.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-
-
-@pytest_asyncio.fixture
-async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-
+from httpx import AsyncClient
 
 # ---------- AUTH TESTS ----------
 
@@ -75,7 +35,7 @@ async def test_register_duplicate_email(client: AsyncClient):
         json={
             "email": "dup@example.com",
             "full_name": "Dup User",
-            "password": "Pass1234!",
+            "password": "Passw0rd1234!",
         },
     )
     response = await client.post(
@@ -83,7 +43,7 @@ async def test_register_duplicate_email(client: AsyncClient):
         json={
             "email": "dup@example.com",
             "full_name": "Another",
-            "password": "Pass5678!",
+            "password": "Passw0rd5678!",
         },
     )
     assert response.status_code == 409
@@ -96,14 +56,14 @@ async def test_login_success(client: AsyncClient):
         json={
             "email": "login_test@example.com",
             "full_name": "Login Test",
-            "password": "Securepass1!",
+            "password": "SecurePass12!",
         },
     )
     response = await client.post(
         "/api/v1/auth/login",
         data={
             "username": "login_test@example.com",
-            "password": "Securepass1!",
+            "password": "SecurePass12!",
         },
     )
     assert response.status_code == 200
@@ -117,14 +77,14 @@ async def test_login_wrong_password(client: AsyncClient):
         json={
             "email": "badpass@example.com",
             "full_name": "Bad Pass",
-            "password": "Rightpass1!",
+            "password": "RightPass12!",
         },
     )
     response = await client.post(
         "/api/v1/auth/login",
         data={
             "username": "badpass@example.com",
-            "password": "Wrongpass1!",
+            "password": "WrongPass12!",
         },
     )
     assert response.status_code == 401
@@ -137,14 +97,14 @@ async def test_get_me_authenticated(client: AsyncClient):
         json={
             "email": "me@example.com",
             "full_name": "Me User",
-            "password": "Mepassword1!",
+            "password": "Mepassword12!",
         },
     )
     login = await client.post(
         "/api/v1/auth/login",
         data={
             "username": "me@example.com",
-            "password": "Mepassword1!",
+            "password": "Mepassword12!",
         },
     )
     token = login.json()["access_token"]
@@ -154,26 +114,6 @@ async def test_get_me_authenticated(client: AsyncClient):
 
 
 # ---------- ATS SCORE TESTS ----------
-
-
-@pytest_asyncio.fixture
-async def auth_token(client: AsyncClient):
-    """Create a unique user per test run and return auth token."""
-    import uuid as _uuid
-
-    email = f"ats_user_{_uuid.uuid4().hex[:8]}@example.com"
-    await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email,
-            "full_name": "ATS User",
-            "password": "Atspass1!",
-        },
-    )
-    login = await client.post(
-        "/api/v1/auth/login", data={"username": email, "password": "Atspass1!"}
-    )
-    return login.json()["access_token"]
 
 
 @pytest.mark.asyncio

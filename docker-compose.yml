@@ -1,20 +1,26 @@
 # LOCAL DEVELOPMENT ONLY — do NOT use in production.
 # Production stack: docker-compose.prod.yml (ECR images, awslogs, no ports exposed)
+#
+# Quick reference:
+#   docker compose up -d              Start all services
+#   docker compose run --rm test      Run lint + tests
+#   docker compose exec api bash      Shell into running API container
+#   docker compose logs -f api        Tail API logs
 services:
   # ─── PostgreSQL ───────────────────────────────────────────
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-careerhub_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-4oJ7TDoGIXsEgC7Pw748gXQT75UU3JBT}
+      POSTGRES_DB: ${POSTGRES_DB:-careerhub}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-careerhub_admin} -d ${POSTGRES_DB:-careerhub}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,10 +29,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Require a password so the dev stack mirrors prod; api + test authenticate
+    # with the same REDIS_PASSWORD (override via the host env, else the default).
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-localdevredis}"]
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-localdevredis}\" --no-auth-warning ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,23 +53,24 @@ services:
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     restart: unless-stopped
     env_file: ./backend/.env
     environment:
       POSTGRES_SERVER: db
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-localdevredis}
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_LLM_MODEL: llama3.2:3b
+      CHROMA_PERSIST_DIR: /app/chroma_data
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      # Mount only the app source code for hot-reload — NOT the whole backend dir
-      # This avoids shadowing /app/site-packages installed inside the container
       - ./backend/app:/app/app
+      - chroma_data:/app/chroma_data
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # ─── Streamlit Frontend ───────────────────────────────────
@@ -88,6 +98,42 @@ services:
       - api
       - frontend
 
+  # ─── Test Runner ──────────────────────────────────────────
+  # Usage: docker compose run --rm test
+  # Runs ruff lint, ruff format check, then pytest inside the container.
+  test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    profiles: ["test"]
+    environment:
+      POSTGRES_SERVER: db
+      POSTGRES_USER: careerhub_admin
+      POSTGRES_PASSWORD: 4oJ7TDoGIXsEgC7Pw748gXQT75UU3JBT
+      POSTGRES_DB: careerhub
+      POSTGRES_PORT: "5432"
+      SECRET_KEY: test-only-key-not-for-production
+      TESTING: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-localdevredis}
+      CHROMA_PERSIST_DIR: /tmp/chroma_test
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "
+        echo '=== Ruff lint ===' &&
+        ruff check app/ tests/ &&
+        echo '=== Ruff format ===' &&
+        ruff format --check app/ tests/ &&
+        echo '=== Pytest ===' &&
+        pytest tests/ -v --tb=short
+      "
+
 volumes:
   postgres_data:
   ollama_data:
+  chroma_data:

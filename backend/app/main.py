@@ -19,12 +19,11 @@ from app.core.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
-# Initialise Sentry — no-op when SENTRY_DSN is empty (local / CI)
 if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
-        traces_sample_rate=0.1,  # 10% of requests get performance traces
-        send_default_pii=False,  # Never send passwords, tokens, or PII
+        traces_sample_rate=0.1,
+        send_default_pii=False,
     )
 
 # Warn at startup if admin endpoint will be permanently locked (misconfiguration guard).
@@ -83,7 +82,6 @@ async def lifespan(app: FastAPI):
     yield
 
 
-# Show docs only in development (hide attack surface in prod)
 _docs_url = "/docs" if not settings.PRODUCTION else None
 _redoc_url = "/redoc" if not settings.PRODUCTION else None
 
@@ -114,9 +112,6 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-# Return a clean 503 with Retry-After during DB cold-start.
-
-
 @app.exception_handler(OperationalError)
 @app.exception_handler(InterfaceError)
 async def db_unavailable_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -143,6 +138,23 @@ async def add_request_id(request: Request, call_next) -> Response:
     return response
 
 
+_STRICT_CSP = "default-src 'none'; frame-ancestors 'none'"
+# Swagger UI and ReDoc pull their JS/CSS from the jsDelivr CDN and bootstrap with
+# an inline script, which the strict policy blocks. These pages are dev-only
+# (disabled when PRODUCTION), so the relaxed policy applies to just those paths.
+_DOCS_CSP = (
+    "default-src 'none'; "
+    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "img-src 'self' data: https://fastapi.tiangolo.com https://cdn.jsdelivr.net; "
+    "font-src 'self' https://cdn.jsdelivr.net; "
+    "worker-src 'self' blob:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'"
+)
+_DOCS_PATHS = frozenset({"/docs", "/redoc"})
+
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next) -> Response:
     """Inject security headers on every response."""
@@ -151,10 +163,15 @@ async def add_security_headers(request: Request, call_next) -> Response:
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     if settings.PRODUCTION:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # The backend is a pure JSON API — no HTML, scripts, or styles served.
-    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    csp = _STRICT_CSP
+    if not settings.PRODUCTION and request.url.path in _DOCS_PATHS:
+        csp = _DOCS_CSP
+    response.headers["Content-Security-Policy"] = csp
     return response
 
 

@@ -3,6 +3,7 @@
 import io
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import httpx
@@ -15,7 +16,7 @@ from app.api.v1.deps import get_current_user
 from app.core.config import settings
 from app.core.db import get_async_session, sync_engine
 from app.core.limiter import rate_limit
-from app.core.utils import sanitize_text
+from app.core.utils import _sanitize_jd_for_prompt, sanitize_text
 from app.models.cover_letter import CoverLetter, CoverLetterCreate, CoverLetterRead
 from app.models.cover_letter_revision import (
     CoverLetterRevision,
@@ -97,7 +98,7 @@ def _run_cover_letter_bg(
         retries = 0
 
         for attempt in range(1 + MAX_QA_RETRIES):
-            result = generate_cover_letter(resume_text, job_description)
+            result = generate_cover_letter(resume_text, job_description, user_id=uuid.UUID(user_id))
             cover_letter_text = result["cover_letter"]
 
             try:
@@ -161,6 +162,12 @@ def _run_cover_letter_bg(
                     cover_letter_id=uuid.UUID(cover_letter_id),
                     job_description=job_description,
                 )
+                _embed_cover_letter_bg(
+                    user_id=uuid.UUID(user_id),
+                    cover_letter_id=uuid.UUID(cover_letter_id),
+                    generated_text=cover_letter_text,
+                    job_description=job_description,
+                )
 
     except Exception as exc:
         logger.error("Cover letter background task failed: %s", exc, exc_info=True)
@@ -185,8 +192,6 @@ def _create_tracker_entry_bg(
     Deduplicates by (user_id, company, role) within 7 days.
     Failures are logged and swallowed — must not affect CL generation result.
     """
-    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
-
     from app.models.job_application import JobApplication  # noqa: PLC0415
     from app.services.job_tracker_service import extract_job_metadata  # noqa: PLC0415
 
@@ -240,6 +245,22 @@ def _create_tracker_entry_bg(
         logger.warning("_create_tracker_entry_bg failed (non-fatal): %s", exc)
 
 
+def _embed_cover_letter_bg(
+    user_id: uuid.UUID,
+    cover_letter_id: uuid.UUID,
+    generated_text: str,
+    job_description: str,
+) -> None:
+    """Index the generated cover letter and its JD into ChromaDB."""
+    from app.services.embedding_service import embed_document  # noqa: PLC0415
+
+    try:
+        embed_document(user_id, "cover_letter", cover_letter_id, generated_text)
+        embed_document(user_id, "job_description", cover_letter_id, job_description)
+    except Exception as exc:
+        logger.warning("Cover letter embedding failed (non-fatal): %s", exc)
+
+
 @router.post("/generate", response_model=CoverLetterRead, status_code=status.HTTP_202_ACCEPTED)
 @rate_limit("5/minute")
 async def generate_cover_letter_endpoint(
@@ -269,12 +290,14 @@ async def generate_cover_letter_endpoint(
             )
 
     task_id = str(uuid.uuid4())
+    sanitized_jd = sanitize_text(payload.job_description)
     cover_letter = CoverLetter(
         user_id=current_user.id,
         resume_id=resume.id,
-        job_description=sanitize_text(payload.job_description),
+        job_description=sanitized_jd,
         task_id=task_id,
         status="processing",
+        started_at=datetime.now(UTC),
     )
     set_cover_letter_expiry(cover_letter)
     session.add(cover_letter)
@@ -293,7 +316,7 @@ async def generate_cover_letter_endpoint(
         dispatched = await _dispatch_to_n8n(
             cover_letter_id=str(cover_letter.id),
             resume_text=resume.raw_text,
-            job_description=payload.job_description,
+            job_description=_sanitize_jd_for_prompt(sanitized_jd),
         )
 
     if not dispatched:
@@ -302,7 +325,7 @@ async def generate_cover_letter_endpoint(
             str(cover_letter.id),
             str(current_user.id),
             resume.raw_text,
-            sanitize_text(payload.job_description),
+            sanitized_jd,
         )
 
     return cover_letter
@@ -341,7 +364,10 @@ async def poll_task_status(
     )
     cl = result.first()
     if not cl:
-        return {"task_id": task_id, "status": "PENDING", "result": None}
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown or expired task.",
+        )
 
     response = {
         "task_id": task_id,
@@ -471,14 +497,20 @@ async def refine_cover_letter_endpoint(
     if not resume:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
 
-    # Determine next version number
+    # Lock the parent row so concurrent refines serialize — otherwise two requests can
+    # read the same max version and assign a duplicate version_number.
     from sqlalchemy import func  # noqa: PLC0415
 
     conn = await session.connection()
-    count_result = await conn.execute(
-        select(func.count()).where(CoverLetterRevision.cover_letter_id == cover_letter_id)
+    await conn.execute(
+        select(CoverLetter.id).where(CoverLetter.id == cover_letter_id).with_for_update()
     )
-    next_version = (count_result.scalar_one() or 0) + 1
+    max_result = await conn.execute(
+        select(func.max(CoverLetterRevision.version_number)).where(
+            CoverLetterRevision.cover_letter_id == cover_letter_id
+        )
+    )
+    next_version = (max_result.scalar_one() or 0) + 1
 
     revision = CoverLetterRevision(
         cover_letter_id=cover_letter_id,
