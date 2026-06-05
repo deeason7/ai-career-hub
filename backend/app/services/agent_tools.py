@@ -20,7 +20,7 @@ def tool_scrape_job(state: dict) -> dict:
     start = time.perf_counter()
 
     try:
-        result = asyncio.get_event_loop().run_until_complete(fetch_job_description(url))
+        result = asyncio.run(fetch_job_description(url))
         elapsed = int((time.perf_counter() - start) * 1000)
         jd = result["job_description"]
         logger.info("scrape_job: fetched %d chars in %dms", len(jd), elapsed)

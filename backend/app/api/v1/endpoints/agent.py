@@ -37,9 +37,9 @@ def _get_resume_text(resume_id: uuid.UUID, user_id: uuid.UUID) -> str:
         ).first()
         if not resume:
             raise HTTPException(status_code=404, detail="Resume not found")
-        if not resume.extracted_text:
+        if not resume.raw_text:
             raise HTTPException(status_code=400, detail="Resume has no extracted text")
-        return resume.extracted_text
+        return resume.raw_text
 
 
 @router.post("/analyze", response_model=AgentResponse)
