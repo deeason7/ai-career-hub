@@ -40,8 +40,10 @@ Please include:
 ## Security Design
 
 ### Authentication
-- JWT access tokens (60-minute expiry)
-- Refresh tokens with `jti` UUID claims, blacklisted in Redis on logout
+- JWT access tokens (60-minute expiry), each carrying a `jti` claim checked against a Redis revocation list on every authenticated request — so a token can be invalidated before it expires
+- Refresh tokens issued as HttpOnly, SameSite=Lax cookies (Secure in production) scoped to `/api/v1/auth`, with `jti` UUID claims and a 7-day expiry
+- Refresh rotation: every `/auth/refresh` is single-use — it revokes the presented refresh token and issues a new one, so a stolen refresh token stops working once it has been replayed
+- Logout revokes the refresh token and best-effort revokes the presented access token, closing the window where an access token would otherwise remain valid until expiry
 - `bcrypt` password hashing
 - Minimum password length: 12 characters; requires at least 1 digit and 1 uppercase letter or symbol
 - Password must not match the account email address
