@@ -36,3 +36,13 @@ def test_permissions_policy_present() -> None:
     policy = resp.headers["permissions-policy"]
     for feature in ("geolocation", "microphone", "camera"):
         assert feature in policy
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc"])
+def test_docs_pages_relax_csp_for_assets(path: str) -> None:
+    resp = client.get(path)
+    assert resp.status_code == 200
+    csp = resp.headers.get("content-security-policy", "")
+    # The strict default-src 'none' would block Swagger/ReDoc's CDN assets.
+    assert "cdn.jsdelivr.net" in csp
+    assert csp != "default-src 'none'; frame-ancestors 'none'"

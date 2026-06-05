@@ -4,6 +4,7 @@ Receives cover letter results from n8n Cloud after workflow execution.
 Authenticated via X-Webhook-Secret header (shared secret, not JWT).
 """
 
+import hmac
 import logging
 import uuid
 from typing import Annotated
@@ -40,7 +41,7 @@ def _verify_webhook_secret(x_webhook_secret: str = Header(...)) -> str:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="n8n webhook not configured.",
         )
-    if x_webhook_secret != settings.N8N_WEBHOOK_SECRET:
+    if not hmac.compare_digest(x_webhook_secret, settings.N8N_WEBHOOK_SECRET):
         logger.warning("Invalid webhook secret received")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

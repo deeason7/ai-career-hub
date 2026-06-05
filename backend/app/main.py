@@ -138,6 +138,23 @@ async def add_request_id(request: Request, call_next) -> Response:
     return response
 
 
+_STRICT_CSP = "default-src 'none'; frame-ancestors 'none'"
+# Swagger UI and ReDoc pull their JS/CSS from the jsDelivr CDN and bootstrap with
+# an inline script, which the strict policy blocks. These pages are dev-only
+# (disabled when PRODUCTION), so the relaxed policy applies to just those paths.
+_DOCS_CSP = (
+    "default-src 'none'; "
+    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "img-src 'self' data: https://fastapi.tiangolo.com https://cdn.jsdelivr.net; "
+    "font-src 'self' https://cdn.jsdelivr.net; "
+    "worker-src 'self' blob:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'"
+)
+_DOCS_PATHS = frozenset({"/docs", "/redoc"})
+
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next) -> Response:
     """Inject security headers on every response."""
@@ -151,7 +168,10 @@ async def add_security_headers(request: Request, call_next) -> Response:
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     if settings.PRODUCTION:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    csp = _STRICT_CSP
+    if not settings.PRODUCTION and request.url.path in _DOCS_PATHS:
+        csp = _DOCS_CSP
+    response.headers["Content-Security-Policy"] = csp
     return response
 
 

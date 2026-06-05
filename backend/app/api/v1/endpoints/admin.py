@@ -1,5 +1,6 @@
 """Admin and lifecycle management endpoints."""
 
+import hmac
 import logging
 from typing import Annotated
 
@@ -15,7 +16,8 @@ router = APIRouter()
 
 
 def _verify_admin_secret(x_admin_secret: Annotated[str | None, Header()] = None) -> None:
-    if not settings.ADMIN_SECRET or x_admin_secret != settings.ADMIN_SECRET:
+    expected = settings.ADMIN_SECRET
+    if not expected or not x_admin_secret or not hmac.compare_digest(x_admin_secret, expected):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden.")
 
 
