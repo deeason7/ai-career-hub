@@ -28,8 +28,9 @@ class AIRequest(BaseModel):
 
 
 class JobUrlRequest(BaseModel):
-    # AnyHttpUrl enforces http/https scheme — blocks SSRF via file://, ftp://, or
-    # internal AWS metadata endpoint (169.254.169.254) on EC2.
+    # AnyHttpUrl only enforces the http/https scheme and URL shape. The actual SSRF
+    # defense — rejecting hosts that resolve to private/loopback/link-local IPs, and
+    # re-checking every redirect hop — lives in job_scraper.fetch_job_description.
     url: AnyHttpUrl = Field(..., max_length=2000)
 
 

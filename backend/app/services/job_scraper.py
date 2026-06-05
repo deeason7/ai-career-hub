@@ -1,11 +1,17 @@
 """Fetch job postings from public URLs and extract the job description text."""
 
+import asyncio
+import ipaddress
 import json
+import logging
 import re
-from urllib.parse import urlparse
+import socket
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 # Realistic browser headers to reduce bot-detection rejections
 _HEADERS = {
@@ -19,6 +25,8 @@ _HEADERS = {
 }
 
 _TIMEOUT = 10.0  # seconds
+_ALLOWED_SCHEMES = ("http", "https")
+_MAX_REDIRECTS = 5
 
 
 class JobFetchError(Exception):
@@ -98,6 +106,60 @@ def _is_linkedin_url(url: str) -> bool:
     return "linkedin.com" in urlparse(url).netloc
 
 
+def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True for any address we must never connect to (SSRF guard)."""
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local  # 169.254.0.0/16 — the cloud metadata range (IMDS)
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+async def _assert_public_url(url: str) -> None:
+    """Reject non-http(s) schemes and any host that resolves to a non-public IP."""
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        raise JobFetchError("Only http and https URLs are supported.")
+    host = parsed.hostname
+    if not host:
+        raise JobFetchError("The provided URL is not permitted.")
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError:
+        raise JobFetchError("The provided URL is not permitted.") from None
+
+    # Async DNS so we never block the event loop; resolve once and check every record
+    # so a host that returns both a public and a private address can't slip through.
+    loop = asyncio.get_running_loop()
+    try:
+        infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        raise JobFetchError("Could not resolve the host for this URL.") from None
+
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped  # unwrap ::ffff:a.b.c.d so it's judged as IPv4
+        if _is_blocked_ip(ip):
+            logger.warning("Blocked SSRF attempt: %s resolved to %s", host, ip)
+            raise JobFetchError("The provided URL is not permitted.")
+
+
+async def _get_validated(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    """GET `url`, re-validating the target before every redirect hop."""
+    current = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        await _assert_public_url(current)
+        resp = await client.get(current)
+        if not resp.is_redirect or "location" not in resp.headers:
+            return resp
+        current = urljoin(current, resp.headers["location"])
+    raise JobFetchError("Too many redirects.")
+
+
 async def fetch_job_description(url: str) -> dict:
     """
     Fetch a job posting URL and extract the job description.
@@ -111,10 +173,12 @@ async def fetch_job_description(url: str) -> dict:
         }
     """
     try:
+        # Redirects are followed manually (not by httpx) so every hop is re-validated:
+        # a public URL can 30x-redirect into an internal address otherwise.
         async with httpx.AsyncClient(
-            headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True
+            headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=False
         ) as client:
-            resp = await client.get(url)
+            resp = await _get_validated(client, url)
     except httpx.TimeoutException:
         raise JobFetchError("Request timed out. The job site may be slow or unavailable.") from None
     except httpx.RequestError as exc:

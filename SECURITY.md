@@ -76,8 +76,9 @@ Please include:
 - `/ai/fetch-job`: 10 requests/minute per IP (external scraping throttle)
 
 ### SSRF Mitigation
-- Job URL import (`POST /ai/fetch-job`) validates the URL with Pydantic's `AnyHttpUrl` field, enforcing `http` or `https` schemes only
-- Blocks `file://`, `ftp://`, and requests to private ranges such as the AWS EC2 IMDS endpoint (`169.254.169.254`)
+- Job URL import (`POST /ai/fetch-job`) accepts only `http`/`https` URLs via Pydantic's `AnyHttpUrl` field — a first-line scheme check
+- Before fetching, the target host is resolved and every resolved IP is rejected if it is private, loopback, link-local (the `169.254.0.0/16` cloud-metadata range, e.g. `169.254.169.254`), multicast, reserved, or unspecified
+- Redirects are not auto-followed — each hop is re-validated the same way, so a public URL cannot redirect into an internal address
 - IMDSv2 is enforced at the EC2 instance level — even if a request reaches the metadata service, it requires a session token that is not accessible from inside the app containers
 
 ### Input Validation
@@ -88,7 +89,7 @@ Please include:
   - ChatML tokens: `<|im_start|>`, `<|im_end|>`, `</s>`
   - LLaMA 2 / Mixtral instruction wrappers: `[INST]`, `[/INST]`, `<<SYS>>`, `<</SYS>>`
 - `sanitize_text()` strips HTML tags, null bytes, and control characters from all user free-text fields before storage
-- `AnyHttpUrl` validation on job URL fields (blocks SSRF vectors)
+- `AnyHttpUrl` validation on job URL fields enforces the http/https scheme (host/IP SSRF checks live in the fetcher — see SSRF Mitigation)
 
 ### Audit Logging (OWASP A09)
 - Sensitive actions logged: `auth.register`, `auth.login`, `auth.login.failed`, `resume.upload`, `cover_letter.generate`
