@@ -28,12 +28,26 @@ async def extract_text_from_upload(file: UploadFile) -> str:
 def _extract_pdf(content: bytes) -> str:
     import fitz  # noqa: PLC0415 — lazy import to avoid startup cost
 
-    doc = fitz.open(stream=content, filetype="pdf")
-    return "\n".join(page.get_text() for page in doc)
+    # A malformed file that slipped past the extension check should surface as a
+    # clean 422, so any parse failure is re-raised as ValueError (caught upstream).
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+        return "\n".join(page.get_text() for page in doc)
+    except Exception as exc:
+        logger.warning("PDF extraction failed: %s", exc)
+        raise ValueError(
+            "Could not read the PDF. It may be corrupted, password-protected, or not a valid PDF."
+        ) from exc
 
 
 def _extract_docx(content: bytes) -> str:
     import docx  # noqa: PLC0415
 
-    doc = docx.Document(io.BytesIO(content))
-    return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    try:
+        doc = docx.Document(io.BytesIO(content))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    except Exception as exc:
+        logger.warning("DOCX extraction failed: %s", exc)
+        raise ValueError(
+            "Could not read the DOCX file. It may be corrupted or not a valid Word document."
+        ) from exc
