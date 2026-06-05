@@ -25,7 +25,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 |---|---|
 | **Multi-Resume Management** | Upload, store, and switch between up to 10 resumes per user (PDF, DOCX, TXT — 5 MB max) |
 | **Semantic ATS Scorer** | `sentence-transformers` dense vector similarity + keyword matching + structure heuristics — catches synonym matches that keyword-only ATS systems miss |
-| **AI Cover Letter Generator** | Structured LLM generation grounded strictly in resume facts — no hallucinations |
+| **AI Cover Letter Generator** | Structured LLM generation grounded strictly in resume facts, then honesty-checked by a second model |
 | **Cover Letter Refinement** | Apply targeted edit commands to any generated letter; full revision history with one-click rollback |
 | **AI-as-a-Judge QA** | Second LLM pass scores every cover letter for honesty (1–10) and tone (1–10) — auto-regenerates up to 2× if honesty score falls below threshold |
 | **Structured LLM Output** | All LLM responses return Pydantic v2-validated JSON via `instructor` — no regex parsing, deterministic contracts |
@@ -94,17 +94,17 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Authentication** | JWT (PyJWT, HS256) with `is_active` check on every protected request |
 | **Session Management** | Short-lived access tokens + HttpOnly refresh cookie — inaccessible to JavaScript |
 | **Rate Limiting** | `slowapi` — registration: 3/min · login: 5/min · refresh: 20/min · AI endpoints: 20/min · cover letters: 5/min · fetch-job: 10/min |
-| **Password Hashing** | `bcrypt` — minimum 8 characters enforced at model level |
+| **Password Hashing** | `bcrypt` — minimum 12 characters enforced at model level |
 | **CORS** | Restricted to known origins — no wildcard `*` with credentials |
 | **File Uploads** | 5 MB limit · MIME type allowlist (PDF/DOCX/TXT) · filename sanitisation |
-| **SSRF Protection** | Job URL import enforces `AnyHttpUrl` (http/https only) — blocks `file://`, `ftp://`, and AWS IMDS endpoint |
-| **Security Headers** | `X-Content-Type-Options` · `X-Frame-Options: DENY` · `Referrer-Policy` · `Permissions-Policy` |
+| **SSRF Protection** | Job URL import resolves the target host and rejects private, loopback, link-local, and cloud-metadata (IMDS) IPs; each redirect hop is re-validated |
+| **Security Headers** | `Content-Security-Policy` (scoped) · `X-Content-Type-Options` · `X-Frame-Options: DENY` · `Referrer-Policy` · `Permissions-Policy` · `Cross-Origin-Resource-Policy` · `Cross-Origin-Opener-Policy` · `X-Permitted-Cross-Domain-Policies` |
 | **HSTS** | Enabled in production — 1-year max-age, includeSubDomains |
 | **API Documentation** | Hidden when `PRODUCTION=true` |
 | **Input Validation** | All request payloads validated by Pydantic v2 — field-level length constraints |
 | **Error Monitoring** | Sentry SDK with PII disabled (`send_default_pii=False`) |
 | **LLM Output Validation** | `instructor` enforces Pydantic v2 contracts — retries up to 3× on validation failure |
-| **Prompt Injection Guard** | Job descriptions stripped of fenced code blocks and role-injection tokens before any LLM call |
+| **Prompt Injection Guard** | Job descriptions stripped of fenced code blocks, chat-template tokens, and override phrases before any LLM call — on both the local and n8n dispatch paths |
 | **Webhook Auth** | n8n callback endpoint authenticated via shared secret header |
 | **IAM Least Privilege** | Custom scoped policies — no wildcards, no unused permissions |
 | **EC2 IMDS** | IMDSv2 required — instance metadata not accessible via SSRF |
@@ -126,7 +126,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Structured Output** | `instructor` + Pydantic v2 |
 | **AI QA** | AI-as-a-Judge reviewer — honesty/tone scoring with auto-regeneration |
 | **Semantic NLP** | `sentence-transformers` — `all-MiniLM-L6-v2` |
-| **RAG Pipeline** | LangChain · FAISS · Ollama embeddings (local dev path) |
+| **RAG Pipeline** | ChromaDB (persistent, per-user collections) · FAISS fallback · LangChain · `all-MiniLM-L6-v2` embeddings |
 | **Orchestration** | n8n Cloud (optional webhook-based) — fallback to `BackgroundTasks` |
 | **PDF Generation** | `reportlab` — server-side, no headless browser |
 | **Web Scraping** | `httpx.AsyncClient` + `beautifulsoup4` |
@@ -168,11 +168,15 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | POST | `/api/v1/ai/interview-questions` | JWT | 20/min | Generate interview questions |
 | POST | `/api/v1/ai/fetch-job` | JWT | 10/min | Fetch JD from URL |
 | POST | `/api/v1/analysis/job-match` | JWT | 20/min | ATS + skill gap + interview in one call |
-| GET | `/api/v1/tracker/` | JWT | — | List job applications |
-| POST | `/api/v1/tracker/` | JWT | — | Create application |
-| GET | `/api/v1/tracker/stats` | JWT | — | Breakdown by status |
-| PATCH | `/api/v1/tracker/{id}` | JWT | — | Update application fields |
-| DELETE | `/api/v1/tracker/{id}` | JWT | — | Delete application |
+| POST | `/api/v1/agent/analyze` | JWT | — | Full agentic pipeline from a job URL (scrape → research → score → letter → questions) |
+| GET | `/api/v1/rag/stats` | JWT | — | Per-user embedding collection stats |
+| POST | `/api/v1/rag/search` | JWT | — | Semantic search over indexed documents |
+| POST | `/api/v1/rag/reindex` | JWT | — | Rebuild embeddings (async 202) |
+| GET | `/api/v1/jobs/` | JWT | — | List job applications |
+| POST | `/api/v1/jobs/` | JWT | — | Create application |
+| GET | `/api/v1/jobs/stats` | JWT | — | Breakdown by status |
+| PATCH | `/api/v1/jobs/{id}` | JWT | — | Update application fields |
+| DELETE | `/api/v1/jobs/{id}` | JWT | — | Delete application |
 | POST | `/api/v1/admin/lifecycle/run` | Secret header | — | Trigger document cleanup |
 | PUT | `/api/v1/webhooks/n8n/cover-letters/{id}/callback` | Webhook secret | — | n8n result callback |
 | GET | `/health` | — | — | Liveness check |
@@ -330,8 +334,20 @@ Off-Hours:
 
 ## Release History
 
-### v4.0.2 — AI Trace Removal + Security Hardening
-- Stripped redundant comments and multi-line docstrings that restated code across 7 backend files
+### v4.1.0 — Agentic Pipeline, RAG & Release Hardening
+- **Agentic analysis pipeline** (LangGraph): one job URL drives scrape → company research → ATS score → skill-gap → cover letter → interview questions in a single run (`POST /api/v1/agent/analyze`)
+- **Retrieval-augmented generation** (ChromaDB): persistent per-user vector collections; resumes auto-embed on upload, cover letters and job descriptions are indexed after generation, with a FAISS fallback (`/api/v1/rag/stats` · `/search` · `/reindex`)
+- **Prompt-injection guard broadened**: role labels matched at any line start, LLaMA 3 chat-template tokens, and "ignore previous instructions" override phrases — applied on both the local and n8n dispatch paths
+- **Content-Security-Policy scoped** so the strict `default-src 'none'` no longer breaks the API docs in development
+- **Constant-time secret comparison** (`hmac.compare_digest`) for the admin and n8n webhook shared secrets
+- **SSRF hardening** on job-URL import: resolve and validate the target host IP, reject private/loopback/link-local/metadata ranges, and re-validate every redirect hop
+- **Stuck-generation reaper**: a `started_at` timestamp plus a watchdog that fails cover letters orphaned in `processing` by a restart or instance sleep
+- **Concurrency & validation fixes**: refinement version numbers assigned under a row lock; generation poll returns 404 for unknown/expired tasks; job-description minimum length enforced
+- **Frontend resilience**: access-token refresh on 401 to prevent silent logouts, dashboard cold-start handling with honest error states, and login/register timeouts
+- Widened the `alembic_version` column so a fresh-from-empty migration run succeeds
+
+### v4.0.2 — Code Cleanup + Security Hardening
+- Consolidated comments and multi-line docstrings to concise one-line summaries across 7 backend files
 - Password minimum raised from 8 to 12 characters
 - Three new security headers: `X-Permitted-Cross-Domain-Policies`, `Cross-Origin-Resource-Policy`, `Cross-Origin-Opener-Policy`
 - Audit log expanded: `auth.register` and `auth.login.failed` events now captured (brute-force detection)
