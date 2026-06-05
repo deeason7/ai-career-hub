@@ -1,5 +1,6 @@
 """RAG management endpoints: stats, semantic search, and reindex."""
 
+import asyncio
 import uuid
 from typing import Annotated
 
@@ -55,7 +56,8 @@ async def rag_search(
             detail="Query must not be empty.",
         )
 
-    results = retrieve_context(
+    results = await asyncio.to_thread(
+        retrieve_context,
         user_id=current_user.id,
         query=payload.query,
         top_k=payload.top_k,

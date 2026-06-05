@@ -3,6 +3,7 @@
 import io
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import httpx
@@ -191,8 +192,6 @@ def _create_tracker_entry_bg(
     Deduplicates by (user_id, company, role) within 7 days.
     Failures are logged and swallowed — must not affect CL generation result.
     """
-    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
-
     from app.models.job_application import JobApplication  # noqa: PLC0415
     from app.services.job_tracker_service import extract_job_metadata  # noqa: PLC0415
 
@@ -297,6 +296,7 @@ async def generate_cover_letter_endpoint(
         job_description=sanitize_text(payload.job_description),
         task_id=task_id,
         status="processing",
+        started_at=datetime.now(UTC),
     )
     set_cover_letter_expiry(cover_letter)
     session.add(cover_letter)
@@ -363,7 +363,10 @@ async def poll_task_status(
     )
     cl = result.first()
     if not cl:
-        return {"task_id": task_id, "status": "PENDING", "result": None}
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown or expired task.",
+        )
 
     response = {
         "task_id": task_id,
@@ -493,14 +496,20 @@ async def refine_cover_letter_endpoint(
     if not resume:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
 
-    # Determine next version number
+    # Lock the parent row so concurrent refines serialize — otherwise two requests can
+    # read the same max version and assign a duplicate version_number.
     from sqlalchemy import func  # noqa: PLC0415
 
     conn = await session.connection()
-    count_result = await conn.execute(
-        select(func.count()).where(CoverLetterRevision.cover_letter_id == cover_letter_id)
+    await conn.execute(
+        select(CoverLetter.id).where(CoverLetter.id == cover_letter_id).with_for_update()
     )
-    next_version = (count_result.scalar_one() or 0) + 1
+    max_result = await conn.execute(
+        select(func.max(CoverLetterRevision.version_number)).where(
+            CoverLetterRevision.cover_letter_id == cover_letter_id
+        )
+    )
+    next_version = (max_result.scalar_one() or 0) + 1
 
     revision = CoverLetterRevision(
         cover_letter_id=cover_letter_id,

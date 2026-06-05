@@ -70,7 +70,10 @@ def call_structured(
     Instructor retries on validation failure, feeding the error back to the
     model so it can self-correct. Raises ValidationError after max_retries.
     """
-    from instructor.core.exceptions import InstructorRetryException
+    try:
+        from instructor.core.exceptions import InstructorRetryException
+    except ImportError:  # instructor relocated this across the >=1.3 range
+        from instructor.exceptions import InstructorRetryException
 
     client, default_model = _get_client()
     model_id = model or default_model

@@ -4,9 +4,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.services.lifecycle import (
     LIFECYCLE_DAYS,
     promote_to_permanent,
+    reap_stuck_cover_letters,
     run_lifecycle_cleanup,
     set_cover_letter_expiry,
     set_resume_expiry,
@@ -227,3 +230,88 @@ def test_cleanup_result_has_correct_keys():
     with patch("app.services.lifecycle.Session", return_value=session):
         result = run_lifecycle_cleanup(MagicMock())
     assert set(result.keys()) == {"deleted_resumes", "deleted_cover_letters"}
+
+
+# ── reap_stuck_cover_letters ─────────────────────────────────────────────────
+
+
+class _ProcessingCL:
+    def __init__(self):
+        self.status = "processing"
+
+
+def _reaper_session(stuck_rows):
+    session = MagicMock()
+    session.__enter__ = lambda s: s
+    session.__exit__ = MagicMock(return_value=False)
+    session.exec.return_value = MagicMock(all=lambda: stuck_rows)
+    return session
+
+
+def test_reaper_fails_stuck_cover_letters():
+    stuck = [_ProcessingCL(), _ProcessingCL()]
+    session = _reaper_session(stuck)
+    with patch("app.services.lifecycle.Session", return_value=session):
+        reaped = reap_stuck_cover_letters(MagicMock())
+    assert reaped == 2
+    assert all(cl.status == "failure" for cl in stuck)
+    session.commit.assert_called_once()
+
+
+def test_reaper_returns_zero_when_none_stuck():
+    session = _reaper_session([])
+    with patch("app.services.lifecycle.Session", return_value=session):
+        reaped = reap_stuck_cover_letters(MagicMock())
+    assert reaped == 0
+    session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_reaper_marks_only_old_processing_rows(client, auth_headers):
+    """Real DB: an old 'processing' row is failed; a fresh one is left alone."""
+    import io
+
+    from sqlmodel import Session
+
+    from app.core.db import sync_engine
+    from app.models.cover_letter import CoverLetter
+    from app.models.resume import Resume
+
+    up = await client.post(
+        "/api/v1/resumes/upload",
+        files={"file": ("r.txt", io.BytesIO(b"Python developer with FastAPI."), "text/plain")},
+        data={"name": "Reaper Resume"},
+        headers=auth_headers,
+    )
+    assert up.status_code == 201
+    resume_id = uuid.UUID(up.json()["id"])
+
+    with Session(sync_engine) as session:
+        user_id = session.get(Resume, resume_id).user_id
+        old = CoverLetter(
+            user_id=user_id,
+            resume_id=resume_id,
+            job_description="stuck",
+            task_id=str(uuid.uuid4()),
+            status="processing",
+            started_at=datetime.now(UTC) - timedelta(minutes=30),
+        )
+        fresh = CoverLetter(
+            user_id=user_id,
+            resume_id=resume_id,
+            job_description="fresh",
+            task_id=str(uuid.uuid4()),
+            status="processing",
+            started_at=datetime.now(UTC),
+        )
+        session.add(old)
+        session.add(fresh)
+        session.commit()
+        old_id, fresh_id = old.id, fresh.id
+
+    reaped = reap_stuck_cover_letters(sync_engine, max_age_minutes=15)
+    assert reaped >= 1
+
+    with Session(sync_engine) as session:
+        assert session.get(CoverLetter, old_id).status == "failure"
+        assert session.get(CoverLetter, fresh_id).status == "processing"

@@ -212,6 +212,7 @@ async def activate_resume(
 @router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_resume(
     resume_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ):
@@ -219,9 +220,9 @@ async def delete_resume(
     resume = await session.get(Resume, resume_id)
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
-    _delete_embeddings_bg(current_user.id, resume_id)
     await session.delete(resume)
     await session.commit()
+    background_tasks.add_task(_delete_embeddings_bg, current_user.id, resume_id)
 
 
 @router.get("/{resume_id}/analysis")
