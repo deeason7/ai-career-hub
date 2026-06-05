@@ -1,18 +1,53 @@
 """Dashboard page — stats overview and quick actions."""
 
+import requests
 import streamlit as st
 
 from api_client import api, safe_json
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _load_stats(token: str) -> dict | None:
+    """Fetch dashboard counts for `token`; None if the API is unreachable.
+
+    `token` is only the cache key (one entry per user); api() injects the real
+    auth header from session state.
+    """
+    try:
+        resumes = api("get", "/resumes/")
+        jobs = api("get", "/jobs/stats")
+        cover_letters = api("get", "/cover-letters/")
+    except requests.exceptions.RequestException:
+        return None
+    if not (resumes.ok and jobs.ok and cover_letters.ok):
+        return None
+    return {
+        "resumes": safe_json(resumes, []),
+        "jobs": safe_json(jobs, {}),
+        "cover_letters": safe_json(cover_letters, []),
+    }
+
+
 def page_dashboard() -> None:
     st.title("📋 Dashboard")
 
-    resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
-    jobs = safe_json(api("get", "/jobs/stats"), {}) if st.session_state.token else {}
-    cover_letters = (
-        safe_json(api("get", "/cover-letters/"), []) if st.session_state.token else []
-    )
+    if not st.session_state.token:
+        return
+
+    stats = _load_stats(st.session_state.token)
+    if stats is None:
+        st.warning(
+            "⏳ **Couldn't load your stats** — the server may be waking from a "
+            "cold start (~90s). Your data is safe; try again in a moment."
+        )
+        if st.button("🔄 Retry"):
+            _load_stats.clear()
+            st.rerun()
+        return
+
+    resumes = stats["resumes"]
+    jobs = stats["jobs"]
+    cover_letters = stats["cover_letters"]
 
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 Resumes", len(resumes) if isinstance(resumes, list) else 0)
