@@ -6,25 +6,7 @@ from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.core.config import settings
-from app.core.db import get_async_session
-from app.main import app
-
-TEST_ENGINE = create_async_engine(settings.SQLALCHEMY_ASYNC_DATABASE_URI, pool_pre_ping=True)
-TestSessionLocal = async_sessionmaker(bind=TEST_ENGINE, class_=AsyncSession, expire_on_commit=False)
-
-
-async def override_session():
-    async with TestSessionLocal() as session:
-        yield session
-
-
-app.dependency_overrides[get_async_session] = override_session
+from httpx import AsyncClient
 
 _ATS_PATCH = "app.api.v1.endpoints.analysis.calculate_ats_score"
 _SKILL_PATCH = "app.api.v1.endpoints.analysis.generate_skill_gap_analysis"
@@ -51,34 +33,6 @@ _FAKE_SKILL_GAP = {
 }
 
 _FAKE_QUESTIONS = ["Tell me about your FastAPI experience.", "How do you handle async IO?"]
-
-
-@pytest_asyncio.fixture(scope="module", autouse=True)
-async def setup_db():
-    async with TEST_ENGINE.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-    yield
-    async with TEST_ENGINE.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-
-
-@pytest_asyncio.fixture
-async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-
-
-@pytest_asyncio.fixture
-async def auth_headers(client: AsyncClient):
-    email = f"analysis_{uuid.uuid4().hex[:8]}@example.com"
-    await client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "full_name": "Analysis User", "password": "Testpassword99!"},
-    )
-    login = await client.post(
-        "/api/v1/auth/login", data={"username": email, "password": "Testpassword99!"}
-    )
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 @pytest_asyncio.fixture
