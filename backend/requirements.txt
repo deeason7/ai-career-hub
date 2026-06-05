@@ -66,6 +66,6 @@ reportlab==4.5.0
 
 # --- Security ---
 bcrypt==4.2.0
-PyJWT==2.12.1
+PyJWT==2.13.0
 cryptography>=44.0.0
 
