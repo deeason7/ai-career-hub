@@ -29,10 +29,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Require a password so the dev stack mirrors prod; api + test authenticate
+    # with the same REDIS_PASSWORD (override via the host env, else the default).
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-localdevredis}"]
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-localdevredis}\" --no-auth-warning ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,6 +59,7 @@ services:
     environment:
       POSTGRES_SERVER: db
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-localdevredis}
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_LLM_MODEL: llama3.2:3b
       CHROMA_PERSIST_DIR: /app/chroma_data
@@ -112,6 +116,7 @@ services:
       TESTING: "true"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-localdevredis}
       CHROMA_PERSIST_DIR: /tmp/chroma_test
     depends_on:
       db:
