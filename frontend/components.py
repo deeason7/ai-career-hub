@@ -31,6 +31,8 @@ def lifecycle_badge(expires_at: str | None, is_permanent: bool = False) -> str:
 
     try:
         exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=UTC)
         days_left = (exp - datetime.now(UTC)).days
         if days_left < 0:
             return "  🔴 expired"
@@ -40,7 +42,7 @@ def lifecycle_badge(expires_at: str | None, is_permanent: bool = False) -> str:
             return f"  🟠 expires in {days_left}d"
         else:
             return f"  🗓️ expires in {days_left}d"
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, TypeError):
         return ""
 
 
@@ -49,8 +51,37 @@ def loading_spinner(label: str = "Working…"):
     return st.spinner(f"⏳ {label}")
 
 
-def job_url_import(key_prefix: str) -> str:
-    """Render a collapsible 'Import from URL' expander; return the fetched JD text or ''."""
+_SHARED_JD_KEY = "shared_jd"
+
+
+def job_description_input(
+    page_key: str, height: int = 280, label: str = "Job Description"
+) -> str:
+    """A job-description field shared across pages.
+
+    The JD lives in st.session_state['shared_jd'], so pasting or importing it on
+    one page (Cover Letter) carries to others (Job Match) for the session. Each
+    page seeds its own text widget from the shared value and syncs edits back;
+    `page_key` just keeps the per-page widget keys unique.
+    """
+    st.session_state.setdefault(_SHARED_JD_KEY, "")
+    _job_url_import(page_key)
+
+    widget_key = f"jd_input_{page_key}"
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = st.session_state[_SHARED_JD_KEY]
+    jd = st.text_area(
+        label,
+        height=height,
+        key=widget_key,
+        placeholder="Paste the full job posting here, or import from URL above.",
+    )
+    st.session_state[_SHARED_JD_KEY] = jd
+    return jd
+
+
+def _job_url_import(page_key: str) -> None:
+    """'Import from URL' expander; on success writes the JD into the shared field."""
     from api_client import api, detail, safe_json
 
     with st.expander("🔗 Import Job from URL (LinkedIn, Greenhouse, Lever…)"):
@@ -58,29 +89,24 @@ def job_url_import(key_prefix: str) -> str:
             "Paste any public job posting URL. LinkedIn may require login — "
             "in that case paste the text manually."
         )
-        job_url_input = st.text_input(
+        url = st.text_input(
             "Job Posting URL",
             placeholder="https://www.linkedin.com/jobs/view/...",
-            key=f"{key_prefix}_url_input",
+            key=f"{page_key}_url_input",
         )
-        if st.button("🚀 Fetch Job Description", key=f"{key_prefix}_fetch_btn"):
-            if not job_url_input.strip():
+        if st.button("🚀 Fetch Job Description", key=f"{page_key}_fetch_btn"):
+            if not url.strip():
                 show_error("Please enter a URL.")
+                return
+            with loading_spinner("Fetching job description…"):
+                resp = api("post", "/ai/fetch-job", json={"url": url.strip()})
+            data = safe_json(resp, {})
+            if resp.status_code == 200 and data.get("success"):
+                st.session_state[_SHARED_JD_KEY] = data.get("job_description", "")
+                st.session_state.pop(f"jd_input_{page_key}", None)
+                if data.get("warning"):
+                    st.warning(data["warning"])
+                show_success("Job description fetched — filled in below.")
+                st.rerun()
             else:
-                with loading_spinner("Fetching job description…"):
-                    resp = api(
-                        "post", "/ai/fetch-job", json={"url": job_url_input.strip()}
-                    )
-                data = safe_json(resp, {})
-                if resp.status_code == 200 and data.get("success"):
-                    st.session_state[f"{key_prefix}_prefilled_jd"] = data.get(
-                        "job_description", ""
-                    )
-                    show_success(
-                        "Job description fetched! Scroll down — it's pre-filled below."
-                    )
-                    if data.get("warning"):
-                        st.warning(data["warning"])
-                else:
-                    show_error(detail(resp, "Could not fetch job description."))
-    return st.session_state.get(f"{key_prefix}_prefilled_jd", "")
+                show_error(detail(resp, "Could not fetch job description."))
