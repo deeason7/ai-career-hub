@@ -48,6 +48,18 @@ async def _run_migrations_when_db_ready() -> None:
         try:
             async with async_engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
+                # Existing databases created alembic_version with a VARCHAR(32)
+                # version_num (alembic's old default), too short for the 33-char
+                # "008_add_tracker_automation_fields" id — stamping it truncates and
+                # upgrade halts at 008. Widen it before upgrading so the chain can
+                # reach head. Idempotent; no-op on a fresh DB (table not created yet).
+                await conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS alembic_version "
+                        "ALTER COLUMN version_num TYPE VARCHAR(255)"
+                    )
+                )
+                await conn.commit()
             logger.info(
                 "[startup] DB reachable after %d attempt(s) — running alembic upgrade head",
                 attempt + 1,
