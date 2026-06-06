@@ -7,25 +7,32 @@ from api_client import api, safe_json
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _load_stats(token: str) -> dict | None:
-    """Fetch dashboard counts for `token`; None if the API is unreachable.
+def _load_stats(token: str) -> dict:
+    """Fetch dashboard counts for `token`.
+
+    Returns {"ok": True, "data": {...}} on success, else {"ok": False, ...}
+    describing the failure (kind / which call / status) so the page can show an
+    honest message instead of always blaming a cold start.
 
     `token` is only the cache key (one entry per user); api() injects the real
     auth header from session state.
     """
-    try:
-        resumes = api("get", "/resumes/")
-        jobs = api("get", "/jobs/stats")
-        cover_letters = api("get", "/cover-letters/")
-    except requests.exceptions.RequestException:
-        return None
-    if not (resumes.ok and jobs.ok and cover_letters.ok):
-        return None
-    return {
-        "resumes": safe_json(resumes, []),
-        "jobs": safe_json(jobs, {}),
-        "cover_letters": safe_json(cover_letters, []),
+    calls = {
+        "resumes": ("/resumes/", []),
+        "jobs": ("/jobs/stats", {}),
+        "cover_letters": ("/cover-letters/", []),
     }
+    data = {}
+    for key, (path, empty) in calls.items():
+        try:
+            resp = api("get", path)
+        except requests.exceptions.RequestException:
+            return {"ok": False, "kind": "network", "where": path, "status": None}
+        if not resp.ok:
+            kind = "auth" if resp.status_code in (401, 403) else "server"
+            return {"ok": False, "kind": kind, "where": path, "status": resp.status_code}
+        data[key] = safe_json(resp, empty)
+    return {"ok": True, "data": data}
 
 
 def page_dashboard() -> None:
@@ -34,17 +41,31 @@ def page_dashboard() -> None:
     if not st.session_state.token:
         return
 
-    stats = _load_stats(st.session_state.token)
-    if stats is None:
-        st.warning(
-            "⏳ **Couldn't load your stats** — the server may be waking from a "
-            "cold start (~90s). Your data is safe; try again in a moment."
-        )
+    result = _load_stats(st.session_state.token)
+    if not result["ok"]:
+        kind = result["kind"]
+        if kind == "auth":
+            st.error(
+                "🔒 **Your session expired.** Please use **Logout** in the sidebar, "
+                "then sign in again."
+            )
+        elif kind == "network":
+            st.warning(
+                "⏳ **Couldn't reach the server** — it may be waking from a cold "
+                "start (~90s). Your data is safe; try again in a moment."
+            )
+        else:  # server error — a real 5xx, not a cold start
+            st.error(
+                f"⚠️ **Server error loading your stats** "
+                f"(`{result['where']}` → HTTP {result['status']}). "
+                "Your data is safe and this has been logged. Please try again shortly."
+            )
         if st.button("🔄 Retry"):
             _load_stats.clear()
             st.rerun()
         return
 
+    stats = result["data"]
     resumes = stats["resumes"]
     jobs = stats["jobs"]
     cover_letters = stats["cover_letters"]
