@@ -1,6 +1,6 @@
 """
 AI Career Hub — Streamlit Frontend (orchestrator)
-Thin routing layer — all page logic lives in pages/.
+Thin routing layer — all page logic lives in views/.
 """
 
 import requests
@@ -9,13 +9,13 @@ from streamlit_cookies_controller import CookieController
 
 from api_client import API_URL, api, safe_json
 from auth import page_auth
-from pages.dashboard import page_dashboard
-from pages.resumes import page_resumes
-from pages.cover_letter import page_cover_letter
-from pages.job_match import page_job_match
-from pages.job_tracker import page_job_tracker
-from pages.legal import page_legal
-from pages.agent import page_agent
+from views.dashboard import page_dashboard
+from views.resumes import page_resumes
+from views.cover_letter import page_cover_letter
+from views.job_match import page_job_match
+from views.job_tracker import page_job_tracker
+from views.legal import page_legal
+from views.agent import page_agent
 
 st.set_page_config(
     page_title="AI Career Hub",
@@ -146,7 +146,10 @@ def sidebar():
 
         st.divider()
         if st.button("🚪 Logout"):
-            cookie_manager.remove("auth_token")
+            try:
+                cookie_manager.remove("auth_token")
+            except Exception:
+                pass
             try:
                 _headers = {}
                 if st.session_state.token:
@@ -185,7 +188,10 @@ if not st.session_state.token:
         if _me and _me.get("email"):
             st.session_state.user = _me
         else:
-            cookie_manager.remove("auth_token")
+            try:
+                cookie_manager.remove("auth_token")
+            except Exception:
+                pass
             st.session_state.token = None
 
 # ─── Page Routing ────────────────────────────────────────────────────────────

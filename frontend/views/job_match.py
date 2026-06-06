@@ -5,7 +5,7 @@ import html
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from components import job_url_import, show_error
+from components import job_description_input, show_error
 
 
 def page_job_match() -> None:
@@ -30,21 +30,13 @@ def page_job_match() -> None:
     )
     selected_id = resume_options[selected_name]
 
-    prefilled_jd = job_url_import("job_match")
-    jd = st.text_area(
-        "Job Description",
-        value=prefilled_jd,
-        height=260,
-        placeholder="Paste the full job posting here, or import from URL above.",
-    )
+    jd = job_description_input("job_match", height=260)
 
     if st.button("🔍 Analyze", type="primary"):
         if not jd.strip():
             show_error("Please paste a job description.")
             return
-        with st.spinner(
-            "Running ATS scoring, skill gap analysis, and interview prep in parallel…"
-        ):
+        with st.spinner("Analyzing your resume against this job…"):
             resp = api(
                 "post",
                 "/analysis/job-match",

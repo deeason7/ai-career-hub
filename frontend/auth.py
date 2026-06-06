@@ -46,11 +46,16 @@ def page_auth(cookie_manager) -> None:
                         st.session_state["refresh_token"] = resp.cookies.get(
                             "refresh_token"
                         )
-                        cookie_manager.set(
-                            "auth_token",
-                            st.session_state.token,
-                            max_age=3600,
-                        )
+                        try:
+                            cookie_manager.set(
+                                "auth_token",
+                                st.session_state.token,
+                                max_age=3600,
+                            )
+                        except Exception:
+                            # Cookie bridge may not have hydrated yet; the
+                            # session still works via session_state this run.
+                            pass
                         me = safe_json(api("get", "/auth/me"), {})
                         st.session_state.user = me
                         show_success("Logged in!")

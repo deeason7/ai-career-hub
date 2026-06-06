@@ -50,32 +50,32 @@ class TestModuleImports:
         result = lifecycle_badge(None)
         assert result == ""
 
-    def test_pages_dashboard_importable(self):
+    def test_views_dashboard_importable(self):
         import importlib
 
-        importlib.import_module("pages.dashboard")
+        importlib.import_module("views.dashboard")
 
-    def test_pages_resumes_importable(self):
+    def test_views_resumes_importable(self):
         import importlib
 
-        importlib.import_module("pages.resumes")
+        importlib.import_module("views.resumes")
 
-    def test_pages_cover_letter_importable(self):
+    def test_views_cover_letter_importable(self):
         import importlib
 
-        importlib.import_module("pages.cover_letter")
+        importlib.import_module("views.cover_letter")
 
-    def test_pages_job_match_importable(self):
+    def test_views_job_match_importable(self):
         import importlib
 
-        importlib.import_module("pages.job_match")
+        importlib.import_module("views.job_match")
 
-    def test_pages_job_tracker_importable(self):
+    def test_views_job_tracker_importable(self):
         import importlib
 
-        importlib.import_module("pages.job_tracker")
+        importlib.import_module("views.job_tracker")
 
-    def test_pages_legal_importable(self):
+    def test_views_legal_importable(self):
         import importlib
 
-        importlib.import_module("pages.legal")
+        importlib.import_module("views.legal")

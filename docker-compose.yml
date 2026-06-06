@@ -81,10 +81,16 @@ services:
     restart: unless-stopped
     environment:
       API_URL: http://api:8000/api/v1
+      # Local-dev hot reload: source is mounted below; Streamlit re-runs on save.
+      # poll watcher is required for bind mounts on macOS Docker.
+      STREAMLIT_SERVER_RUN_ON_SAVE: "true"
+      STREAMLIT_SERVER_FILE_WATCHER_TYPE: poll
     ports:
       - "8501:8501"
     depends_on:
       - api
+    volumes:
+      - ./frontend:/app
 
   # ─── Nginx Reverse Proxy ──────────────────────────────────
   nginx:
