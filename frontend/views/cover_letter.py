@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from components import job_url_import, loading_spinner, show_error, show_success
+from components import job_description_input, loading_spinner, show_error, show_success
 
 
 def _show_rag_context() -> None:
@@ -58,12 +58,8 @@ def page_cover_letter() -> None:
     )
     selected_id = resume_options[selected_name]
 
-    prefilled_jd = job_url_import("cover_letter")
-    jd = st.text_area(
-        "Paste the Job Description",
-        value=prefilled_jd,
-        height=300,
-        placeholder="Paste the full job posting here, or import from URL above.",
+    jd = job_description_input(
+        "cover_letter", height=300, label="Paste the Job Description"
     )
 
     if st.button("🚀 Generate Cover Letter", type="primary"):
@@ -218,6 +214,8 @@ def page_cover_letter() -> None:
                     exp = datetime.fromisoformat(
                         cl["expires_at"].replace("Z", "+00:00")
                     )
+                    if exp.tzinfo is None:
+                        exp = exp.replace(tzinfo=UTC)
                     days_left = (exp - datetime.now(UTC)).days
                     if days_left < 0:
                         cl_expiry_tag = "  🔴 expired"
