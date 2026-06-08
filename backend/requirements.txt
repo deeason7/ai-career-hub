@@ -65,7 +65,7 @@ ddgs>=9.0.0
 # CVE-2026-45829 (chromadb):
 #   Accepted risk. ChromaDB collections are per-user and server-side only.
 #   No user-controlled query paths to the underlying storage layer.
-groq>=0.9.0,<1.0.0
+groq>=1.4.0,<2.0.0
 instructor>=1.3.0
 
 # --- File Handling ---
