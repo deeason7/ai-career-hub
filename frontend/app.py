@@ -9,6 +9,7 @@ from streamlit_cookies_controller import CookieController
 
 from api_client import API_URL, api, safe_json
 from auth import page_auth
+from session import cookie_get, cookie_remove
 from views.agent import page_agent
 from views.cover_letter import page_cover_letter
 from views.dashboard import page_dashboard
@@ -26,10 +27,11 @@ st.set_page_config(
 
 cookie_manager = CookieController()
 
-# CookieController renders an invisible JS bridge iframe. Hide it and the
-# Streamlit wrapper that contains it (incl. the "trouble loading" banner),
-# scoped via :has() to the cookie iframe so other components and sibling
-# layout are untouched — the previous "~ div" rule could hide real content.
+# CookieController renders a JS bridge iframe. Move it (and its wrapper, incl.
+# the "trouble loading" banner) off-screen rather than display:none — the iframe
+# must stay in the layout to hydrate, or the cookie never loads and a page reload
+# logs the user out. Scoped via :has() to the cookie iframe so other components
+# and sibling layout are untouched.
 st.html(
     "<style>"
     "iframe[title*='cookies_controller' i],"
@@ -37,13 +39,17 @@ st.html(
     "[data-testid='stCustomComponentV1']:has(iframe[title*='cookie' i]),"
     "[data-testid='stElementContainer']:has(iframe[title*='cookie' i]),"
     ".element-container:has(iframe[title*='cookie' i]) {"
-    "  display:none !important;"
-    "  height:0 !important;"
-    "  min-height:0 !important;"
+    "  position:absolute !important;"
+    "  left:-9999px !important;"
+    "  top:0 !important;"
+    "  width:1px !important;"
+    "  height:1px !important;"
+    "  opacity:0 !important;"
+    "  pointer-events:none !important;"
+    "  overflow:hidden !important;"
     "  margin:0 !important;"
     "  padding:0 !important;"
-    "  overflow:hidden !important;"
-    "  position:absolute !important;"
+    "  border:0 !important;"
     "}"
     "</style>"
 )
@@ -99,10 +105,7 @@ def show_disclaimer_modal():
 
 
 def _logout():
-    try:
-        cookie_manager.remove("auth_token")
-    except Exception:
-        pass
+    cookie_remove(cookie_manager, "auth_token")
     try:
         _headers = {}
         if st.session_state.token:
@@ -126,23 +129,18 @@ def _logout():
 
 
 # ─── Session Restore from Cookie ────────────────────────────────────────────
-# CookieController.get() raises TypeError when cookies dict is None during
-# the first render before browser JS has hydrated. Guard with try/except.
+# With the bridge now allowed to hydrate (see the CSS above), a stored auth
+# cookie is read back on reload so the session survives. cookie_get guards the
+# not-yet-hydrated first render.
 if not st.session_state.token:
-    try:
-        _cookie_token = cookie_manager.get("auth_token")
-    except TypeError:
-        _cookie_token = None
+    _cookie_token = cookie_get(cookie_manager, "auth_token")
     if _cookie_token:
         st.session_state.token = _cookie_token
         _me = safe_json(api("get", "/auth/me"), {})
         if _me and _me.get("email"):
             st.session_state.user = _me
         else:
-            try:
-                cookie_manager.remove("auth_token")
-            except Exception:
-                pass
+            cookie_remove(cookie_manager, "auth_token")
             st.session_state.token = None
 
 # ─── Page Routing ────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import streamlit as st
 
 from api_client import API_URL, api, detail, safe_json
 from components import show_error, show_success
+from session import cookie_set
 
 
 def page_auth(cookie_manager) -> None:
@@ -46,16 +47,7 @@ def page_auth(cookie_manager) -> None:
                         st.session_state["refresh_token"] = resp.cookies.get(
                             "refresh_token"
                         )
-                        try:
-                            cookie_manager.set(
-                                "auth_token",
-                                st.session_state.token,
-                                max_age=3600,
-                            )
-                        except Exception:
-                            # Cookie bridge may not have hydrated yet; the
-                            # session still works via session_state this run.
-                            pass
+                        cookie_set(cookie_manager, "auth_token", st.session_state.token)
                         me = safe_json(api("get", "/auth/me"), {})
                         st.session_state.user = me
                         show_success("Logged in!")

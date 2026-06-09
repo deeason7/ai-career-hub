@@ -32,6 +32,9 @@ class TestModuleImports:
             toast_success,
         )
 
+    def test_session_imports(self):
+        from session import cookie_get, cookie_remove, cookie_set  # noqa: F401
+
     def test_ui_imports(self):
         from ui import (  # noqa: F401
             card,
@@ -60,6 +63,17 @@ class TestModuleImports:
         assert score_tone(85) == "good"
         assert score_tone(55) == "warn"
         assert score_tone(20) == "bad"
+
+    def test_error_state_classify(self):
+        # The honest-error mapping behind error_state: never collapse 401/5xx to "cold".
+        from ui import _classify
+
+        assert _classify(401) == "auth"
+        assert _classify(403) == "auth"
+        assert _classify(429) == "rate"
+        assert _classify(503) == "cold"
+        assert _classify(None) == "network"
+        assert _classify(500) == "server"
 
     def test_lifecycle_badge_expired(self):
         from components import lifecycle_badge

@@ -4,24 +4,23 @@ import requests
 import streamlit as st
 
 from api_client import api, safe_json
-from ui import page_header
+from ui import error_state, page_header
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _load_stats(token: str) -> dict | None:
-    """Fetch dashboard counts for `token`; None if the API is unreachable.
+def _load_stats(token: str) -> dict:
+    """Fetch dashboard counts for `token`; raise on failure.
 
+    Raising (vs returning None) keeps st.cache_data from caching the error, so a
+    retry re-fetches; the caller classifies the failure via ui.error_state.
     `token` is only the cache key (one entry per user); api() injects the real
     auth header from session state.
     """
-    try:
-        resumes = api("get", "/resumes/")
-        jobs = api("get", "/jobs/stats")
-        cover_letters = api("get", "/cover-letters/")
-    except requests.exceptions.RequestException:
-        return None
-    if not (resumes.ok and jobs.ok and cover_letters.ok):
-        return None
+    resumes = api("get", "/resumes/")
+    jobs = api("get", "/jobs/stats")
+    cover_letters = api("get", "/cover-letters/")
+    for r in (resumes, jobs, cover_letters):
+        r.raise_for_status()
     return {
         "resumes": safe_json(resumes, []),
         "jobs": safe_json(jobs, {}),
@@ -42,12 +41,11 @@ def page_dashboard() -> None:
     if not st.session_state.token:
         return
 
-    stats = _load_stats(st.session_state.token)
-    if stats is None:
-        st.warning(
-            "⏳ **Couldn't load your stats** — the server may be waking from a "
-            "cold start (~90s). Your data is safe; try again in a moment."
-        )
+    try:
+        stats = _load_stats(st.session_state.token)
+    except requests.exceptions.RequestException as exc:
+        resp = getattr(exc, "response", None)
+        error_state(resp if resp is not None else "network")
         if st.button("🔄 Retry"):
             _load_stats.clear()
             st.rerun()
