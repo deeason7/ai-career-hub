@@ -1,13 +1,19 @@
 """Job match analysis page — ATS score, skill gap, interview prep."""
 
-import html
-
 import requests
 import streamlit as st
 
 from api_client import api, safe_json
-from components import job_description_input, show_error
-from ui import error_state, page_header
+from ui import (
+    chip_row,
+    error_state,
+    job_description_input,
+    metric_tile,
+    nav_to,
+    page_header,
+    score_tone,
+    show_error,
+)
 
 # ATS + skill gap + interview questions ride one request through several LLM
 # calls; the 30s client default read-timed-out in prod when the model was cold.
@@ -74,7 +80,7 @@ def page_job_match() -> None:
 
 
 def _render_analysis(data: dict) -> None:
-    """Render the combined analysis result in three tabs."""
+    """Render the combined analysis result in three tabs, plus the next step."""
     ats = data.get("ats", {})
     skill_gap = data.get("skill_gap", {})
     questions = data.get("interview_questions", [])
@@ -86,24 +92,35 @@ def _render_analysis(data: dict) -> None:
         sem_score = ats.get("semantic_score", 0)
         kw_score = ats.get("keyword_score", 0)
         struct_score = ats.get("structure_score", 0)
-        color = "🟢" if score >= 70 else "🟡" if score >= 45 else "🔴"
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric(
-            f"{color} ATS Score",
-            f"{score}%",
-            help="Composite: 50% semantic + 30% keyword + 20% structure",
-        )
-        c2.metric(
-            "🧠 Semantic Match",
-            f"{sem_score}%",
-            help="Sentence-transformer cosine similarity — catches synonyms",
-        )
-        c3.metric("🔑 Keywords", f"{kw_score}%", help="Exact + bigram keyword overlap")
-        c4.metric(
-            "📐 Structure",
-            f"{struct_score}%",
-            help="Section presence and resume length",
-        )
+        with c1:
+            metric_tile(
+                "ATS Score",
+                f"{score}%",
+                tone=score_tone(score),
+                help="Composite: 50% semantic + 30% keyword + 20% structure",
+            )
+        with c2:
+            metric_tile(
+                "🧠 Semantic",
+                f"{sem_score}%",
+                tone=score_tone(sem_score),
+                help="Sentence-transformer cosine similarity — catches synonyms",
+            )
+        with c3:
+            metric_tile(
+                "🔑 Keywords",
+                f"{kw_score}%",
+                tone=score_tone(kw_score),
+                help="Exact + bigram keyword overlap",
+            )
+        with c4:
+            metric_tile(
+                "📐 Structure",
+                f"{struct_score}%",
+                tone=score_tone(struct_score),
+                help="Section presence and resume length",
+            )
         st.progress(int(score) / 100)
         if sem_score >= 70:
             st.success("🧠 High semantic alignment — your resume language closely matches the JD.")
@@ -120,43 +137,20 @@ def _render_analysis(data: dict) -> None:
             st.subheader("📊 Section Alignment with JD")
             sec_cols = st.columns(len(section_scores))
             for col, (sec, sec_score) in zip(sec_cols, section_scores.items(), strict=True):
-                sec_color = "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
-                col.metric(
-                    f"{sec_color} {sec.title()}",
-                    f"{sec_score}%" if sec_score > 0 else "—",
-                )
+                with col:
+                    metric_tile(
+                        sec.title(),
+                        f"{sec_score}%" if sec_score > 0 else "—",
+                        tone=score_tone(sec_score, good=60, ok=35),
+                    )
         st.divider()
         col_l, col_r = st.columns(2)
         with col_l:
             st.subheader("✅ Matched Keywords")
-            matched = ats.get("matched_keywords", [])
-            if matched:
-                st.markdown(
-                    " ".join(
-                        f'<span style="background:#1e7e34;color:#fff;padding:2px 8px;'
-                        f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
-                        f"{html.escape(str(kw))}</span>"
-                        for kw in matched[:30]
-                    ),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.write("None")
+            chip_row(ats.get("matched_keywords", [])[:30], tone="good")
         with col_r:
             st.subheader("❌ Missing Keywords")
-            missing = ats.get("missing_keywords", [])
-            if missing:
-                st.markdown(
-                    " ".join(
-                        f'<span style="background:#b02a37;color:#fff;padding:2px 8px;'
-                        f'border-radius:12px;font-size:0.82em;margin:2px;display:inline-block">'
-                        f"{html.escape(str(kw))}</span>"
-                        for kw in missing[:20]
-                    ),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.write("None")
+            chip_row(ats.get("missing_keywords", [])[:20], tone="bad")
         recs = ats.get("recommendations", [])
         if recs:
             st.subheader("💡 Recommendations")
@@ -165,17 +159,14 @@ def _render_analysis(data: dict) -> None:
 
     with tab_gap:
         sg_score = skill_gap.get("ats_score", 0)
-        sg_color = "🟢" if sg_score >= 70 else "🟡" if sg_score >= 45 else "🔴"
-        st.metric(f"{sg_color} ATS Score", f"{sg_score}%")
+        metric_tile("ATS Score", f"{sg_score}%", tone=score_tone(sg_score))
         col_l, col_r = st.columns(2)
         with col_l:
             st.subheader("✅ Skills You Have")
-            for s in skill_gap.get("matched_skills", [])[:15]:
-                st.markdown(f"- `{s}`")
+            chip_row(skill_gap.get("matched_skills", [])[:15], tone="good")
         with col_r:
             st.subheader("❌ Missing Skills")
-            for s in skill_gap.get("missing_skills", [])[:15]:
-                st.markdown(f"- `{s}`")
+            chip_row(skill_gap.get("missing_skills", [])[:15], tone="bad")
         priority_gaps = skill_gap.get("priority_gaps", [])
         if priority_gaps:
             st.subheader("🚨 Priority Gaps")
@@ -202,3 +193,15 @@ def _render_analysis(data: dict) -> None:
                 st.markdown(f"**{i}.** {q}")
         else:
             st.info("No interview questions generated. Try again with a more detailed JD.")
+
+    st.divider()
+    h1, h2 = st.columns([1, 1])
+    with h1:
+        if st.button(
+            "✉️ Write a cover letter for this JD",
+            type="primary",
+            use_container_width=True,
+        ):
+            nav_to("cover_letter")
+    with h2:
+        st.caption("Your pasted job description carries over automatically.")
