@@ -4,7 +4,7 @@ import requests
 import streamlit as st
 
 from api_client import api, safe_json
-from ui import error_state, page_header
+from ui import chip_row, error_state, metric_tile, nav_to, page_header, score_tone
 
 # The pipeline runs as one synchronous call — the backend doesn't expose
 # per-step progress — so the wait is shown as honest-indeterminate and the
@@ -131,18 +131,19 @@ def _render_results(result: dict) -> None:
         st.subheader("📊 ATS Score")
         score = ats.get("score", 0)
         col1, col2, col3 = st.columns(3)
-        col1.metric("Overall", f"{score}/100")
-        col2.metric("Semantic", f"{ats.get('semantic_score', 0)}/100")
-        col3.metric("Keywords", f"{ats.get('keyword_score', 0)}/100")
+        with col1:
+            metric_tile("Overall", f"{score}/100", tone=score_tone(score))
+        with col2:
+            metric_tile("Semantic", f"{ats.get('semantic_score', 0)}/100")
+        with col3:
+            metric_tile("Keywords", f"{ats.get('keyword_score', 0)}/100")
 
         if ats.get("matched_keywords"):
-            st.markdown(
-                "**Matched:** " + ", ".join(f"`{kw}`" for kw in ats["matched_keywords"][:10])
-            )
+            st.markdown("**Matched:**")
+            chip_row([str(kw) for kw in ats["matched_keywords"][:10]], tone="good")
         if ats.get("missing_keywords"):
-            st.markdown(
-                "**Missing:** " + ", ".join(f"`{kw}`" for kw in ats["missing_keywords"][:10])
-            )
+            st.markdown("**Missing:**")
+            chip_row([str(kw) for kw in ats["missing_keywords"][:10]], tone="bad")
         if ats.get("recommendations"):
             for rec in ats["recommendations"]:
                 st.markdown(f"- {rec}")
@@ -182,3 +183,7 @@ def _render_results(result: dict) -> None:
         with st.expander("⚠️ Errors"):
             for err in errors:
                 st.error(err)
+
+    st.divider()
+    if st.button("📊 Open your tracker", use_container_width=True):
+        nav_to("tracker")
