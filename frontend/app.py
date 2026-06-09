@@ -127,24 +127,6 @@ def sidebar():
         )
         st.session_state["current_page"] = page
         st.divider()
-
-        # ── Dark mode toggle ─────────────────────────────────────────────────
-        if "dark_mode" not in st.session_state:
-            st.session_state["dark_mode"] = False
-        dark = st.toggle("🌙 Dark Mode", value=st.session_state["dark_mode"])
-        st.session_state["dark_mode"] = dark
-        if dark:
-            st.html(
-                "<style>"
-                "[data-testid='stAppViewContainer'] { background-color: #0e1117; color: #fafafa; }"
-                "[data-testid='stSidebar'] { background-color: #161b22; }"
-                "[data-testid='stHeader'] { background-color: #0e1117; }"
-                ".stTextInput input, .stTextArea textarea, .stSelectbox select {"
-                "    background-color: #1e2530 !important; color: #fafafa !important; }"
-                "</style>"
-            )
-
-        st.divider()
         if st.button("🚪 Logout"):
             try:
                 cookie_manager.remove("auth_token")
