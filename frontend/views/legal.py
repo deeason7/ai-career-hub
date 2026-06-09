@@ -2,9 +2,11 @@
 
 import streamlit as st
 
+from ui import page_header
+
 
 def page_legal() -> None:
-    st.title("📜 Legal & Info")
+    page_header("📜", "Legal & Info")
 
     tab_use, tab_terms, tab_disclaimer, tab_ai, tab_privacy = st.tabs(
         [

@@ -51,12 +51,42 @@ def loading_spinner(label: str = "Working…"):
     return st.spinner(f"⏳ {label}")
 
 
+# Mirrors the backend HALLUCINATION_THRESHOLD: honesty below this is where generation
+# would auto-regenerate, so surface it in red here too.
+_HONESTY_OK = 6
+
+
+def render_qa_scores(honesty: int | None, tone: int | None, flags: str | None) -> None:
+    """Show a revision's QA honesty/tone scores and any flags.
+
+    `flags` arrives as a JSON-encoded list (or None) on the revision payload.
+    """
+    if honesty is None:
+        return
+    c1, c2 = st.columns(2)
+    if honesty >= _HONESTY_OK:
+        c1.success(f"🟢 Honesty {honesty}/10")
+    else:
+        c1.error(f"🔴 Honesty {honesty}/10")
+    if tone is not None:
+        c2.info(f"🎯 Tone {tone}/10")
+    if not flags:
+        return
+
+    import json
+
+    try:
+        parsed = json.loads(flags)
+    except (ValueError, TypeError):
+        parsed = []
+    if parsed:
+        st.warning("⚠️ QA flags:\n" + "\n".join(f"- {f}" for f in parsed))
+
+
 _SHARED_JD_KEY = "shared_jd"
 
 
-def job_description_input(
-    page_key: str, height: int = 280, label: str = "Job Description"
-) -> str:
+def job_description_input(page_key: str, height: int = 280, label: str = "Job Description") -> str:
     """A job-description field shared across pages.
 
     The JD lives in st.session_state['shared_jd'], so pasting or importing it on

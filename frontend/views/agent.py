@@ -1,12 +1,19 @@
 """AI Agent page — autonomous multi-step job analysis workflow."""
 
+import requests
 import streamlit as st
 
 from api_client import api, safe_json
+from ui import chip_row, error_state, metric_tile, nav_to, page_header, score_tone
+
+# The pipeline runs as one synchronous call — the backend doesn't expose
+# per-step progress — so the wait is shown as honest-indeterminate and the
+# real per-step trace renders on completion.
+_AGENT_TIMEOUT_S = 120
 
 
 def page_agent() -> None:
-    st.title("🤖 AI Agent")
+    page_header("✨", "Quick Apply")
     st.caption(
         "Paste a job URL and select your resume. The agent autonomously scrapes, "
         "analyzes, scores, and generates everything you need to apply."
@@ -40,53 +47,78 @@ def page_agent() -> None:
 
         resume_id = resume_options[selected_resume]
 
-        progress_container = st.container()
-        with progress_container:
-            st.info("⏳ Agent is running... This may take 30-60 seconds.")
-            progress_bar = st.progress(0, text="Starting agent...")
+        with st.status("🤖 Agent running — scrape, research, score, write…", expanded=True) as box:
+            st.caption(
+                "Seven steps run as one pipeline call, typically 30–90 seconds. "
+                "The real per-step trace appears when it finishes."
+            )
+            try:
+                resp = api(
+                    "post",
+                    "/agent/analyze",
+                    json={"job_url": job_url, "resume_id": resume_id},
+                    timeout=_AGENT_TIMEOUT_S,
+                )
+            except requests.exceptions.Timeout:
+                box.update(label="⏱️ No result after 2 minutes", state="error")
+                st.error(
+                    "The agent didn't finish in time — the job site may be slow or the "
+                    "model cold. Try again in a minute."
+                )
+                return
+            except requests.RequestException:
+                box.update(label="🌐 Request failed", state="error")
+                error_state("network")
+                return
 
-        resp = api(
-            "post",
-            "/agent/analyze",
-            json={"job_url": job_url, "resume_id": resume_id},
-            timeout=120,
-        )
+            if resp.status_code != 200:
+                box.update(label="❌ Agent failed", state="error")
+                error_state(resp)
+                return
 
-        if resp.status_code != 200:
-            st.error(f"Agent failed: {safe_json(resp, {}).get('detail', resp.text)}")
-            return
+            result = safe_json(resp, {})
+            if not result.get("status"):
+                box.update(label="❌ Unexpected response", state="error")
+                st.error("The agent returned an unreadable result. Try again.")
+                return
 
-        result = resp.json()
-        progress_bar.progress(100, text="Agent completed!")
+            box.update(label="✅ Agent finished", state="complete")
+            st.session_state["agent_result"] = result
 
+    # Rendered from state, outside the click branch, so the report survives
+    # reruns (editing the URL or switching resumes no longer wipes it).
+    result = st.session_state.get("agent_result")
+    if result:
         _render_results(result)
 
 
 def _render_results(result: dict) -> None:
     """Render the agent execution results."""
-    status = result["status"]
+    status = result.get("status", "failed")
+    steps = result.get("steps", [])
+    duration = result.get("total_duration_ms", 0)
+    errors = result.get("errors", [])
     if status == "completed":
-        st.success(f"✅ Agent completed successfully — {len(result['steps'])} steps in {result['total_duration_ms']}ms")
+        st.success(f"✅ Agent completed successfully — {len(steps)} steps in {duration}ms")
     elif status == "partial":
-        st.warning(f"⚠️ Agent completed with {len(result['errors'])} error(s) — {result['total_duration_ms']}ms")
+        st.warning(f"⚠️ Agent completed with {len(errors)} error(s) — {duration}ms")
     else:
-        st.error(f"❌ Agent failed — {result['total_duration_ms']}ms")
+        st.error(f"❌ Agent failed — {duration}ms")
 
     # Step execution trace
     with st.expander("📊 Execution Trace", expanded=True):
-        for step in result["steps"]:
+        for step in steps:
             icon = {"success": "✅", "failed": "❌", "skipped": "⏭️"}.get(step["status"], "❓")
-            st.markdown(
-                f"{icon} **{step['name']}** — {step['detail']} "
-                f"({step['duration_ms']}ms)"
-            )
+            st.markdown(f"{icon} **{step['name']}** — {step['detail']} ({step['duration_ms']}ms)")
 
     summary = result.get("summary", {})
     full = result.get("full_results", {})
 
     # Company & Role
     if summary.get("company") or summary.get("role"):
-        st.subheader(f"🏢 {summary.get('role', 'Unknown Role')} @ {summary.get('company', 'Unknown')}")
+        st.subheader(
+            f"🏢 {summary.get('role', 'Unknown Role')} @ {summary.get('company', 'Unknown')}"
+        )
 
     # Company research
     if full.get("company_research"):
@@ -99,14 +131,19 @@ def _render_results(result: dict) -> None:
         st.subheader("📊 ATS Score")
         score = ats.get("score", 0)
         col1, col2, col3 = st.columns(3)
-        col1.metric("Overall", f"{score}/100")
-        col2.metric("Semantic", f"{ats.get('semantic_score', 0)}/100")
-        col3.metric("Keywords", f"{ats.get('keyword_score', 0)}/100")
+        with col1:
+            metric_tile("Overall", f"{score}/100", tone=score_tone(score))
+        with col2:
+            metric_tile("Semantic", f"{ats.get('semantic_score', 0)}/100")
+        with col3:
+            metric_tile("Keywords", f"{ats.get('keyword_score', 0)}/100")
 
         if ats.get("matched_keywords"):
-            st.markdown("**Matched:** " + ", ".join(f"`{kw}`" for kw in ats["matched_keywords"][:10]))
+            st.markdown("**Matched:**")
+            chip_row([str(kw) for kw in ats["matched_keywords"][:10]], tone="good")
         if ats.get("missing_keywords"):
-            st.markdown("**Missing:** " + ", ".join(f"`{kw}`" for kw in ats["missing_keywords"][:10]))
+            st.markdown("**Missing:**")
+            chip_row([str(kw) for kw in ats["missing_keywords"][:10]], tone="bad")
         if ats.get("recommendations"):
             for rec in ats["recommendations"]:
                 st.markdown(f"- {rec}")
@@ -122,7 +159,9 @@ def _render_results(result: dict) -> None:
                 st.markdown("**Recommended Learning:**")
                 for rec in recs:
                     if isinstance(rec, dict):
-                        st.markdown(f"- **{rec.get('skill', '')}**: {rec.get('resource', '')} ({rec.get('timeline', '')})")
+                        st.markdown(
+                            f"- **{rec.get('skill', '')}**: {rec.get('resource', '')} ({rec.get('timeline', '')})"
+                        )
                     else:
                         st.markdown(f"- {rec}")
 
@@ -140,7 +179,11 @@ def _render_results(result: dict) -> None:
                 st.markdown(f"**{i}.** {q}")
 
     # Errors
-    if result.get("errors"):
+    if errors:
         with st.expander("⚠️ Errors"):
-            for err in result["errors"]:
+            for err in errors:
                 st.error(err)
+
+    st.divider()
+    if st.button("📊 Open your tracker", use_container_width=True):
+        nav_to("tracker")

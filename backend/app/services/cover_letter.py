@@ -194,6 +194,7 @@ def refine_cover_letter(
     """Apply a targeted edit command to an existing cover letter."""
     from app.core.config import settings  # noqa: PLC0415
 
+    job_description = _sanitize_jd_for_prompt(job_description)
     if settings.USE_GROQ:
         return _refine_via_instructor(original_text, resume_text, job_description, user_command)
     return _refine_via_ollama(original_text, resume_text, job_description, user_command)

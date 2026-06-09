@@ -1,6 +1,6 @@
 """
 AI Career Hub — Streamlit Frontend (orchestrator)
-Thin routing layer — all page logic lives in views/.
+Thin routing layer — page logic lives in views/; navigation via st.navigation.
 """
 
 import requests
@@ -9,27 +9,29 @@ from streamlit_cookies_controller import CookieController
 
 from api_client import API_URL, api, safe_json
 from auth import page_auth
-from views.dashboard import page_dashboard
-from views.resumes import page_resumes
+from session import cookie_get, cookie_remove
+from views.agent import page_agent
 from views.cover_letter import page_cover_letter
+from views.dashboard import page_dashboard
 from views.job_match import page_job_match
 from views.job_tracker import page_job_tracker
 from views.legal import page_legal
-from views.agent import page_agent
+from views.resumes import page_resumes
 
 st.set_page_config(
     page_title="AI Career Hub",
     page_icon="🚀",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 cookie_manager = CookieController()
 
-# CookieController renders an invisible JS bridge iframe. Hide it and the
-# Streamlit wrapper that contains it (incl. the "trouble loading" banner),
-# scoped via :has() to the cookie iframe so other components and sibling
-# layout are untouched — the previous "~ div" rule could hide real content.
+# CookieController renders a JS bridge iframe. Move it (and its wrapper, incl.
+# the "trouble loading" banner) off-screen rather than display:none — the iframe
+# must stay in the layout to hydrate, or the cookie never loads and a page reload
+# logs the user out. Scoped via :has() to the cookie iframe so other components
+# and sibling layout are untouched.
 st.html(
     "<style>"
     "iframe[title*='cookies_controller' i],"
@@ -37,13 +39,17 @@ st.html(
     "[data-testid='stCustomComponentV1']:has(iframe[title*='cookie' i]),"
     "[data-testid='stElementContainer']:has(iframe[title*='cookie' i]),"
     ".element-container:has(iframe[title*='cookie' i]) {"
-    "  display:none !important;"
-    "  height:0 !important;"
-    "  min-height:0 !important;"
+    "  position:absolute !important;"
+    "  left:-9999px !important;"
+    "  top:0 !important;"
+    "  width:1px !important;"
+    "  height:1px !important;"
+    "  opacity:0 !important;"
+    "  pointer-events:none !important;"
+    "  overflow:hidden !important;"
     "  margin:0 !important;"
     "  padding:0 !important;"
-    "  overflow:hidden !important;"
-    "  position:absolute !important;"
+    "  border:0 !important;"
     "}"
     "</style>"
 )
@@ -52,8 +58,6 @@ st.html(
 for key in ["token", "user", "refresh_token"]:
     if key not in st.session_state:
         st.session_state[key] = None
-if "current_page" not in st.session_state:
-    st.session_state["current_page"] = "📋 Dashboard"
 if "disclaimer_accepted" not in st.session_state:
     st.session_state["disclaimer_accepted"] = False
 if "disclaimer_never_show" not in st.session_state:
@@ -97,101 +101,46 @@ def show_disclaimer_modal():
         st.rerun()
 
 
-# ─── Sidebar & Navigation ────────────────────────────────────────────────────
+# ─── Logout ──────────────────────────────────────────────────────────────────
 
 
-def sidebar():
-    _pages = [
-        "📋 Dashboard",
-        "📄 My Resumes",
-        "✉️ Cover Letter",
-        "🎯 Job Match Analysis",
-        "📊 Job Tracker",
-        "🤖 AI Agent",
-        "📜 Legal & Info",
-    ]
-    with st.sidebar:
-        st.title("🚀 AI Career Hub")
-        user = st.session_state.user or {}
-        st.markdown(
-            f"👤 **{user.get('full_name', 'User')}**  \n`{user.get('email', '')}`"
+def _logout():
+    cookie_remove(cookie_manager, "auth_token")
+    try:
+        _headers = {}
+        if st.session_state.token:
+            _headers["Authorization"] = f"Bearer {st.session_state.token}"
+        # Send the refresh token so the backend revokes it server-side.
+        _cookies = {}
+        if st.session_state.get("refresh_token"):
+            _cookies["refresh_token"] = st.session_state["refresh_token"]
+        requests.post(
+            f"{API_URL}/auth/logout",
+            headers=_headers,
+            cookies=_cookies,
+            timeout=3,
         )
-        st.divider()
-        current_idx = (
-            _pages.index(st.session_state["current_page"])
-            if st.session_state["current_page"] in _pages
-            else 0
-        )
-        page = st.radio(
-            "Navigation", _pages, index=current_idx, label_visibility="collapsed"
-        )
-        st.session_state["current_page"] = page
-        st.divider()
-
-        # ── Dark mode toggle ─────────────────────────────────────────────────
-        if "dark_mode" not in st.session_state:
-            st.session_state["dark_mode"] = False
-        dark = st.toggle("🌙 Dark Mode", value=st.session_state["dark_mode"])
-        st.session_state["dark_mode"] = dark
-        if dark:
-            st.html(
-                "<style>"
-                "[data-testid='stAppViewContainer'] { background-color: #0e1117; color: #fafafa; }"
-                "[data-testid='stSidebar'] { background-color: #161b22; }"
-                "[data-testid='stHeader'] { background-color: #0e1117; }"
-                ".stTextInput input, .stTextArea textarea, .stSelectbox select {"
-                "    background-color: #1e2530 !important; color: #fafafa !important; }"
-                "</style>"
-            )
-
-        st.divider()
-        if st.button("🚪 Logout"):
-            try:
-                cookie_manager.remove("auth_token")
-            except Exception:
-                pass
-            try:
-                _headers = {}
-                if st.session_state.token:
-                    _headers["Authorization"] = f"Bearer {st.session_state.token}"
-                # Send the refresh token so the backend revokes it server-side.
-                _cookies = {}
-                if st.session_state.get("refresh_token"):
-                    _cookies["refresh_token"] = st.session_state["refresh_token"]
-                requests.post(
-                    f"{API_URL}/auth/logout",
-                    headers=_headers,
-                    cookies=_cookies,
-                    timeout=3,
-                )
-            except Exception:
-                pass
-            st.session_state.token = None
-            st.session_state.user = None
-            st.session_state.refresh_token = None
-            st.session_state["current_page"] = "📋 Dashboard"
-            st.rerun()
-    return page
+    except Exception:
+        pass
+    st.session_state.token = None
+    st.session_state.user = None
+    st.session_state.refresh_token = None
+    st.rerun()
 
 
 # ─── Session Restore from Cookie ────────────────────────────────────────────
-# CookieController.get() raises TypeError when cookies dict is None during
-# the first render before browser JS has hydrated. Guard with try/except.
+# With the bridge now allowed to hydrate (see the CSS above), a stored auth
+# cookie is read back on reload so the session survives. cookie_get guards the
+# not-yet-hydrated first render.
 if not st.session_state.token:
-    try:
-        _cookie_token = cookie_manager.get("auth_token")
-    except TypeError:
-        _cookie_token = None
+    _cookie_token = cookie_get(cookie_manager, "auth_token")
     if _cookie_token:
         st.session_state.token = _cookie_token
         _me = safe_json(api("get", "/auth/me"), {})
         if _me and _me.get("email"):
             st.session_state.user = _me
         else:
-            try:
-                cookie_manager.remove("auth_token")
-            except Exception:
-                pass
+            cookie_remove(cookie_manager, "auth_token")
             st.session_state.token = None
 
 # ─── Page Routing ────────────────────────────────────────────────────────────
@@ -213,19 +162,44 @@ else:
     ):
         show_disclaimer_modal()
 
-    page = sidebar()
+    # Journey-first navigation. Home and the one-shot agent lead; the manual
+    # tools sit under "Workspace". Pages are URL-deep-linkable and auth-gated
+    # (only registered here, after login — the login screen has no nav).
+    home = st.Page(page_dashboard, title="Home", icon="🏠", default=True)
+    quick_apply = st.Page(page_agent, title="Quick Apply", icon="✨", url_path="quick-apply")
+    resumes = st.Page(page_resumes, title="Resumes", icon="📄", url_path="resumes")
+    job_match = st.Page(page_job_match, title="Job Match", icon="🎯", url_path="job-match")
+    cover_letter = st.Page(
+        page_cover_letter, title="Cover Letter", icon="✉️", url_path="cover-letter"
+    )
+    tracker = st.Page(page_job_tracker, title="Tracker", icon="📊", url_path="tracker")
+    legal = st.Page(page_legal, title="Legal & Info", icon="📜", url_path="legal")
 
-    if page == "📋 Dashboard":
-        page_dashboard()
-    elif page == "📄 My Resumes":
-        page_resumes()
-    elif page == "✉️ Cover Letter":
-        page_cover_letter()
-    elif page == "🎯 Job Match Analysis":
-        page_job_match()
-    elif page == "📊 Job Tracker":
-        page_job_tracker()
-    elif page == "🤖 AI Agent":
-        page_agent()
-    elif page == "📜 Legal & Info":
-        page_legal()
+    # Registry for cross-page navigation via st.switch_page from inside a view
+    # (e.g. the dashboard quick-actions). Rebuilt every run, so never stale.
+    st.session_state["_nav"] = {
+        "home": home,
+        "agent": quick_apply,
+        "resumes": resumes,
+        "job_match": job_match,
+        "cover_letter": cover_letter,
+        "tracker": tracker,
+        "legal": legal,
+    }
+
+    nav = st.navigation(
+        {
+            "Start": [home, quick_apply],
+            "Workspace": [resumes, job_match, cover_letter, tracker],
+            "More": [legal],
+        }
+    )
+
+    with st.sidebar:
+        st.divider()
+        _user = st.session_state.user or {}
+        st.markdown(f"👤 **{_user.get('full_name', 'User')}**  \n`{_user.get('email', '')}`")
+        if st.button("🚪 Logout", use_container_width=True):
+            _logout()
+
+    nav.run()
