@@ -75,6 +75,19 @@ class TestModuleImports:
         assert _classify(None) == "network"
         assert _classify(500) == "server"
 
+    def test_generate_poll_outcome(self):
+        # One tick of the generate poll: terminal vs transient classification.
+        from views.cover_letter import _GENERATE_TIMEOUT_S, _poll_outcome
+
+        assert _poll_outcome(404, None, 5) == "lost"
+        assert _poll_outcome(401, None, 5) == "auth"
+        assert _poll_outcome(200, "SUCCESS", 5) == "done"
+        assert _poll_outcome(200, "FAILURE", 5) == "failed"
+        assert _poll_outcome(200, "STARTED", 5) == "running"
+        assert _poll_outcome(200, "PENDING", 5) == "running"
+        assert _poll_outcome(None, None, 5) == "running"  # network blip = transient
+        assert _poll_outcome(200, "STARTED", _GENERATE_TIMEOUT_S + 1) == "timeout"
+
     def test_lifecycle_badge_expired(self):
         from components import lifecycle_badge
 
