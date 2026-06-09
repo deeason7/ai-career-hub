@@ -39,9 +39,11 @@ class TestModuleImports:
             error_state,
             loading,
             metric_tile,
+            nav_to,
             page_header,
             score_gauge,
             section,
+            status_icon,
             status_pill,
         )
 
@@ -51,7 +53,14 @@ class TestModuleImports:
             job_description_input,
             lifecycle_badge,
             loading_spinner,
+            render_qa_scores,
         )
+
+    def test_status_icon_known_and_unknown(self):
+        from ui import status_icon
+
+        assert status_icon("offer") == "🎉"
+        assert status_icon("not_a_status") == "•"
 
     def test_score_tone_thresholds(self):
         from ui import score_tone

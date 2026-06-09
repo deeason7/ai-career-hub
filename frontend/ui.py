@@ -14,6 +14,7 @@ from components import (
     job_description_input,
     lifecycle_badge,
     loading_spinner,
+    render_qa_scores,
     show_error,
     show_success,
     toast_error,
@@ -30,12 +31,15 @@ __all__ = [
     "loading",
     "loading_spinner",
     "metric_tile",
+    "nav_to",
     "page_header",
+    "render_qa_scores",
     "score_gauge",
     "score_tone",
     "section",
     "show_error",
     "show_success",
+    "status_icon",
     "status_pill",
     "toast_error",
     "toast_success",
@@ -142,6 +146,18 @@ def status_pill(status: str) -> None:
         f'font-size:0.85em;display:inline-block">{icon} {label}</span>',
         unsafe_allow_html=True,
     )
+
+
+def status_icon(status: str) -> str:
+    """The icon half of status_pill, for plain-text spots like expander titles."""
+    return _STATUS_META.get(status, ("•", "neutral"))[0]
+
+
+def nav_to(key: str) -> None:
+    """Switch to a page registered in app.py's nav registry; no-op if unknown."""
+    page = st.session_state.get("_nav", {}).get(key)
+    if page is not None:
+        st.switch_page(page)
 
 
 def empty_state(icon: str, title: str, body: str, cta: str | None = None) -> bool:
