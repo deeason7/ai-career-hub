@@ -4,6 +4,7 @@ import streamlit as st
 
 from api_client import api, detail, safe_json
 from components import show_error, show_success
+from ui import page_header
 
 STATUS_EMOJIS = {
     "wishlist": "💭",
@@ -56,7 +57,7 @@ def _next_status(current: str) -> str | None:
 
 
 def page_job_tracker() -> None:
-    st.title("📊 Job Application Tracker")
+    page_header("📊", "Tracker")
 
     with st.expander("➕ Add New Application"):
         with st.form("add_job_form"):

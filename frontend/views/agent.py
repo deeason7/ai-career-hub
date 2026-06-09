@@ -3,10 +3,11 @@
 import streamlit as st
 
 from api_client import api, safe_json
+from ui import page_header
 
 
 def page_agent() -> None:
-    st.title("🤖 AI Agent")
+    page_header("✨", "Quick Apply")
     st.caption(
         "Paste a job URL and select your resume. The agent autonomously scrapes, "
         "analyzes, scores, and generates everything you need to apply."

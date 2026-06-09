@@ -4,10 +4,11 @@ import streamlit as st
 
 from api_client import api, detail, safe_json
 from components import lifecycle_badge, loading_spinner, show_error, show_success
+from ui import page_header
 
 
 def page_resumes() -> None:
-    st.title("📄 My Resumes")
+    page_header("📄", "Resumes")
     st.markdown("Upload up to **10 resumes**. Activate the one to use for AI features.")
 
     with st.expander("➕ Upload a New Resume", expanded=True):

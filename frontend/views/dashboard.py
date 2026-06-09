@@ -4,6 +4,7 @@ import requests
 import streamlit as st
 
 from api_client import api, safe_json
+from ui import page_header
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -28,8 +29,15 @@ def _load_stats(token: str) -> dict | None:
     }
 
 
+def _go(key: str) -> None:
+    """Switch to a page registered in app.py's nav registry."""
+    page = st.session_state.get("_nav", {}).get(key)
+    if page is not None:
+        st.switch_page(page)
+
+
 def page_dashboard() -> None:
-    st.title("📋 Dashboard")
+    page_header("🏠", "Home")
 
     if not st.session_state.token:
         return
@@ -81,11 +89,8 @@ def page_dashboard() -> None:
     st.subheader("🚀 Quick Actions")
     q1, q2, q3 = st.columns(3)
     if q1.button("📄 Upload Resume", use_container_width=True, type="primary"):
-        st.session_state["current_page"] = "📄 My Resumes"
-        st.rerun()
+        _go("resumes")
     if q2.button("✉️ Generate Cover Letter", use_container_width=True, type="primary"):
-        st.session_state["current_page"] = "✉️ Cover Letter"
-        st.rerun()
+        _go("cover_letter")
     if q3.button("🎯 Score My Resume", use_container_width=True, type="primary"):
-        st.session_state["current_page"] = "🎯 Job Match Analysis"
-        st.rerun()
+        _go("job_match")

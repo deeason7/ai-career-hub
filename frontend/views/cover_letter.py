@@ -7,6 +7,7 @@ import streamlit as st
 
 from api_client import api, detail, safe_json
 from components import job_description_input, loading_spinner, show_error, show_success
+from ui import page_header
 
 
 def _show_rag_context() -> None:
@@ -36,7 +37,7 @@ def _show_rag_context() -> None:
 
 
 def page_cover_letter() -> None:
-    st.title("✉️ AI Cover Letter Generator")
+    page_header("✉️", "Cover Letter")
     st.markdown(
         "Generates a **zero-hallucination** cover letter using RAG — "
         "only facts from YOUR resume."

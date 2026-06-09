@@ -6,10 +6,11 @@ import streamlit as st
 
 from api_client import api, detail, safe_json
 from components import job_description_input, show_error
+from ui import page_header
 
 
 def page_job_match() -> None:
-    st.title("🎯 Job Match Analysis")
+    page_header("🎯", "Job Match")
     st.markdown(
         "One job description → **ATS score**, **skill gap**, and **interview questions** — all at once."
     )
