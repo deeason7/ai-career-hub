@@ -135,3 +135,8 @@ class TestModuleImports:
         import importlib
 
         importlib.import_module("views.legal")
+
+    def test_views_agent_importable(self):
+        import importlib
+
+        importlib.import_module("views.agent")

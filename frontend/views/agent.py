@@ -1,9 +1,15 @@
 """AI Agent page — autonomous multi-step job analysis workflow."""
 
+import requests
 import streamlit as st
 
 from api_client import api, safe_json
-from ui import page_header
+from ui import error_state, page_header
+
+# The pipeline runs as one synchronous call — the backend doesn't expose
+# per-step progress — so the wait is shown as honest-indeterminate and the
+# real per-step trace renders on completion.
+_AGENT_TIMEOUT_S = 120
 
 
 def page_agent() -> None:
@@ -41,41 +47,67 @@ def page_agent() -> None:
 
         resume_id = resume_options[selected_resume]
 
-        progress_container = st.container()
-        with progress_container:
-            st.info("⏳ Agent is running... This may take 30-60 seconds.")
-            progress_bar = st.progress(0, text="Starting agent...")
+        with st.status("🤖 Agent running — scrape, research, score, write…", expanded=True) as box:
+            st.caption(
+                "Seven steps run as one pipeline call, typically 30–90 seconds. "
+                "The real per-step trace appears when it finishes."
+            )
+            try:
+                resp = api(
+                    "post",
+                    "/agent/analyze",
+                    json={"job_url": job_url, "resume_id": resume_id},
+                    timeout=_AGENT_TIMEOUT_S,
+                )
+            except requests.exceptions.Timeout:
+                box.update(label="⏱️ No result after 2 minutes", state="error")
+                st.error(
+                    "The agent didn't finish in time — the job site may be slow or the "
+                    "model cold. Try again in a minute."
+                )
+                return
+            except requests.RequestException:
+                box.update(label="🌐 Request failed", state="error")
+                error_state("network")
+                return
 
-        resp = api(
-            "post",
-            "/agent/analyze",
-            json={"job_url": job_url, "resume_id": resume_id},
-            timeout=120,
-        )
+            if resp.status_code != 200:
+                box.update(label="❌ Agent failed", state="error")
+                error_state(resp)
+                return
 
-        if resp.status_code != 200:
-            st.error(f"Agent failed: {safe_json(resp, {}).get('detail', resp.text)}")
-            return
+            result = safe_json(resp, {})
+            if not result.get("status"):
+                box.update(label="❌ Unexpected response", state="error")
+                st.error("The agent returned an unreadable result. Try again.")
+                return
 
-        result = resp.json()
-        progress_bar.progress(100, text="Agent completed!")
+            box.update(label="✅ Agent finished", state="complete")
+            st.session_state["agent_result"] = result
 
+    # Rendered from state, outside the click branch, so the report survives
+    # reruns (editing the URL or switching resumes no longer wipes it).
+    result = st.session_state.get("agent_result")
+    if result:
         _render_results(result)
 
 
 def _render_results(result: dict) -> None:
     """Render the agent execution results."""
-    status = result["status"]
+    status = result.get("status", "failed")
+    steps = result.get("steps", [])
+    duration = result.get("total_duration_ms", 0)
+    errors = result.get("errors", [])
     if status == "completed":
-        st.success(f"✅ Agent completed successfully — {len(result['steps'])} steps in {result['total_duration_ms']}ms")
+        st.success(f"✅ Agent completed successfully — {len(steps)} steps in {duration}ms")
     elif status == "partial":
-        st.warning(f"⚠️ Agent completed with {len(result['errors'])} error(s) — {result['total_duration_ms']}ms")
+        st.warning(f"⚠️ Agent completed with {len(errors)} error(s) — {duration}ms")
     else:
-        st.error(f"❌ Agent failed — {result['total_duration_ms']}ms")
+        st.error(f"❌ Agent failed — {duration}ms")
 
     # Step execution trace
     with st.expander("📊 Execution Trace", expanded=True):
-        for step in result["steps"]:
+        for step in steps:
             icon = {"success": "✅", "failed": "❌", "skipped": "⏭️"}.get(step["status"], "❓")
             st.markdown(
                 f"{icon} **{step['name']}** — {step['detail']} "
@@ -141,7 +173,7 @@ def _render_results(result: dict) -> None:
                 st.markdown(f"**{i}.** {q}")
 
     # Errors
-    if result.get("errors"):
+    if errors:
         with st.expander("⚠️ Errors"):
-            for err in result["errors"]:
+            for err in errors:
                 st.error(err)
