@@ -121,10 +121,7 @@ def _render_active_letter() -> None:
     st.divider()
     st.subheader("📝 Your Cover Letter")
     if cl.get("qa_score_honesty") is not None:
-        st.caption(
-            f"🛡️ AI honesty review: {cl['qa_score_honesty']}/10 honesty · "
-            f"{cl.get('qa_score_tone', '—')}/10 tone"
-        )
+        render_qa_scores(cl.get("qa_score_honesty"), cl.get("qa_score_tone"), cl.get("qa_flags"))
     st.text_area(
         "Generated cover letter",
         text,
@@ -264,7 +261,8 @@ def _render_revision_history(cl_id: str) -> None:
 def page_cover_letter() -> None:
     page_header("✉️", "Cover Letter")
     st.markdown(
-        "Generates a **zero-hallucination** cover letter using RAG — only facts from YOUR resume."
+        "Drafts a letter from **your resume only** (RAG retrieval), then an AI judge "
+        "reviews it for honesty before you see it."
     )
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
