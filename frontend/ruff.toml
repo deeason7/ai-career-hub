@@ -1,0 +1,16 @@
+# Mirrors backend/ruff.toml so the whole repo lints to one standard.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes (unused imports, undefined names)
+  "W",    # pycodestyle warnings
+  "I",    # isort
+  "B",    # flake8-bugbear (likely bugs + design smells)
+  "UP",   # pyupgrade (modernise Python syntax to 3.11+)
+]
+ignore = [
+  "E501",  # line too long — handled by ruff-format
+]

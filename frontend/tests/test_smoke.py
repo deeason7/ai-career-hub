@@ -7,12 +7,8 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def mock_streamlit(monkeypatch):
-    monkeypatch.setattr(
-        "streamlit.session_state", {"token": None, "user": None}, raising=False
-    )
-    monkeypatch.setattr(
-        "streamlit_cookies_controller.CookieController", MagicMock, raising=False
-    )
+    monkeypatch.setattr("streamlit.session_state", {"token": None, "user": None}, raising=False)
+    monkeypatch.setattr("streamlit_cookies_controller.CookieController", MagicMock, raising=False)
 
 
 class TestModuleImports:

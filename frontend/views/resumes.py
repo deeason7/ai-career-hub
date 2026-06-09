@@ -17,18 +17,14 @@ def page_resumes() -> None:
                 "Resume Label (e.g. 'ML Engineer Resume')",
                 placeholder="ML Engineer 2026",
             )
-            file = st.file_uploader(
-                "File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"]
-            )
+            file = st.file_uploader("File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
             if st.form_submit_button("Upload & Parse", type="primary"):
                 if not label.strip():
                     show_error("Please provide a label.")
                 elif not file:
                     show_error("Please select a file.")
                 else:
-                    with loading_spinner(
-                        "Extracting text and parsing resume with AI..."
-                    ):
+                    with loading_spinner("Extracting text and parsing resume with AI..."):
                         resp = api(
                             "post",
                             "/resumes/upload",
@@ -54,9 +50,7 @@ def page_resumes() -> None:
     st.subheader(f"Your Resumes ({len(resumes)})")
     for r in resumes:
         active_tag = "🟢 **ACTIVE**" if r["is_active"] else "⚪ inactive"
-        lifecycle_tag = lifecycle_badge(
-            r.get("expires_at"), r.get("is_permanent", False)
-        )
+        lifecycle_tag = lifecycle_badge(r.get("expires_at"), r.get("is_permanent", False))
 
         with st.expander(
             f"{active_tag}{lifecycle_tag} — {r['name']}  |  `{r['original_filename']}`"

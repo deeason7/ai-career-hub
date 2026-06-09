@@ -41,8 +41,7 @@ def _show_rag_context() -> None:
     with st.expander("🔍 RAG Context (Vector Store)", expanded=False):
         if total == 0:
             st.info(
-                "No embeddings stored yet. Upload a resume to start "
-                "building your vector store."
+                "No embeddings stored yet. Upload a resume to start building your vector store."
             )
             return
 
@@ -265,8 +264,7 @@ def _render_revision_history(cl_id: str) -> None:
 def page_cover_letter() -> None:
     page_header("✉️", "Cover Letter")
     st.markdown(
-        "Generates a **zero-hallucination** cover letter using RAG — "
-        "only facts from YOUR resume."
+        "Generates a **zero-hallucination** cover letter using RAG — only facts from YOUR resume."
     )
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
@@ -275,9 +273,7 @@ def page_cover_letter() -> None:
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next(
-        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
-    )
+    active = next((r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0])
     selected_name = st.selectbox(
         "Choose Resume",
         list(resume_options.keys()),
@@ -285,9 +281,7 @@ def page_cover_letter() -> None:
     )
     selected_id = resume_options[selected_name]
 
-    jd = job_description_input(
-        "cover_letter", height=300, label="Paste the Job Description"
-    )
+    jd = job_description_input("cover_letter", height=300, label="Paste the Job Description")
 
     in_flight = bool(st.session_state.get("cl_generate"))
     if st.button("🚀 Generate Cover Letter", type="primary", disabled=in_flight):
@@ -366,9 +360,7 @@ def page_cover_letter() -> None:
             cl_expiry_tag = ""
             if cl.get("expires_at"):
                 try:
-                    exp = datetime.fromisoformat(
-                        cl["expires_at"].replace("Z", "+00:00")
-                    )
+                    exp = datetime.fromisoformat(cl["expires_at"].replace("Z", "+00:00"))
                     if exp.tzinfo is None:
                         exp = exp.replace(tzinfo=UTC)
                     days_left = (exp - datetime.now(UTC)).days

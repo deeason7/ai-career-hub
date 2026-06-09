@@ -91,15 +91,12 @@ def page_job_tracker() -> None:
     if isinstance(stats, dict) and "by_status" in stats:
         st.subheader(f"📈 Pipeline — {stats['total']} Applications")
         cols = st.columns(7)
-        for col, (s, count) in zip(cols, stats["by_status"].items()):
-            col.metric(
-                f"{STATUS_EMOJIS.get(s, '')} {s.replace('_', ' ').title()}", count
-            )
+        # cols is fixed at 7; tolerate a server payload with fewer statuses.
+        for col, (s, count) in zip(cols, stats["by_status"].items(), strict=False):
+            col.metric(f"{STATUS_EMOJIS.get(s, '')} {s.replace('_', ' ').title()}", count)
 
     st.divider()
-    filter_status = st.selectbox(
-        "Filter by Status", ["All"] + list(STATUS_EMOJIS.keys())
-    )
+    filter_status = st.selectbox("Filter by Status", ["All"] + list(STATUS_EMOJIS.keys()))
     params = {} if filter_status == "All" else {"status_filter": filter_status}
     apps_resp = api("get", "/jobs/", params=params)
     apps = safe_json(apps_resp, []) if apps_resp.status_code == 200 else []

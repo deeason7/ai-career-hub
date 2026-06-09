@@ -86,9 +86,7 @@ def render_qa_scores(honesty: int | None, tone: int | None, flags: str | None) -
 _SHARED_JD_KEY = "shared_jd"
 
 
-def job_description_input(
-    page_key: str, height: int = 280, label: str = "Job Description"
-) -> str:
+def job_description_input(page_key: str, height: int = 280, label: str = "Job Description") -> str:
     """A job-description field shared across pages.
 
     The JD lives in st.session_state['shared_jd'], so pasting or importing it on

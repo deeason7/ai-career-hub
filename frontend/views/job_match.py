@@ -26,9 +26,7 @@ def page_job_match() -> None:
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
-    active = next(
-        (r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0]
-    )
+    active = next((r["name"] for r in resumes if r["is_active"]), list(resume_options.keys())[0])
     selected_name = st.selectbox(
         "Resume",
         list(resume_options.keys()),
@@ -81,9 +79,7 @@ def _render_analysis(data: dict) -> None:
     skill_gap = data.get("skill_gap", {})
     questions = data.get("interview_questions", [])
 
-    tab_ats, tab_gap, tab_interview = st.tabs(
-        ["🎯 ATS Score", "🔍 Skill Gap", "🎙️ Interview Prep"]
-    )
+    tab_ats, tab_gap, tab_interview = st.tabs(["🎯 ATS Score", "🔍 Skill Gap", "🎙️ Interview Prep"])
 
     with tab_ats:
         score = ats.get("score", 0)
@@ -102,9 +98,7 @@ def _render_analysis(data: dict) -> None:
             f"{sem_score}%",
             help="Sentence-transformer cosine similarity — catches synonyms",
         )
-        c3.metric(
-            "🔑 Keywords", f"{kw_score}%", help="Exact + bigram keyword overlap"
-        )
+        c3.metric("🔑 Keywords", f"{kw_score}%", help="Exact + bigram keyword overlap")
         c4.metric(
             "📐 Structure",
             f"{struct_score}%",
@@ -112,9 +106,7 @@ def _render_analysis(data: dict) -> None:
         )
         st.progress(int(score) / 100)
         if sem_score >= 70:
-            st.success(
-                "🧠 High semantic alignment — your resume language closely matches the JD."
-            )
+            st.success("🧠 High semantic alignment — your resume language closely matches the JD.")
         elif sem_score >= 45:
             st.warning(
                 "🧠 Moderate semantic alignment — consider mirroring more of the JD's phrasing."
@@ -127,10 +119,8 @@ def _render_analysis(data: dict) -> None:
         if section_scores:
             st.subheader("📊 Section Alignment with JD")
             sec_cols = st.columns(len(section_scores))
-            for col, (sec, sec_score) in zip(sec_cols, section_scores.items()):
-                sec_color = (
-                    "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
-                )
+            for col, (sec, sec_score) in zip(sec_cols, section_scores.items(), strict=True):
+                sec_color = "🟢" if sec_score >= 60 else "🟡" if sec_score >= 35 else "🔴"
                 col.metric(
                     f"{sec_color} {sec.title()}",
                     f"{sec_score}%" if sec_score > 0 else "—",
@@ -211,6 +201,4 @@ def _render_analysis(data: dict) -> None:
             for i, q in enumerate(questions, 1):
                 st.markdown(f"**{i}.** {q}")
         else:
-            st.info(
-                "No interview questions generated. Try again with a more detailed JD."
-            )
+            st.info("No interview questions generated. Try again with a more detailed JD.")

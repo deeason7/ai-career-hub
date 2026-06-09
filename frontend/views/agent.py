@@ -109,17 +109,16 @@ def _render_results(result: dict) -> None:
     with st.expander("📊 Execution Trace", expanded=True):
         for step in steps:
             icon = {"success": "✅", "failed": "❌", "skipped": "⏭️"}.get(step["status"], "❓")
-            st.markdown(
-                f"{icon} **{step['name']}** — {step['detail']} "
-                f"({step['duration_ms']}ms)"
-            )
+            st.markdown(f"{icon} **{step['name']}** — {step['detail']} ({step['duration_ms']}ms)")
 
     summary = result.get("summary", {})
     full = result.get("full_results", {})
 
     # Company & Role
     if summary.get("company") or summary.get("role"):
-        st.subheader(f"🏢 {summary.get('role', 'Unknown Role')} @ {summary.get('company', 'Unknown')}")
+        st.subheader(
+            f"🏢 {summary.get('role', 'Unknown Role')} @ {summary.get('company', 'Unknown')}"
+        )
 
     # Company research
     if full.get("company_research"):
@@ -137,9 +136,13 @@ def _render_results(result: dict) -> None:
         col3.metric("Keywords", f"{ats.get('keyword_score', 0)}/100")
 
         if ats.get("matched_keywords"):
-            st.markdown("**Matched:** " + ", ".join(f"`{kw}`" for kw in ats["matched_keywords"][:10]))
+            st.markdown(
+                "**Matched:** " + ", ".join(f"`{kw}`" for kw in ats["matched_keywords"][:10])
+            )
         if ats.get("missing_keywords"):
-            st.markdown("**Missing:** " + ", ".join(f"`{kw}`" for kw in ats["missing_keywords"][:10]))
+            st.markdown(
+                "**Missing:** " + ", ".join(f"`{kw}`" for kw in ats["missing_keywords"][:10])
+            )
         if ats.get("recommendations"):
             for rec in ats["recommendations"]:
                 st.markdown(f"- {rec}")
@@ -155,7 +158,9 @@ def _render_results(result: dict) -> None:
                 st.markdown("**Recommended Learning:**")
                 for rec in recs:
                     if isinstance(rec, dict):
-                        st.markdown(f"- **{rec.get('skill', '')}**: {rec.get('resource', '')} ({rec.get('timeline', '')})")
+                        st.markdown(
+                            f"- **{rec.get('skill', '')}**: {rec.get('resource', '')} ({rec.get('timeline', '')})"
+                        )
                     else:
                         st.markdown(f"- {rec}")
 

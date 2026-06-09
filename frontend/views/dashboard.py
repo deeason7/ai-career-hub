@@ -57,12 +57,8 @@ def page_dashboard() -> None:
 
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 Resumes", len(resumes) if isinstance(resumes, list) else 0)
-    col2.metric(
-        "✉️ Cover Letters", len(cover_letters) if isinstance(cover_letters, list) else 0
-    )
-    col3.metric(
-        "📊 Applications", jobs.get("total", 0) if isinstance(jobs, dict) else 0
-    )
+    col2.metric("✉️ Cover Letters", len(cover_letters) if isinstance(cover_letters, list) else 0)
+    col3.metric("📊 Applications", jobs.get("total", 0) if isinstance(jobs, dict) else 0)
 
     st.divider()
     st.subheader("Application Pipeline")
@@ -78,10 +74,8 @@ def page_dashboard() -> None:
             "rejected": "❌",
             "accepted": "✅",
         }
-        for col, (s, count) in zip(cols, statuses.items()):
-            col.metric(
-                f"{status_emojis.get(s, '')} {s.replace('_', ' ').title()}", count
-            )
+        for col, (s, count) in zip(cols, statuses.items(), strict=True):
+            col.metric(f"{status_emojis.get(s, '')} {s.replace('_', ' ').title()}", count)
 
     st.divider()
     st.subheader("🚀 Quick Actions")
