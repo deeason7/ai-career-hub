@@ -32,6 +32,35 @@ class TestModuleImports:
             toast_success,
         )
 
+    def test_ui_imports(self):
+        from ui import (  # noqa: F401
+            card,
+            chip_row,
+            empty_state,
+            error_state,
+            loading,
+            metric_tile,
+            page_header,
+            score_gauge,
+            section,
+            status_pill,
+        )
+
+    def test_ui_reexports_keepers(self):
+        # ui is the single import surface — keepers stay reachable through it.
+        from ui import (  # noqa: F401
+            job_description_input,
+            lifecycle_badge,
+            loading_spinner,
+        )
+
+    def test_score_tone_thresholds(self):
+        from ui import score_tone
+
+        assert score_tone(85) == "good"
+        assert score_tone(55) == "warn"
+        assert score_tone(20) == "bad"
+
     def test_lifecycle_badge_expired(self):
         from components import lifecycle_badge
 

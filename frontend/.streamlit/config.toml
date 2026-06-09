@@ -3,3 +3,11 @@ maxUploadSize = 5          # MB — resumes never exceed this; blocks oversized 
 
 [browser]
 gatherUsageStats = false   # Disable Streamlit telemetry
+
+[theme]
+base = "light"
+primaryColor = "#4f46e5"               # indigo — buttons, links, progress, focus
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f5f8"   # sidebar, cards, inputs, code blocks
+textColor = "#1c1e26"
+font = "sans serif"
