@@ -1,10 +1,18 @@
-"""Dashboard page — stats overview and quick actions."""
+"""Dashboard page — the home view: counts, pipeline, and journey shortcuts."""
 
 import requests
 import streamlit as st
 
 from api_client import api, safe_json
-from ui import error_state, page_header
+from ui import (
+    card,
+    empty_state,
+    error_state,
+    metric_tile,
+    nav_to,
+    page_header,
+    status_icon,
+)
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -28,13 +36,6 @@ def _load_stats(token: str) -> dict:
     }
 
 
-def _go(key: str) -> None:
-    """Switch to a page registered in app.py's nav registry."""
-    page = st.session_state.get("_nav", {}).get(key)
-    if page is not None:
-        st.switch_page(page)
-
-
 def page_dashboard() -> None:
     page_header("🏠", "Home")
 
@@ -51,38 +52,66 @@ def page_dashboard() -> None:
             st.rerun()
         return
 
-    resumes = stats["resumes"]
-    jobs = stats["jobs"]
-    cover_letters = stats["cover_letters"]
+    resumes = stats["resumes"] if isinstance(stats["resumes"], list) else []
+    jobs = stats["jobs"] if isinstance(stats["jobs"], dict) else {}
+    cover_letters = stats["cover_letters"] if isinstance(stats["cover_letters"], list) else []
+
+    # First run: walk a new account to its first resume instead of showing zeros.
+    if not resumes:
+        if empty_state(
+            "📄",
+            "Start with your resume",
+            "Upload a resume once and every tool — scoring, cover letters, the "
+            "one-click agent — works from it.",
+            cta="Upload your first resume",
+        ):
+            nav_to("resumes")
+        return
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("📄 Resumes", len(resumes) if isinstance(resumes, list) else 0)
-    col2.metric("✉️ Cover Letters", len(cover_letters) if isinstance(cover_letters, list) else 0)
-    col3.metric("📊 Applications", jobs.get("total", 0) if isinstance(jobs, dict) else 0)
+    with col1:
+        metric_tile("📄 Resumes", len(resumes))
+    with col2:
+        metric_tile("✉️ Cover Letters", len(cover_letters))
+    with col3:
+        metric_tile("📊 Applications", jobs.get("total", 0))
 
     st.divider()
-    st.subheader("Application Pipeline")
-    if isinstance(jobs, dict) and "by_status" in jobs:
-        statuses = jobs["by_status"]
-        cols = st.columns(len(statuses))
-        status_emojis = {
-            "wishlist": "⭐",
-            "applied": "📨",
-            "phone_screen": "📞",
-            "interview": "🎯",
-            "offer": "🎉",
-            "rejected": "❌",
-            "accepted": "✅",
-        }
-        for col, (s, count) in zip(cols, statuses.items(), strict=True):
-            col.metric(f"{status_emojis.get(s, '')} {s.replace('_', ' ').title()}", count)
+
+    # The flagship fast path gets the hero spot.
+    active_name = next((r["name"] for r in resumes if r.get("is_active")), None)
+    with card("✨ Quick Apply"):
+        st.caption(
+            f"Paste a job URL and the agent scores **{active_name or 'your resume'}** "
+            "against it, researches the company, and drafts the letter — one click."
+        )
+        if st.button("Run Quick Apply", type="primary"):
+            nav_to("agent")
+
+    by_status = jobs.get("by_status") or {}
+    if by_status:
+        st.subheader("Application Pipeline")
+        cols = st.columns(len(by_status))
+        for col, (s, count) in zip(cols, by_status.items(), strict=True):
+            with col:
+                metric_tile(f"{status_icon(s)} {s.replace('_', ' ').title()}", count)
+
+    if cover_letters:
+        st.subheader("Recent Cover Letters")
+        for cl in cover_letters[:3]:
+            with card(f"✉️ {cl.get('created_at', '')[:10]} · `{cl.get('status', '')}`"):
+                preview = (cl.get("generated_text") or "")[:160]
+                st.caption(f"{preview}…" if preview else "Generating…")
+                if st.button("Open", key=f"open_cl_{cl['id']}"):
+                    st.session_state["active_cl_id"] = cl["id"]
+                    nav_to("cover_letter")
 
     st.divider()
     st.subheader("🚀 Quick Actions")
     q1, q2, q3 = st.columns(3)
-    if q1.button("📄 Upload Resume", use_container_width=True, type="primary"):
-        _go("resumes")
-    if q2.button("✉️ Generate Cover Letter", use_container_width=True, type="primary"):
-        _go("cover_letter")
-    if q3.button("🎯 Score My Resume", use_container_width=True, type="primary"):
-        _go("job_match")
+    if q1.button("📄 Upload Resume", use_container_width=True):
+        nav_to("resumes")
+    if q2.button("✉️ Generate Cover Letter", use_container_width=True):
+        nav_to("cover_letter")
+    if q3.button("🎯 Score My Resume", use_container_width=True):
+        nav_to("job_match")
