@@ -1,20 +1,14 @@
 """Job application tracker page."""
 
+from datetime import UTC, datetime
+
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from components import show_error, show_success
-from ui import page_header
+from ui import nav_to, page_header, show_error, show_success, status_icon
 
-STATUS_EMOJIS = {
-    "wishlist": "💭",
-    "applied": "📤",
-    "phone_screen": "📞",
-    "interview": "🎯",
-    "offer": "🎉",
-    "rejected": "❌",
-    "accepted": "✅",
-}
+# UI order for the add-form and filter; promotion follows _STATUS_ORDER below.
+_STATUSES = ["wishlist", "applied", "phone_screen", "interview", "offer", "rejected", "accepted"]
 
 _STATUS_ORDER = [
     "wishlist",
@@ -56,6 +50,14 @@ def _next_status(current: str) -> str | None:
         return None
 
 
+def _applied_stamp(app: dict, new_status: str) -> dict:
+    """PATCH body for a status change; stamps applied_at the first time a job hits applied."""
+    patch: dict = {"status": new_status}
+    if new_status == "applied" and not app.get("applied_at"):
+        patch["applied_at"] = datetime.now(UTC).isoformat()
+    return patch
+
+
 def page_job_tracker() -> None:
     page_header("📊", "Tracker")
 
@@ -64,7 +66,7 @@ def page_job_tracker() -> None:
             col1, col2 = st.columns(2)
             company = col1.text_input("Company")
             role = col2.text_input("Role / Title")
-            status = st.selectbox("Status", list(STATUS_EMOJIS.keys()))
+            status = st.selectbox("Status", _STATUSES)
             job_url = st.text_input("Job URL (optional)")
             deadline = st.date_input("Application Deadline (optional)", value=None)
             notes = st.text_area("Notes", height=80)
@@ -93,10 +95,10 @@ def page_job_tracker() -> None:
         cols = st.columns(7)
         # cols is fixed at 7; tolerate a server payload with fewer statuses.
         for col, (s, count) in zip(cols, stats["by_status"].items(), strict=False):
-            col.metric(f"{STATUS_EMOJIS.get(s, '')} {s.replace('_', ' ').title()}", count)
+            col.metric(f"{status_icon(s)} {s.replace('_', ' ').title()}", count)
 
     st.divider()
-    filter_status = st.selectbox("Filter by Status", ["All"] + list(STATUS_EMOJIS.keys()))
+    filter_status = st.selectbox("Filter by Status", ["All"] + _STATUSES)
     params = {} if filter_status == "All" else {"status_filter": filter_status}
     apps_resp = api("get", "/jobs/", params=params)
     apps = safe_json(apps_resp, []) if apps_resp.status_code == 200 else []
@@ -106,7 +108,7 @@ def page_job_tracker() -> None:
         return
 
     for app in apps:
-        emoji = STATUS_EMOJIS.get(app["status"], "")
+        emoji = status_icon(app["status"])
         badge = _deadline_badge(app.get("deadline"))
         is_auto = app.get("source") == "auto"
         auto_tag = "  🤖 Auto" if is_auto else ""
@@ -117,7 +119,8 @@ def page_job_tracker() -> None:
             with col1:
                 if is_auto:
                     st.caption("🤖 Auto-created when your cover letter was generated.")
-                st.markdown(f"**Applied:** {app.get('applied_at', 'N/A')}")
+                if app.get("applied_at"):
+                    st.markdown(f"**Applied:** {str(app['applied_at'])[:10]}")
                 if app.get("deadline"):
                     st.markdown(
                         f"**Deadline:** `{app['deadline']}`{_deadline_badge(app['deadline'])}"
@@ -125,23 +128,27 @@ def page_job_tracker() -> None:
                 if app.get("job_url"):
                     st.markdown(f"**URL:** [{app['job_url']}]({app['job_url']})")
                 if app.get("cover_letter_id"):
-                    st.markdown(
-                        f"**Cover Letter:** linked — "
-                        f"[View in Cover Letter tab](#) _(ID: {str(app['cover_letter_id'])[:8]}…)_"
-                    )
+                    if st.button("✉️ View cover letter", key=f"view_cl_{app['id']}"):
+                        st.session_state["active_cl_id"] = app["cover_letter_id"]
+                        nav_to("cover_letter")
                 if app.get("notes"):
                     st.markdown(f"**Notes:** {app['notes']}")
                 next_st = _next_status(app["status"])
                 if next_st and app["status"] != "rejected":
-                    next_label = f"{STATUS_EMOJIS.get(next_st, '')} Advance → {next_st.replace('_', ' ').title()}"
+                    next_label = (
+                        f"{status_icon(next_st)} Advance → {next_st.replace('_', ' ').title()}"
+                    )
                     if st.button(next_label, key=f"promote_{app['id']}"):
-                        api("patch", f"/jobs/{app['id']}", json={"status": next_st})
-                        st.rerun()
+                        resp = api("patch", f"/jobs/{app['id']}", json=_applied_stamp(app, next_st))
+                        if resp.status_code == 200:
+                            st.rerun()
+                        else:
+                            show_error(detail(resp, "Could not update status."))
             with col2:
                 new_status = st.selectbox(
                     "Update Status",
-                    list(STATUS_EMOJIS.keys()),
-                    index=list(STATUS_EMOJIS.keys()).index(app["status"]),
+                    _STATUSES,
+                    index=_STATUSES.index(app["status"]) if app["status"] in _STATUSES else 0,
                     key=f"status_{app['id']}",
                 )
                 new_deadline = st.date_input(
@@ -151,11 +158,17 @@ def page_job_tracker() -> None:
                     help="Leave empty to keep existing deadline",
                 )
                 if st.button("Save", key=f"save_{app['id']}"):
-                    patch = {"status": new_status}
+                    patch = _applied_stamp(app, new_status)
                     if new_deadline:
                         patch["deadline"] = new_deadline.isoformat()
-                    api("patch", f"/jobs/{app['id']}", json=patch)
-                    st.rerun()
+                    resp = api("patch", f"/jobs/{app['id']}", json=patch)
+                    if resp.status_code == 200:
+                        st.rerun()
+                    else:
+                        show_error(detail(resp, "Could not save changes."))
                 if st.button("🗑️ Delete", key=f"del_{app['id']}"):
-                    api("delete", f"/jobs/{app['id']}")
-                    st.rerun()
+                    resp = api("delete", f"/jobs/{app['id']}")
+                    if resp.status_code == 204:
+                        st.rerun()
+                    else:
+                        show_error(detail(resp, "Could not delete."))

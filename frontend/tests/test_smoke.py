@@ -62,6 +62,16 @@ class TestModuleImports:
         assert status_icon("offer") == "🎉"
         assert status_icon("not_a_status") == "•"
 
+    def test_tracker_applied_stamp(self):
+        # applied_at is stamped exactly once: first transition into "applied".
+        from views.job_tracker import _applied_stamp
+
+        body = _applied_stamp({"applied_at": None}, "applied")
+        assert body["status"] == "applied"
+        assert "applied_at" in body
+        assert "applied_at" not in _applied_stamp({"applied_at": "2026-06-01"}, "applied")
+        assert "applied_at" not in _applied_stamp({}, "interview")
+
     def test_score_tone_thresholds(self):
         from ui import score_tone
 
