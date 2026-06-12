@@ -3,7 +3,6 @@
 import time
 from datetime import UTC, datetime
 
-import requests
 import streamlit as st
 
 from api_client import api, detail, safe_json
@@ -14,7 +13,7 @@ from components import (
     show_error,
     toast_success,
 )
-from ui import page_header
+from ui import page_header, poll_outcome, poll_task
 
 # Generation is usually 20-60s (draft + AI honesty review, with up to two
 # regenerations). Past this the task is almost certainly orphaned; the backend
@@ -57,39 +56,14 @@ def _show_rag_context() -> None:
         )
 
 
-def _poll_outcome(http_status: int | None, task_status: str | None, elapsed: float) -> str:
-    """Classify one poll tick of the generate task.
-
-    Transient trouble (a network blip, a 5xx) reads as "running" so a hiccup
-    doesn't kill the poll; the elapsed cap is the backstop.
-    """
-    if http_status == 404:
-        return "lost"  # unknown or expired task id
-    if http_status in (401, 403):
-        return "auth"
-    if task_status == "SUCCESS":
-        return "done"
-    if task_status == "FAILURE":
-        return "failed"
-    if elapsed > _GENERATE_TIMEOUT_S:
-        return "timeout"
-    return "running"
-
-
 def _generation_status() -> None:
     """One poll tick — runs inside a fragment so only this block re-renders."""
     task = st.session_state.get("cl_generate")
     if not task:
         return
     elapsed = time.time() - task["started"]
-    try:
-        resp = api("get", f"/cover-letters/task/{task['task_id']}")
-        http_status = resp.status_code
-        task_status = safe_json(resp, {}).get("status")
-    except requests.RequestException:
-        http_status, task_status = None, None
-
-    outcome = _poll_outcome(http_status, task_status, elapsed)
+    http_status, payload = poll_task(f"/cover-letters/task/{task['task_id']}")
+    outcome = poll_outcome(http_status, payload.get("status"), elapsed, _GENERATE_TIMEOUT_S)
     if outcome == "running":
         st.status(
             f"✍️ Drafting your letter, then running the AI honesty review… {int(elapsed)}s",
