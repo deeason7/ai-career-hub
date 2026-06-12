@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 from typing import Annotated
 
 import redis
@@ -18,14 +19,21 @@ from app.models.user import User
 from app.services import task_state
 from app.services.ats_scorer import calculate_ats_score
 from app.services.cover_letter import generate_interview_questions, generate_skill_gap_analysis
+from app.services.llm_client import LLMRateLimitedError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _SERVICE_ERROR = "AI service temporarily unavailable. Please try again."
+_BUSY_ERROR = (
+    "The AI model is at its rate limit right now. "
+    "The analysis was retried but couldn't get through — try again in a minute."
+)
 
 # Step names surfaced live in the frontend while the analysis runs.
 _STEPS = ("ats", "skill_gap", "interview")
+
+_OnBusy = Callable[[float], None] | None
 
 
 class JobMatchRequest(BaseModel):
@@ -33,7 +41,8 @@ class JobMatchRequest(BaseModel):
     job_description: str = Field(..., max_length=10_000)
 
 
-def _ats_part(resume_text: str, jd: str) -> dict:
+def _ats_part(resume_text: str, jd: str, on_busy: _OnBusy = None) -> dict:
+    # on_busy is unused here — ATS scoring is local, no model to be busy.
     r = calculate_ats_score(resume_text, jd)
     return {
         "score": r.score,
@@ -48,12 +57,12 @@ def _ats_part(resume_text: str, jd: str) -> dict:
     }
 
 
-def _skill_gap_part(resume_text: str, jd: str) -> dict:
-    return generate_skill_gap_analysis(resume_text, jd)
+def _skill_gap_part(resume_text: str, jd: str, on_busy: _OnBusy = None) -> dict:
+    return generate_skill_gap_analysis(resume_text, jd, on_busy=on_busy)
 
 
-def _interview_part(resume_text: str, jd: str) -> list[str]:
-    return generate_interview_questions(resume_text, jd)
+def _interview_part(resume_text: str, jd: str, on_busy: _OnBusy = None) -> list[str]:
+    return generate_interview_questions(resume_text, jd, on_busy=on_busy)
 
 
 async def _run_job_match_bg(task_id: str, resume_text: str, jd: str) -> None:
@@ -62,8 +71,13 @@ async def _run_job_match_bg(task_id: str, resume_text: str, jd: str) -> None:
 
     async def tracked(step: str, fn):
         await task_state.set_step(task_id, step, "running")
+
+        def on_busy(_delay: float) -> None:
+            # Fires inside the worker thread, so it must use the sync client.
+            task_state.set_step_sync(task_id, step, "waiting")
+
         try:
-            out = await asyncio.to_thread(fn, resume_text, jd)
+            out = await asyncio.to_thread(fn, resume_text, jd, on_busy)
         except Exception:
             await task_state.set_step(task_id, step, "failed")
             raise
@@ -71,11 +85,15 @@ async def _run_job_match_bg(task_id: str, resume_text: str, jd: str) -> None:
         return out
 
     try:
-        ats_result, skill_gap_result, interview_result = await asyncio.gather(
-            tracked("ats", _ats_part),
-            tracked("skill_gap", _skill_gap_part),
-            tracked("interview", _interview_part),
-        )
+        # One at a time on purpose: firing all three at once burns the
+        # provider's per-minute token budget and they 429 each other.
+        ats_result = await tracked("ats", _ats_part)
+        skill_gap_result = await tracked("skill_gap", _skill_gap_part)
+        interview_result = await tracked("interview", _interview_part)
+    except LLMRateLimitedError:
+        logger.warning("job-match task %s gave up: model rate-limited", task_id)
+        await task_state.set_status(task_id, "FAILURE", error=_BUSY_ERROR)
+        return
     except Exception as exc:
         logger.error("job-match task %s failed: %s", task_id, exc, exc_info=True)
         await task_state.set_status(task_id, "FAILURE", error=_SERVICE_ERROR)
@@ -122,11 +140,16 @@ async def job_match(
 
     logger.warning("job-match running inline — Redis task store unavailable")
     try:
-        ats_result, skill_gap_result, interview_result = await asyncio.gather(
-            asyncio.to_thread(_ats_part, resume_text, jd),
-            asyncio.to_thread(_skill_gap_part, resume_text, jd),
-            asyncio.to_thread(_interview_part, resume_text, jd),
-        )
+        # Same sequencing as the background path — see the comment there.
+        ats_result = await asyncio.to_thread(_ats_part, resume_text, jd)
+        skill_gap_result = await asyncio.to_thread(_skill_gap_part, resume_text, jd)
+        interview_result = await asyncio.to_thread(_interview_part, resume_text, jd)
+    except LLMRateLimitedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_BUSY_ERROR,
+            headers={"Retry-After": "60"},
+        ) from exc
     except Exception as exc:
         logger.error("job-match fan-out failed: %s", exc, exc_info=True)
         raise HTTPException(
