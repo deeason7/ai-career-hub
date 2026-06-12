@@ -104,6 +104,20 @@ class TestModuleImports:
         assert poll_outcome(503, None, 5, 180) == "running"  # store hiccup = transient
         assert poll_outcome(200, "STARTED", 181, 180) == "timeout"
 
+    def test_agent_checklist(self):
+        # The first pending step shows as running — but only while the task runs.
+        from views.agent import _agent_checklist
+
+        lines = _agent_checklist({"scrape_job": "success", "extract_metadata": "failed"}, True)
+        assert lines[0].startswith("✅")
+        assert lines[1].startswith("❌")
+        assert lines[2].startswith("⏳")  # first pending becomes the running marker
+        assert lines[3].startswith("⬜")  # only one running marker
+        assert len(lines) == 7
+
+        idle = _agent_checklist({}, False)
+        assert all(line.startswith("⬜") for line in idle)
+
     def test_job_match_steps_line(self):
         # Live step captions render in pipeline order with honest state icons.
         from views.job_match import _steps_line
