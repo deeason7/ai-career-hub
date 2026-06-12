@@ -22,9 +22,10 @@ from ui import (
 # matters for the degraded inline mode (no task store), where the whole
 # pipeline rides the one request.
 _SUBMIT_TIMEOUT_S = 120
-# Poll cap — seven steps usually finish in 30–90s; past this the run is
-# treated as stuck even if it might still finish server-side.
-_RUN_TIMEOUT_S = 240
+# Poll cap — seven steps usually finish in 30–90s, but a busy model adds
+# backoff waits; past this the run is treated as stuck even if it might
+# still finish server-side.
+_RUN_TIMEOUT_S = 360
 
 # Pipeline checklist, in execution order, keyed by the backend step names.
 _STEP_LABELS = {
@@ -48,7 +49,7 @@ _OUTCOME_ERRORS = {
     "failed": "The agent run failed on the server. Try again in a minute.",
     "lost": "This run is no longer tracked (it may have expired). Run it again.",
     "auth": "Your session expired during the run. Log in again, then retry.",
-    "timeout": "Still running after 4 minutes — the job site or model may be slow. Try again.",
+    "timeout": "Still running after 6 minutes — the job site or model may be slow. Try again.",
 }
 
 

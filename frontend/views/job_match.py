@@ -22,30 +22,33 @@ from ui import (
 
 # The submit normally returns 202 in milliseconds; the generous timeout only
 # matters for the degraded inline mode (no task store), where several LLM
-# calls ride the one request.
-_SUBMIT_TIMEOUT_S = 90
-# Poll cap — three LLM calls usually land well under a minute; past this the
-# task is treated as stuck even if it might still finish server-side.
-_TASK_TIMEOUT_S = 180
+# calls ride the one request — sequentially, so their times add up.
+_SUBMIT_TIMEOUT_S = 150
+# Poll cap — the three steps run one at a time and may wait out a busy model;
+# past this the task is treated as stuck even if it might still finish.
+_TASK_TIMEOUT_S = 300
 
 # Step keys come from the backend task; render them in pipeline order.
 _STEP_LABELS = {"ats": "ATS score", "skill_gap": "Skill gap", "interview": "Interview questions"}
-_STEP_ICONS = {"pending": "⬜", "running": "⏳", "done": "✅", "failed": "❌"}
+_STEP_ICONS = {"pending": "⬜", "running": "⏳", "done": "✅", "failed": "❌", "waiting": "🕐"}
 
 _OUTCOME_ERRORS = {
     "failed": "Analysis failed on the server. Try again in a minute.",
     "lost": "This analysis is no longer tracked (it may have expired). Run it again.",
     "auth": "Your session expired during the analysis. Log in again, then retry.",
-    "timeout": "Still running after 3 minutes — the model may be overloaded. Try again shortly.",
+    "timeout": "Still running after 5 minutes — the model may be overloaded. Try again shortly.",
 }
 
 
 def _steps_line(steps: dict) -> str:
     """One caption line of step states, in pipeline order, e.g. '✅ ATS score · ⏳ Skill gap'."""
-    return " · ".join(
-        f"{_STEP_ICONS.get(steps.get(name, 'pending'), '⬜')} {label}"
-        for name, label in _STEP_LABELS.items()
-    )
+    parts = []
+    for name, label in _STEP_LABELS.items():
+        state = steps.get(name, "pending")
+        if state == "waiting":
+            label = f"{label} (model busy — retrying)"
+        parts.append(f"{_STEP_ICONS.get(state, '⬜')} {label}")
+    return " · ".join(parts)
 
 
 def _analysis_status() -> None:
