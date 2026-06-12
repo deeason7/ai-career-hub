@@ -1,5 +1,7 @@
 """Resumes page — upload, list, activate, delete."""
 
+import json
+
 import streamlit as st
 
 from api_client import api, detail, safe_json
@@ -13,8 +15,23 @@ from ui import (
 )
 
 
+def _parse_failed(resume_body: dict) -> bool:
+    """True when the upload response says the AI parse errored out."""
+    try:
+        return bool(json.loads(resume_body.get("parsed_json") or "{}").get("parse_failed"))
+    except (TypeError, ValueError):
+        return False
+
+
 def _render_analysis(parsed: dict) -> None:
     """Readable view of the LLM-parsed resume; the shape varies, so render defensively."""
+    if parsed.get("parse_failed"):
+        st.warning(
+            "⚠️ The AI parse failed for this resume, so there's no structured analysis. "
+            "ATS scoring and cover letters still work — they read the raw text. "
+            "Delete and re-upload to retry the parse."
+        )
+        return
     if parsed.get("summary"):
         st.markdown(f"_{parsed['summary']}_")
     skills = parsed.get("skills") or []
@@ -50,6 +67,14 @@ def page_resumes() -> None:
     page_header("📄", "Resumes")
     st.markdown("Upload up to **10 resumes**. Activate the one to use for AI features.")
 
+    # Flash from the last upload — set before st.rerun(), shown after it.
+    warn_label = st.session_state.pop("resume_parse_warn", None)
+    if warn_label:
+        st.warning(
+            f"⚠️ '{warn_label}' uploaded, but the AI parse failed — its analysis will be "
+            "empty. The model may be busy; delete and re-upload to retry."
+        )
+
     with st.expander("➕ Upload a New Resume", expanded=True):
         with st.form("upload_form"):
             label = st.text_input(
@@ -71,7 +96,10 @@ def page_resumes() -> None:
                             files={"file": (file.name, file.getvalue(), file.type)},
                         )
                     if resp.status_code == 201:
-                        show_success(f"Resume '{label}' uploaded and parsed!")
+                        if _parse_failed(safe_json(resp, {})):
+                            st.session_state["resume_parse_warn"] = label.strip()
+                        else:
+                            show_success(f"Resume '{label}' uploaded and parsed!")
                         st.rerun()
                     else:
                         show_error(detail(resp, "Upload failed."))
