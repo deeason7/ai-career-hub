@@ -24,6 +24,20 @@ class CoverLetterRevision(SQLModel, table=True):
         )
     )
     version_number: int
+    # Lineage: the revision this one was refined from. NULL = refined from the
+    # letter's active text. SET NULL so deleting an ancestor never blocks.
+    parent_revision_id: uuid.UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey(
+                "cover_letter_revisions.id",
+                ondelete="SET NULL",
+                name="fk_cl_revision_parent",
+            ),
+            nullable=True,
+        ),
+    )
     generated_text: str = Field(sa_column=Column(Text))
     user_command: str = Field(sa_column=Column(Text))
     qa_score_honesty: int | None = Field(default=None)
@@ -44,12 +58,15 @@ class CoverLetterRevision(SQLModel, table=True):
 
 class CoverLetterRevisionCreate(SQLModel):
     command: str = Field(..., min_length=3, max_length=1000)
+    # Refine from this revision's text instead of the active letter.
+    base_version: int | None = Field(default=None, ge=1)
 
 
 class CoverLetterRevisionRead(SQLModel):
     id: uuid.UUID
     cover_letter_id: uuid.UUID
     version_number: int
+    parent_revision_id: uuid.UUID | None = None
     generated_text: str
     user_command: str
     qa_score_honesty: int | None = None
