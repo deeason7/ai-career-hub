@@ -276,7 +276,105 @@ STOP_WORDS = {
     "preferred",
     "required",
     "including",
+    # EEO / benefits / corporate boilerplate — legal and perks language, not skills.
+    # Deliberately absent: "vision", "identity", "origin", "learning" — they carry
+    # real tech bigrams (computer vision, identity management, machine learning).
+    "accommodation",
+    "accommodations",
+    "age",
+    "alongside",
+    "america",
+    "american",
+    "applicable",
+    "benefits",
+    "bonus",
+    "citizenship",
+    "compensation",
+    "dental",
+    "disabilities",
+    "disability",
+    "discrimination",
+    "eeo",
+    "employer",
+    "employers",
+    "employment",
+    "equity",
+    "ethnicity",
+    "gender",
+    "group",
+    "groups",
+    "holidays",
+    "insurance",
+    "marital",
+    "orientation",
+    "perks",
+    "pto",
+    "qualified",
+    "race",
+    "reasonable",
+    "regard",
+    "regardless",
+    "reimbursement",
+    "religion",
+    "religious",
+    "sex",
+    "sponsorship",
+    "status",
+    "tuition",
+    "vacation",
+    "veteran",
+    "veterans",
+    "visa",
+    "wellness",
+    # URL/email fragments and company-suffix junk the tokenizer produces
+    "com",
+    "corp",
+    "http",
+    "https",
+    "inc",
+    "llc",
+    "ltd",
+    "www",
 }
+
+# Short tokens that are real skills — the len>=3 keyword floor would drop them.
+# "go" and "r" stay out on purpose: lowercased text can't tell Go from the verb
+# or R from "r&d", and a false skill is worse noise than a missed one.
+TECH_SHORTHANDS = {"ai", "ml", "ci", "cd", "qa", "ui", "ux", "js", "ts"}
+
+# Segment-level markers for JD boilerplate (EEO statements, benefits lists).
+# Matched as lowercase substrings; a hit drops the whole sentence/line before
+# keyword extraction so legal text never surfaces as "missing skills".
+_BOILERPLATE_MARKERS = (
+    "equal opportunity",
+    "equal employment",
+    "without regard to",
+    "reasonable accommodation",
+    "all qualified applicants",
+    "affirmative action",
+    "protected veteran",
+    "protected characteristic",
+    "criminal histor",
+    "background check",
+    "e-verify",
+    "drug-free workplace",
+    "drug free workplace",
+    "401(k)",
+    "401k",
+    "paid time off",
+    "parental leave",
+    "tuition reimbursement",
+    "health insurance",
+    "dental insurance",
+    "life insurance",
+    "medical, dental",
+    "dental, and vision",
+    "dental and vision",
+    "competitive salary",
+    "competitive compensation",
+    "comprehensive benefits",
+    "benefits package",
+)
 
 
 @dataclass
@@ -342,6 +440,18 @@ def _score_semantic(resume_text: str, jd_text: str) -> tuple[float, dict]:
 # --- Keyword Matching ---
 
 
+def _strip_boilerplate(jd_text: str) -> str:
+    """Drop EEO/benefits segments from a JD before keyword extraction.
+
+    Splits on sentence enders and newlines (the request pipeline collapses
+    newlines, so sentences are the reliable unit). If everything matched —
+    a pure-boilerplate input — return the original rather than nothing.
+    """
+    segments = re.split(r"(?<=[.!?])\s+|\n+", jd_text)
+    kept = [s for s in segments if s and not any(m in s.lower() for m in _BOILERPLATE_MARKERS)]
+    return " ".join(kept) if kept else jd_text
+
+
 def _tokenize(text: str) -> set[str]:
     text = text.lower()
     text = re.sub(r"[^a-z0-9\s]", " ", text)
@@ -349,7 +459,9 @@ def _tokenize(text: str) -> set[str]:
 
 
 def _extract_ngrams(text: str, n: int = 2) -> set[str]:
-    words = text.lower().split()
+    # Same punctuation cleanup as _tokenize, so "machine learning," still
+    # produces the phrase "machine learning" on both sides of the match.
+    words = re.sub(r"[^a-z0-9\s]", " ", text.lower()).split()
     return {" ".join(words[i : i + n]) for i in range(len(words) - n + 1)}
 
 
@@ -358,11 +470,25 @@ def _is_keyword(token: str) -> bool:
 
     Drops digit-leading tokens — salary, counts, durations ('200k', '300', '1hr',
     '000') — and common filler, so matched/missing keywords read as skills, not noise.
+    Known short skills (ai, ml, ci...) skip the length floor.
     """
+    if token in TECH_SHORTHANDS:
+        return True
     return len(token) >= 3 and not token[0].isdigit() and token not in STOP_WORDS
 
 
+def _is_phrase_word(word: str) -> bool:
+    """One word of a candidate phrase — held to the same bar as single keywords."""
+    return (
+        bool(word)
+        and not word[0].isdigit()
+        and word not in STOP_WORDS
+        and (len(word) >= 3 or word in TECH_SHORTHANDS)
+    )
+
+
 def _score_keywords(resume_text: str, jd_text: str) -> tuple[float, list[str], list[str]]:
+    jd_text = _strip_boilerplate(jd_text)
     resume_tokens = _tokenize(resume_text)
     jd_tokens = _tokenize(jd_text)
     resume_bigrams = _extract_ngrams(resume_text)
@@ -372,7 +498,8 @@ def _score_keywords(resume_text: str, jd_text: str) -> tuple[float, list[str], l
     jd_phrases = {
         p
         for p in jd_bigrams
-        if all(w and not w[0].isdigit() and w not in STOP_WORDS for w in p.split())
+        # Distinct words only — "group group" style scrape stutter is never a skill.
+        if len(set(p.split())) == 2 and all(_is_phrase_word(w) for w in p.split())
     }
 
     matched: list[str] = []
