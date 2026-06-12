@@ -130,6 +130,17 @@ class TestModuleImports:
         # Unknown states and missing steps degrade to the pending icon.
         assert _steps_line({}) == "⬜ ATS score · ⬜ Skill gap · ⬜ Interview questions"
 
+    def test_refine_lineage_tag(self):
+        # History titles show where a branch came from; root revisions stay unmarked.
+        from views.cover_letter import _lineage_tag
+
+        versions = {"abc": 2}
+        assert _lineage_tag({"parent_revision_id": "abc"}, versions) == " ← v2"
+        assert _lineage_tag({"parent_revision_id": None}, versions) == ""
+        assert _lineage_tag({}, versions) == ""
+        # Parent no longer in the list (SET NULL edge) → no broken label.
+        assert _lineage_tag({"parent_revision_id": "gone"}, versions) == ""
+
     def test_resumes_parse_failed_flag(self):
         # The upload response carries parsed_json as a string; bad shapes are calm.
         from views.resumes import _parse_failed
