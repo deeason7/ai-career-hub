@@ -9,6 +9,7 @@ without aborting the entire workflow.
 import logging
 import operator
 import time
+from collections.abc import Callable
 from typing import Annotated, TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -105,8 +106,16 @@ def get_agent_graph():
     return _compiled_graph
 
 
-def run_agent(job_url: str, resume_text: str, user_id: str) -> dict:
+def run_agent(
+    job_url: str,
+    resume_text: str,
+    user_id: str,
+    on_step: Callable[[dict], None] | None = None,
+) -> dict:
     """Execute the full agentic workflow and return the final state.
+
+    `on_step`, when given, is called with the accumulated state after every
+    node — progress reporting hooks in here without touching the tools.
 
     Returns a dict with:
         status: "completed" | "partial" | "failed"
@@ -133,7 +142,16 @@ def run_agent(job_url: str, resume_text: str, user_id: str) -> dict:
     }
 
     start = time.perf_counter()
-    final_state = graph.invoke(initial_state)
+    # Stream full state values instead of invoke(): same final state, but each
+    # completed node yields once, which is what makes live progress possible.
+    final_state: dict = dict(initial_state)
+    for state in graph.stream(initial_state, stream_mode="values"):
+        final_state = state
+        if on_step is not None:
+            try:
+                on_step(state)
+            except Exception as exc:
+                logger.warning("agent progress callback failed (run continues): %s", exc)
     total_ms = int((time.perf_counter() - start) * 1000)
 
     steps = final_state.get("steps_completed", [])

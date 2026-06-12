@@ -19,13 +19,10 @@ TASK_TTL_SECONDS = 3600
 _STEP_PREFIX = "step:"
 
 _redis: aioredis.Redis | None = None
+_redis_sync: redis.Redis | None = None
 
 
-def _get_redis() -> aioredis.Redis | None:
-    """Return the module-level Redis client, initialised lazily on first call."""
-    global _redis
-    if _redis is not None:
-        return _redis
+def _redis_url() -> str | None:
     host = os.getenv("REDIS_HOST", "")
     if not host:
         return None
@@ -33,13 +30,37 @@ def _get_redis() -> aioredis.Redis | None:
     password = os.getenv("REDIS_PASSWORD") or None
     auth = f":{password}@" if password else ""
     # DB 2 keeps task state apart from the token deny-list (DB 1).
-    _redis = aioredis.from_url(
-        f"redis://{auth}{host}:{port}/2",
-        encoding="utf-8",
-        decode_responses=True,
-        max_connections=5,
-    )
+    return f"redis://{auth}{host}:{port}/2"
+
+
+def _get_redis() -> aioredis.Redis | None:
+    """Return the module-level async Redis client, initialised lazily on first call."""
+    global _redis
+    if _redis is not None:
+        return _redis
+    url = _redis_url()
+    if url is None:
+        return None
+    _redis = aioredis.from_url(url, encoding="utf-8", decode_responses=True, max_connections=5)
     return _redis
+
+
+def _get_redis_sync() -> redis.Redis | None:
+    """Return the sync Redis client for threadpool writers (sync background tasks).
+
+    The async client is bound to the event loop, so code running in worker
+    threads — where BackgroundTasks executes sync functions — must use this one.
+    """
+    global _redis_sync
+    if _redis_sync is not None:
+        return _redis_sync
+    url = _redis_url()
+    if url is None:
+        return None
+    _redis_sync = redis.Redis.from_url(
+        url, encoding="utf-8", decode_responses=True, max_connections=5
+    )
+    return _redis_sync
 
 
 def _key(task_id: str) -> str:
@@ -98,6 +119,42 @@ async def set_result(task_id: str, result: dict) -> None:
         await client.hset(
             _key(task_id), mapping={"status": "SUCCESS", "result": json.dumps(result)}
         )
+    except redis.RedisError as exc:
+        logger.warning("could not store result for task %s: %s", task_id, exc)
+
+
+def set_status_sync(task_id: str, status: str, error: str | None = None) -> None:
+    """set_status for sync (threadpool) contexts; best-effort like its async twin."""
+    client = _get_redis_sync()
+    if client is None:
+        return
+    fields = {"status": status}
+    if error:
+        fields["error"] = error
+    try:
+        client.hset(_key(task_id), mapping=fields)
+    except redis.RedisError as exc:
+        logger.warning("could not move task %s to %s: %s", task_id, status, exc)
+
+
+def set_step_sync(task_id: str, step: str, state: str) -> None:
+    """set_step for sync (threadpool) contexts; best-effort."""
+    client = _get_redis_sync()
+    if client is None:
+        return
+    try:
+        client.hset(_key(task_id), mapping={f"{_STEP_PREFIX}{step}": state})
+    except redis.RedisError as exc:
+        logger.warning("could not record step %s=%s on task %s: %s", step, state, task_id, exc)
+
+
+def set_result_sync(task_id: str, result: dict) -> None:
+    """set_result for sync (threadpool) contexts; best-effort."""
+    client = _get_redis_sync()
+    if client is None:
+        return
+    try:
+        client.hset(_key(task_id), mapping={"status": "SUCCESS", "result": json.dumps(result)})
     except redis.RedisError as exc:
         logger.warning("could not store result for task %s: %s", task_id, exc)
 

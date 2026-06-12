@@ -39,40 +39,6 @@ def _fake_ats_obj():
     )
 
 
-class _FakeRedis:
-    """Minimal async stand-in for the hash ops task_state uses."""
-
-    def __init__(self):
-        self.data: dict[str, dict] = {}
-
-    async def hset(self, key, mapping=None):
-        self.data.setdefault(key, {}).update(mapping or {})
-
-    async def hgetall(self, key):
-        return dict(self.data.get(key, {}))
-
-    async def expire(self, key, ttl):
-        return True
-
-
-@pytest.fixture
-def fake_task_store(monkeypatch):
-    """Route task_state at an in-memory fake so tests don't need a live Redis."""
-    from app.services import task_state
-
-    fake = _FakeRedis()
-    monkeypatch.setattr(task_state, "_get_redis", lambda: fake)
-    return fake
-
-
-@pytest.fixture
-def no_task_store(monkeypatch):
-    """Simulate Redis being unavailable — the endpoint should run inline."""
-    from app.services import task_state
-
-    monkeypatch.setattr(task_state, "_get_redis", lambda: None)
-
-
 @pytest_asyncio.fixture
 async def resume_id(client: AsyncClient, auth_headers: dict):
     content = b"Python developer with 3 years FastAPI and PostgreSQL experience."
