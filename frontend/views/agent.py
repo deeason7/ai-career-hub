@@ -1,15 +1,95 @@
 """AI Agent page — autonomous multi-step job analysis workflow."""
 
+import time
+
 import requests
 import streamlit as st
 
 from api_client import api, safe_json
-from ui import chip_row, error_state, metric_tile, nav_to, page_header, score_tone
+from ui import (
+    chip_row,
+    error_state,
+    loading,
+    metric_tile,
+    nav_to,
+    page_header,
+    poll_outcome,
+    poll_task,
+    score_tone,
+)
 
-# The pipeline runs as one synchronous call — the backend doesn't expose
-# per-step progress — so the wait is shown as honest-indeterminate and the
-# real per-step trace renders on completion.
-_AGENT_TIMEOUT_S = 120
+# The submit normally returns 202 in milliseconds; the generous timeout only
+# matters for the degraded inline mode (no task store), where the whole
+# pipeline rides the one request.
+_SUBMIT_TIMEOUT_S = 120
+# Poll cap — seven steps usually finish in 30–90s; past this the run is
+# treated as stuck even if it might still finish server-side.
+_RUN_TIMEOUT_S = 240
+
+# Pipeline checklist, in execution order, keyed by the backend step names.
+_STEP_LABELS = {
+    "scrape_job": "Scrape the job posting",
+    "extract_metadata": "Extract role & company",
+    "search_company": "Research the company",
+    "score_ats": "Score your ATS match",
+    "analyze_gaps": "Analyze skill gaps",
+    "write_cover_letter": "Draft a cover letter",
+    "generate_questions": "Prepare interview questions",
+}
+_STEP_ICONS = {
+    "success": "✅",
+    "failed": "❌",
+    "skipped": "⏭️",
+    "running": "⏳",
+    "pending": "⬜",
+}
+
+_OUTCOME_ERRORS = {
+    "failed": "The agent run failed on the server. Try again in a minute.",
+    "lost": "This run is no longer tracked (it may have expired). Run it again.",
+    "auth": "Your session expired during the run. Log in again, then retry.",
+    "timeout": "Still running after 4 minutes — the job site or model may be slow. Try again.",
+}
+
+
+def _agent_checklist(steps: dict, running: bool) -> list[str]:
+    """Checklist lines in pipeline order; the first pending step shows as running."""
+    lines = []
+    current_marked = False
+    for name, label in _STEP_LABELS.items():
+        state = steps.get(name, "pending")
+        if state == "pending" and running and not current_marked:
+            state = "running"
+            current_marked = True
+        lines.append(f"{_STEP_ICONS.get(state, '⬜')} {label}")
+    return lines
+
+
+def _agent_status() -> None:
+    """One poll tick — runs inside a fragment so only this block re-renders."""
+    task = st.session_state.get("agent_task")
+    if not task:
+        return
+    elapsed = time.time() - task["started"]
+    http_status, payload = poll_task(f"/agent/task/{task['task_id']}")
+    outcome = poll_outcome(http_status, payload.get("status"), elapsed, _RUN_TIMEOUT_S)
+
+    if outcome == "running":
+        with st.status(f"🤖 Agent working… {int(elapsed)}s", state="running", expanded=True):
+            for line in _agent_checklist(payload.get("steps") or {}, running=True):
+                st.markdown(line)
+        st.caption("Runs in the background — switching pages won't cancel it.")
+        return
+
+    # Terminal state: stop polling and hand control back to a full-page run.
+    st.session_state.pop("agent_task", None)
+    if outcome == "done":
+        st.session_state["agent_result"] = payload.get("result") or {}
+    elif outcome == "failed":
+        st.session_state["agent_error"] = payload.get("error") or _OUTCOME_ERRORS["failed"]
+    else:
+        st.session_state["agent_error"] = _OUTCOME_ERRORS[outcome]
+    st.rerun(scope="app")
 
 
 def page_agent() -> None:
@@ -40,50 +120,61 @@ def page_agent() -> None:
     with col2:
         selected_resume = st.selectbox("Resume", options=list(resume_options.keys()))
 
-    if st.button("🚀 Run Agent", type="primary", use_container_width=True, disabled=not job_url):
+    in_flight = bool(st.session_state.get("agent_task"))
+    if st.button(
+        "🚀 Run Agent",
+        type="primary",
+        use_container_width=True,
+        disabled=not job_url or in_flight,
+    ):
         if not job_url or not selected_resume:
             st.error("Please provide a job URL and select a resume.")
             return
 
         resume_id = resume_options[selected_resume]
-
-        with st.status("🤖 Agent running — scrape, research, score, write…", expanded=True) as box:
-            st.caption(
-                "Seven steps run as one pipeline call, typically 30–90 seconds. "
-                "The real per-step trace appears when it finishes."
-            )
+        with loading("Starting the agent…"):
             try:
                 resp = api(
                     "post",
                     "/agent/analyze",
                     json={"job_url": job_url, "resume_id": resume_id},
-                    timeout=_AGENT_TIMEOUT_S,
+                    timeout=_SUBMIT_TIMEOUT_S,
                 )
             except requests.exceptions.Timeout:
-                box.update(label="⏱️ No result after 2 minutes", state="error")
                 st.error(
-                    "The agent didn't finish in time — the job site may be slow or the "
-                    "model cold. Try again in a minute."
+                    "The agent didn't start in time — the server may be cold. "
+                    "Try again in a minute."
                 )
                 return
             except requests.RequestException:
-                box.update(label="🌐 Request failed", state="error")
                 error_state("network")
                 return
 
-            if resp.status_code != 200:
-                box.update(label="❌ Agent failed", state="error")
-                error_state(resp)
-                return
-
+        if resp.status_code == 202:
+            task_id = safe_json(resp, {}).get("task_id")
+            st.session_state["agent_task"] = {"task_id": task_id, "started": time.time()}
+            st.session_state.pop("agent_result", None)
+            st.rerun()
+        elif resp.status_code == 200:
+            # Degraded inline mode — the whole pipeline ran in this request.
             result = safe_json(resp, {})
-            if not result.get("status"):
-                box.update(label="❌ Unexpected response", state="error")
+            if result.get("status"):
+                st.session_state["agent_result"] = result
+            else:
                 st.error("The agent returned an unreadable result. Try again.")
                 return
+        else:
+            error_state(resp)
+            return
 
-            box.update(label="✅ Agent finished", state="complete")
-            st.session_state["agent_result"] = result
+    if in_flight:
+        # Poll inside a fragment: only the checklist re-runs every 2s, so the
+        # page stays responsive and navigation never cancels the run.
+        st.fragment(_agent_status, run_every="2s")()
+
+    agent_error = st.session_state.pop("agent_error", None)
+    if agent_error:
+        st.error(agent_error)
 
     # Rendered from state, outside the click branch, so the report survives
     # reruns (editing the URL or switching resumes no longer wipes it).
