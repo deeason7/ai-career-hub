@@ -345,7 +345,7 @@ Off-Hours:
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
 
-### v4.2.0 (Unreleased) — Async Analysis, Resilience & Refine Branching
+### v4.2.0 — Async Analysis, Resilience & Refine Branching
 - **Async job-match & agentic analysis** — both now return `202` and run as background tasks with a Redis-backed task store; the UI polls and renders a live step checklist that survives navigating away mid-run
 - **LLM rate-limit resilience** — capped exponential backoff on provider `429`s with an honest "model busy" status; the job-match fan-out is serialised to fit the token-per-minute budget
 - **ATS keyword quality** — posting boilerplate (EEO, benefits) is stripped before extraction, so matched and missing keywords read like real skills

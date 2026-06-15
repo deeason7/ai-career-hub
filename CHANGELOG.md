@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Targeting **v4.2.0** — async analysis, resilience under rate limits, and refine branching.
+## [4.2.0] - 2026-06-15
+
+Async analysis, resilience under rate limits, and refine branching.
 
 ### Added
 - Async job-match analysis: `POST /api/v1/analysis/job-match` returns `202` with a task id, and `GET /api/v1/analysis/task/{task_id}` polls status with live per-step progress. State is held in a Redis task store with one hash field per step, so parallel workers never clobber a shared blob.
@@ -135,7 +137,8 @@ AWS production deployment.
 ### Security
 - Hardened IAM — least-privilege policies, MFA, IMDSv2.
 
-[Unreleased]: https://github.com/deeason7/ai-career-hub/compare/v4.1.0...develop
+[Unreleased]: https://github.com/deeason7/ai-career-hub/compare/v4.2.0...develop
+[4.2.0]: https://github.com/deeason7/ai-career-hub/releases/tag/v4.2.0
 [4.1.0]: https://github.com/deeason7/ai-career-hub/releases/tag/v4.1.0
 [4.0.0]: https://github.com/deeason7/ai-career-hub/releases/tag/v4.0.0
 [3.0.0]: https://github.com/deeason7/ai-career-hub/releases/tag/v3.0.0
