@@ -92,16 +92,30 @@ class TestSkillGapResult:
     def test_valid_result(self):
         rec = SkillRecommendation(
             skill="Kubernetes",
-            resource="CKA on Linux Foundation",
+            resource="Certified Kubernetes Administrator (CKA)",
+            platform="Linux Foundation",
             timeline="6 weeks",
         )
         result = SkillGapResult(recommendations=[rec])
         assert len(result.recommendations) == 1
-        assert result.recommendations[0].skill == "Kubernetes"
+        assert result.recommendations[0].platform == "Linux Foundation"
 
-    def test_empty_defaults(self):
-        result = SkillGapResult()
-        assert result.recommendations == []
+    def test_recommendation_requires_platform(self):
+        with pytest.raises(ValidationError):
+            SkillRecommendation(skill="Go", resource="A Tour of Go", timeline="2 weeks")
+
+    def test_rejects_empty_recommendations(self):
+        # At least one path per analysis — instructor must not return an empty list.
+        with pytest.raises(ValidationError, match="at least 1"):
+            SkillGapResult(recommendations=[])
+
+    def test_rejects_too_many_recommendations(self):
+        recs = [
+            SkillRecommendation(skill=f"S{i}", resource="R", platform="P", timeline="T")
+            for i in range(6)
+        ]
+        with pytest.raises(ValidationError, match="at most 5"):
+            SkillGapResult(recommendations=recs)
 
 
 class TestJobExtraction:
