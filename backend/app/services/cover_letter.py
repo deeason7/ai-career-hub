@@ -1,6 +1,7 @@
 """Cover letter generation and AI tools service."""
 
 import logging
+from collections.abc import Callable
 
 from pydantic import ValidationError
 
@@ -256,7 +257,12 @@ def _refine_via_ollama(
     return {"cover_letter": text.strip(), "chunks_used": 0}
 
 
-def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
+def generate_skill_gap_analysis(
+    resume_text: str,
+    job_description: str,
+    *,
+    on_busy: Callable[[float], None] | None = None,
+) -> dict:
     """Identify missing skills and generate prioritised learning recommendations."""
     from app.services.ats_scorer import PRIORITY_KEYWORDS, calculate_ats_score  # noqa: PLC0415
 
@@ -270,7 +276,7 @@ def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
         from app.core.config import settings  # noqa: PLC0415
 
         if settings.USE_GROQ:
-            recommendations = _skill_gap_via_instructor(priority_gaps)
+            recommendations = _skill_gap_via_instructor(priority_gaps, on_busy=on_busy)
         else:
             recommendations = _skill_gap_via_langchain(priority_gaps)
 
@@ -283,7 +289,10 @@ def generate_skill_gap_analysis(resume_text: str, job_description: str) -> dict:
     }
 
 
-def _skill_gap_via_instructor(priority_gaps: list[str]) -> list[dict]:
+def _skill_gap_via_instructor(
+    priority_gaps: list[str],
+    on_busy: Callable[[float], None] | None = None,
+) -> list[dict]:
     """Structured skill gap recommendations via instructor."""
     from app.services.llm_client import call_structured  # noqa: PLC0415
     from app.services.llm_schemas import SkillGapResult  # noqa: PLC0415
@@ -297,6 +306,7 @@ def _skill_gap_via_instructor(priority_gaps: list[str]) -> list[dict]:
             response_model=SkillGapResult,
             system_prompt=_SKILL_GAP_SYSTEM_PROMPT,
             user_prompt=user_prompt,
+            on_busy=on_busy,
         )
         return [rec.model_dump() for rec in result.recommendations]
     except ValidationError:
@@ -320,17 +330,26 @@ def _skill_gap_via_langchain(priority_gaps: list[str]) -> list[str]:
     return [r.strip() for r in text.strip().split("\n") if r.strip()]
 
 
-def generate_interview_questions(resume_text: str, job_description: str) -> list[str]:
+def generate_interview_questions(
+    resume_text: str,
+    job_description: str,
+    *,
+    on_busy: Callable[[float], None] | None = None,
+) -> list[str]:
     """Generate tailored interview questions."""
     from app.core.config import settings  # noqa: PLC0415
 
     job_description = _sanitize_jd_for_prompt(job_description)
     if settings.USE_GROQ:
-        return _interview_via_instructor(resume_text, job_description)
+        return _interview_via_instructor(resume_text, job_description, on_busy=on_busy)
     return _interview_via_langchain(resume_text, job_description)
 
 
-def _interview_via_instructor(resume_text: str, job_description: str) -> list[str]:
+def _interview_via_instructor(
+    resume_text: str,
+    job_description: str,
+    on_busy: Callable[[float], None] | None = None,
+) -> list[str]:
     """Structured interview questions via instructor — no regex parsing needed."""
     from app.services.llm_client import call_structured  # noqa: PLC0415
     from app.services.llm_schemas import InterviewQuestions  # noqa: PLC0415
@@ -345,6 +364,7 @@ def _interview_via_instructor(resume_text: str, job_description: str) -> list[st
             response_model=InterviewQuestions,
             system_prompt=_INTERVIEW_SYSTEM_PROMPT,
             user_prompt=user_prompt,
+            on_busy=on_busy,
         )
         return result.questions[:10]
     except ValidationError:

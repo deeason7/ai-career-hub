@@ -8,6 +8,8 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
+from app.services.llm_client import LLMRateLimitedError
+
 _ATS_PATCH = "app.api.v1.endpoints.analysis.calculate_ats_score"
 _SKILL_PATCH = "app.api.v1.endpoints.analysis.generate_skill_gap_analysis"
 _INTERVIEW_PATCH = "app.api.v1.endpoints.analysis.generate_interview_questions"
@@ -178,6 +180,102 @@ async def test_job_match_failure_reported_via_poll(
     assert task["error"]
     assert task["result"] is None
     assert task["steps"]["ats"] == "failed"
+
+
+# ── Rate-limit resilience ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_steps_run_one_at_a_time(
+    client: AsyncClient, auth_headers: dict, resume_id: str, fake_task_store
+):
+    """Each step finishes before the next starts — parallel calls trip the TPM cap."""
+    seen = {}
+
+    def skill_gap_spy(resume_text, jd, on_busy=None):
+        task = next(iter(fake_task_store.values()))
+        seen["ats_when_skill_gap_runs"] = task.get("step:ats")
+        return _FAKE_SKILL_GAP
+
+    def interview_spy(resume_text, jd, on_busy=None):
+        task = next(iter(fake_task_store.values()))
+        seen["skill_gap_when_interview_runs"] = task.get("step:skill_gap")
+        return _FAKE_QUESTIONS
+
+    with (
+        patch(_ATS_PATCH, return_value=_fake_ats_obj()),
+        patch(_SKILL_PATCH, side_effect=skill_gap_spy),
+        patch(_INTERVIEW_PATCH, side_effect=interview_spy),
+    ):
+        resp = await _submit(client, auth_headers, resume_id)
+
+    assert resp.status_code == 202
+    assert seen == {
+        "ats_when_skill_gap_runs": "done",
+        "skill_gap_when_interview_runs": "done",
+    }
+
+
+@pytest.mark.asyncio
+async def test_busy_wait_surfaces_as_waiting_step(
+    client: AsyncClient, auth_headers: dict, resume_id: str, fake_task_store
+):
+    """The on_busy hook flips the step to 'waiting' — what the live UI renders."""
+    observed = {}
+
+    def busy_then_fine(resume_text, jd, on_busy=None):
+        on_busy(4.0)  # exactly what call_structured does before a backoff sleep
+        task = next(iter(fake_task_store.values()))
+        observed["during_wait"] = task.get("step:skill_gap")
+        return _FAKE_SKILL_GAP
+
+    with (
+        patch(_ATS_PATCH, return_value=_fake_ats_obj()),
+        patch(_SKILL_PATCH, side_effect=busy_then_fine),
+        patch(_INTERVIEW_PATCH, return_value=_FAKE_QUESTIONS),
+    ):
+        resp = await _submit(client, auth_headers, resume_id)
+
+    assert observed["during_wait"] == "waiting"
+    poll = await client.get(f"/api/v1/analysis/task/{resp.json()['task_id']}", headers=auth_headers)
+    task = poll.json()
+    assert task["status"] == "SUCCESS"
+    assert task["steps"]["skill_gap"] == "done"  # recovered, not stuck on waiting
+
+
+@pytest.mark.asyncio
+async def test_rate_limited_out_reports_honest_error(
+    client: AsyncClient, auth_headers: dict, resume_id: str, fake_task_store
+):
+    with (
+        patch(_ATS_PATCH, return_value=_fake_ats_obj()),
+        patch(_SKILL_PATCH, side_effect=LLMRateLimitedError("still 429 after backoff")),
+        patch(_INTERVIEW_PATCH, return_value=_FAKE_QUESTIONS),
+    ):
+        resp = await _submit(client, auth_headers, resume_id)
+
+    poll = await client.get(f"/api/v1/analysis/task/{resp.json()['task_id']}", headers=auth_headers)
+    task = poll.json()
+    assert task["status"] == "FAILURE"
+    assert "rate limit" in task["error"].lower()
+    assert task["steps"]["ats"] == "done"
+    assert task["steps"]["skill_gap"] == "failed"
+    assert task["steps"]["interview"] == "pending"  # never started — runs are sequential
+
+
+@pytest.mark.asyncio
+async def test_inline_rate_limited_returns_503(
+    client: AsyncClient, auth_headers: dict, resume_id: str, no_task_store
+):
+    with (
+        patch(_ATS_PATCH, return_value=_fake_ats_obj()),
+        patch(_SKILL_PATCH, side_effect=LLMRateLimitedError("still 429 after backoff")),
+        patch(_INTERVIEW_PATCH, return_value=_FAKE_QUESTIONS),
+    ):
+        resp = await _submit(client, auth_headers, resume_id)
+
+    assert resp.status_code == 503
+    assert resp.headers.get("retry-after") == "60"
 
 
 # ── Poll guards ───────────────────────────────────────────────────────────────

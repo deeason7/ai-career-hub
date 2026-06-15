@@ -125,8 +125,20 @@ class TestModuleImports:
         line = _steps_line({"ats": "done", "skill_gap": "running", "interview": "pending"})
         assert line == "✅ ATS score · ⏳ Skill gap · ⬜ Interview questions"
         assert "❌" in _steps_line({"ats": "failed"})
+        # A rate-limited step says so instead of posing as ordinary progress.
+        assert "model busy" in _steps_line({"ats": "waiting"})
         # Unknown states and missing steps degrade to the pending icon.
         assert _steps_line({}) == "⬜ ATS score · ⬜ Skill gap · ⬜ Interview questions"
+
+    def test_resumes_parse_failed_flag(self):
+        # The upload response carries parsed_json as a string; bad shapes are calm.
+        from views.resumes import _parse_failed
+
+        assert _parse_failed({"parsed_json": '{"parse_failed": true}'}) is True
+        assert _parse_failed({"parsed_json": '{"skills": ["python"]}'}) is False
+        assert _parse_failed({"parsed_json": None}) is False
+        assert _parse_failed({"parsed_json": "not json"}) is False
+        assert _parse_failed({}) is False
 
     def test_lifecycle_badge_expired(self):
         from components import lifecycle_badge
