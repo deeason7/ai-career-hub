@@ -2,6 +2,7 @@
 
 import uuid
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -65,6 +66,62 @@ async def auth_token(client: AsyncClient) -> str:
 async def auth_headers(auth_token: str) -> dict:
     """Authorization header for a freshly registered user."""
     return {"Authorization": f"Bearer {auth_token}"}
+
+
+class _FakeRedisSync:
+    """In-memory stand-in for the sync hash ops task_state uses."""
+
+    def __init__(self, data: dict):
+        self.data = data
+
+    def hset(self, key, mapping=None):
+        self.data.setdefault(key, {}).update(mapping or {})
+
+    def hgetall(self, key):
+        return dict(self.data.get(key, {}))
+
+    def expire(self, key, ttl):
+        return True
+
+
+class _FakeRedisAsync:
+    """Async twin of _FakeRedisSync over the same storage dict."""
+
+    def __init__(self, data: dict):
+        self.data = data
+
+    async def hset(self, key, mapping=None):
+        self.data.setdefault(key, {}).update(mapping or {})
+
+    async def hgetall(self, key):
+        return dict(self.data.get(key, {}))
+
+    async def expire(self, key, ttl):
+        return True
+
+
+@pytest.fixture
+def fake_task_store(monkeypatch):
+    """Route task_state at an in-memory fake so tests don't need a live Redis.
+
+    Async handlers and sync background tasks see the same storage, mirroring
+    how both real clients point at the same Redis DB.
+    """
+    from app.services import task_state
+
+    data: dict[str, dict] = {}
+    monkeypatch.setattr(task_state, "_get_redis", lambda: _FakeRedisAsync(data))
+    monkeypatch.setattr(task_state, "_get_redis_sync", lambda: _FakeRedisSync(data))
+    return data
+
+
+@pytest.fixture
+def no_task_store(monkeypatch):
+    """Simulate Redis being unavailable — endpoints should fall back inline."""
+    from app.services import task_state
+
+    monkeypatch.setattr(task_state, "_get_redis", lambda: None)
+    monkeypatch.setattr(task_state, "_get_redis_sync", lambda: None)
 
 
 @pytest_asyncio.fixture

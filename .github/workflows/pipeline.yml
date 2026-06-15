@@ -82,10 +82,10 @@ jobs:
             --ignore-vuln CVE-2026-45829
 
       - name: Lint
-        run: ruff check backend/
+        run: ruff check backend/ frontend/
 
       - name: Format check
-        run: ruff format --check backend/
+        run: ruff format --check backend/ frontend/
 
       - name: Test
         working-directory: backend

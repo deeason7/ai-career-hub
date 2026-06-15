@@ -1,14 +1,79 @@
 """Resumes page — upload, list, activate, delete."""
 
+import json
+
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from components import lifecycle_badge, loading_spinner, show_error, show_success
+from ui import (
+    chip_row,
+    lifecycle_badge,
+    loading_spinner,
+    page_header,
+    show_error,
+    show_success,
+)
+
+
+def _parse_failed(resume_body: dict) -> bool:
+    """True when the upload response says the AI parse errored out."""
+    try:
+        return bool(json.loads(resume_body.get("parsed_json") or "{}").get("parse_failed"))
+    except (TypeError, ValueError):
+        return False
+
+
+def _render_analysis(parsed: dict) -> None:
+    """Readable view of the LLM-parsed resume; the shape varies, so render defensively."""
+    if parsed.get("parse_failed"):
+        st.warning(
+            "⚠️ The AI parse failed for this resume, so there's no structured analysis. "
+            "ATS scoring and cover letters still work — they read the raw text. "
+            "Delete and re-upload to retry the parse."
+        )
+        return
+    if parsed.get("summary"):
+        st.markdown(f"_{parsed['summary']}_")
+    skills = parsed.get("skills") or []
+    if skills:
+        st.markdown("**Skills**")
+        chip_row([str(s) for s in skills[:40]], tone="brand")
+    experience = [j for j in (parsed.get("experience") or []) if isinstance(j, dict)]
+    if experience:
+        st.markdown("**Experience**")
+        for job in experience:
+            title = job.get("title") or "Role"
+            company = job.get("company") or ""
+            header = f"**{title}**" + (f" — {company}" if company else "")
+            if job.get("duration"):
+                header += f"  \n_{job['duration']}_"
+            st.markdown(header)
+            if job.get("description"):
+                st.caption(job["description"])
+    education = [e for e in (parsed.get("education") or []) if isinstance(e, dict)]
+    if education:
+        st.markdown("**Education**")
+        for e in education:
+            line = " · ".join(
+                str(v) for v in (e.get("degree"), e.get("institution"), e.get("year")) if v
+            )
+            if line:
+                st.markdown(f"- {line}")
+    with st.expander("Raw parsed JSON"):
+        st.json(parsed)
 
 
 def page_resumes() -> None:
-    st.title("📄 My Resumes")
+    page_header("📄", "Resumes")
     st.markdown("Upload up to **10 resumes**. Activate the one to use for AI features.")
+
+    # Flash from the last upload — set before st.rerun(), shown after it.
+    warn_label = st.session_state.pop("resume_parse_warn", None)
+    if warn_label:
+        st.warning(
+            f"⚠️ '{warn_label}' uploaded, but the AI parse failed — its analysis will be "
+            "empty. The model may be busy; delete and re-upload to retry."
+        )
 
     with st.expander("➕ Upload a New Resume", expanded=True):
         with st.form("upload_form"):
@@ -16,18 +81,14 @@ def page_resumes() -> None:
                 "Resume Label (e.g. 'ML Engineer Resume')",
                 placeholder="ML Engineer 2026",
             )
-            file = st.file_uploader(
-                "File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"]
-            )
+            file = st.file_uploader("File (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
             if st.form_submit_button("Upload & Parse", type="primary"):
                 if not label.strip():
                     show_error("Please provide a label.")
                 elif not file:
                     show_error("Please select a file.")
                 else:
-                    with loading_spinner(
-                        "Extracting text and parsing resume with AI..."
-                    ):
+                    with loading_spinner("Extracting text and parsing resume with AI..."):
                         resp = api(
                             "post",
                             "/resumes/upload",
@@ -35,7 +96,10 @@ def page_resumes() -> None:
                             files={"file": (file.name, file.getvalue(), file.type)},
                         )
                     if resp.status_code == 201:
-                        show_success(f"Resume '{label}' uploaded and parsed!")
+                        if _parse_failed(safe_json(resp, {})):
+                            st.session_state["resume_parse_warn"] = label.strip()
+                        else:
+                            show_success(f"Resume '{label}' uploaded and parsed!")
                         st.rerun()
                     else:
                         show_error(detail(resp, "Upload failed."))
@@ -53,9 +117,7 @@ def page_resumes() -> None:
     st.subheader(f"Your Resumes ({len(resumes)})")
     for r in resumes:
         active_tag = "🟢 **ACTIVE**" if r["is_active"] else "⚪ inactive"
-        lifecycle_tag = lifecycle_badge(
-            r.get("expires_at"), r.get("is_permanent", False)
-        )
+        lifecycle_tag = lifecycle_badge(r.get("expires_at"), r.get("is_permanent", False))
 
         with st.expander(
             f"{active_tag}{lifecycle_tag} — {r['name']}  |  `{r['original_filename']}`"
@@ -69,12 +131,11 @@ def page_resumes() -> None:
                         st.rerun()
                     else:
                         show_error(detail(resp, "Could not activate resume."))
+            analysis_key = f"show_analysis_{r['id']}"
             if col2.button("🔍 View Analysis", key=f"analysis_{r['id']}"):
-                analysis_resp = api("get", f"/resumes/{r['id']}/analysis")
-                if analysis_resp.status_code == 200:
-                    st.json(analysis_resp.json())
-                else:
-                    show_error("No analysis available.")
+                # Toggle a flag and render below from state, so the analysis
+                # stays open across reruns instead of vanishing on the next click.
+                st.session_state[analysis_key] = not st.session_state.get(analysis_key, False)
             if col3.button("🗑️ Delete", key=f"delete_{r['id']}"):
                 resp = api("delete", f"/resumes/{r['id']}")
                 if resp.status_code == 204:
@@ -82,3 +143,10 @@ def page_resumes() -> None:
                     st.rerun()
                 else:
                     show_error(detail(resp, "Could not delete resume."))
+
+            if st.session_state.get(analysis_key):
+                analysis_resp = api("get", f"/resumes/{r['id']}/analysis")
+                if analysis_resp.status_code == 200:
+                    _render_analysis(safe_json(analysis_resp, {}))
+                else:
+                    show_error(detail(analysis_resp, "No analysis available."))

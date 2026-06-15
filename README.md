@@ -4,6 +4,10 @@ An AI-powered career acceleration platform built with a production-grade enginee
 Upload your resume, score it against job descriptions, generate honest cover letters, and track your applications — all in one place.
 
 [![Pipeline](https://github.com/deeason7/ai-career-hub/actions/workflows/pipeline.yml/badge.svg)](https://github.com/deeason7/ai-career-hub/actions/workflows/pipeline.yml)
+[![Python](https://img.shields.io/badge/python-3.11-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3110/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 ---
 
@@ -26,13 +30,15 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Multi-Resume Management** | Upload, store, and switch between up to 10 resumes per user (PDF, DOCX, TXT — 5 MB max) |
 | **Semantic ATS Scorer** | `sentence-transformers` dense vector similarity + keyword matching + structure heuristics — catches synonym matches that keyword-only ATS systems miss |
 | **AI Cover Letter Generator** | Structured LLM generation grounded strictly in resume facts, then honesty-checked by a second model |
-| **Cover Letter Refinement** | Apply targeted edit commands to any generated letter; full revision history with one-click rollback |
+| **Cover Letter Refinement** | Apply targeted edit commands to any generated letter; branch a new draft from any point in history; full revision tree with one-click rollback |
 | **AI-as-a-Judge QA** | Second LLM pass scores every cover letter for honesty (1–10) and tone (1–10) — auto-regenerates up to 2× if honesty score falls below threshold |
 | **Structured LLM Output** | All LLM responses return Pydantic v2-validated JSON via `instructor` — no regex parsing, deterministic contracts |
 | **Workflow Orchestration** | Event-driven cover letter pipeline via n8n Cloud webhooks — graceful fallback to local `BackgroundTasks` |
 | **PDF Export** | Download generated cover letters as professionally formatted PDFs |
 | **Job URL Import** | Auto-fill job description from any LinkedIn, Greenhouse, Lever, or Workday URL |
 | **Skill Gap Analysis** | Identify missing skills with AI-powered upskilling recommendations |
+| **Live Progress, No Lost Work** | Job-match and the agentic pipeline run as async background tasks (202 + poll); a live step checklist streams progress and survives navigating away mid-run |
+| **Rate-Limit Resilience** | LLM calls back off and retry on provider 429s with an honest "model busy" status; the job-match fan-out serialises to fit the token-per-minute budget |
 | **Interview Question Generator** | 10 tailored questions generated from your resume and the job description |
 | **Application Tracker** | Full pipeline tracking with deadline management and urgency indicators |
 | **Auto-Tracker** | Cover letter generation automatically creates a wishlist tracker entry — no manual logging required |
@@ -167,8 +173,10 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | POST | `/api/v1/ai/skill-gap` | JWT | 20/min | Skill gap analysis |
 | POST | `/api/v1/ai/interview-questions` | JWT | 20/min | Generate interview questions |
 | POST | `/api/v1/ai/fetch-job` | JWT | 10/min | Fetch JD from URL |
-| POST | `/api/v1/analysis/job-match` | JWT | 20/min | ATS + skill gap + interview in one call |
-| POST | `/api/v1/agent/analyze` | JWT | — | Full agentic pipeline from a job URL (scrape → research → score → letter → questions) |
+| POST | `/api/v1/analysis/job-match` | JWT | 20/min | ATS + skill gap + interview in one call (async 202) |
+| GET | `/api/v1/analysis/task/{task_id}` | JWT | — | Poll job-match status with live per-step progress |
+| POST | `/api/v1/agent/analyze` | JWT | 5/min | Full agentic pipeline from a job URL — async 202 (scrape → research → score → letter → questions) |
+| GET | `/api/v1/agent/task/{task_id}` | JWT | — | Poll the agent run with a live step checklist |
 | GET | `/api/v1/rag/stats` | JWT | — | Per-user embedding collection stats |
 | POST | `/api/v1/rag/search` | JWT | — | Semantic search over indexed documents |
 | POST | `/api/v1/rag/reindex` | JWT | — | Rebuild embeddings (async 202) |
@@ -202,6 +210,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | `OLLAMA_BASE_URL` | — | `http://ollama:11434` | Ollama endpoint (local dev) |
 | `OLLAMA_LLM_MODEL` | — | `llama3.2:3b` | Ollama LLM model |
 | `OLLAMA_EMBED_MODEL` | — | `nomic-embed-text` | Ollama embedding model |
+| `CHROMA_PERSIST_DIR` | — | `/app/chroma_data` | ChromaDB persistent vector-store path (RAG) |
 | `N8N_WEBHOOK_URL` | — | `""` | n8n Cloud trigger URL |
 | `N8N_WEBHOOK_SECRET` | — | `""` | Shared secret for n8n callbacks |
 | `ALLOWED_ORIGINS` | — | `http://localhost:8501` | Comma-separated CORS origins |
@@ -334,6 +343,15 @@ Off-Hours:
 
 ## Release History
 
+> The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
+
+### v4.2.0 — Async Analysis, Resilience & Refine Branching
+- **Async job-match & agentic analysis** — both now return `202` and run as background tasks with a Redis-backed task store; the UI polls and renders a live step checklist that survives navigating away mid-run
+- **LLM rate-limit resilience** — capped exponential backoff on provider `429`s with an honest "model busy" status; the job-match fan-out is serialised to fit the token-per-minute budget
+- **ATS keyword quality** — posting boilerplate (EEO, benefits) is stripped before extraction, so matched and missing keywords read like real skills
+- **Refine from any revision** — branch a new draft off any past version, with lineage tracked through the revision tree (migration `011`)
+- **Session restore** — a bounded wait-for-hydration gate keeps you logged in across reload and duplicate tabs
+
 ### v4.1.0 — Agentic Pipeline, RAG & Release Hardening
 - **Agentic analysis pipeline** (LangGraph): one job URL drives scrape → company research → ATS score → skill-gap → cover letter → interview questions in a single run (`POST /api/v1/agent/analyze`)
 - **Retrieval-augmented generation** (ChromaDB): persistent per-user vector collections; resumes auto-embed on upload, cover letters and job descriptions are indexed after generation, with a FAISS fallback (`/api/v1/rag/stats` · `/search` · `/reindex`)
@@ -392,6 +410,20 @@ Off-Hours:
 - Secrets managed via AWS SSM Parameter Store
 - Wake-on-Visit infrastructure (Route 53 failover → CloudFront → Lambda)
 - Hardened IAM — least-privilege policies, MFA, IMDSv2
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [Architecture](./docs/ARCHITECTURE.md) | System design, request lifecycle, the async task model, the agentic pipeline, and the data model — with diagrams |
+| [API Reference](./docs/API.md) | Every endpoint: auth, rate limits, request/response shapes, and status codes |
+| [Configuration](./docs/CONFIGURATION.md) | Full environment-variable reference |
+| [Architecture Decisions](./docs/adr/) | The reasoning behind the load-bearing design choices (ADRs) |
+| [Changelog](./CHANGELOG.md) | Complete release history |
+| [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) | Workflow, conventions, and the security policy |
+| [Deployment](./DEPLOYMENT.md) · [Infrastructure](./INFRASTRUCTURE.md) | AWS topology, CI/CD, and the cost model |
 
 ---
 

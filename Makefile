@@ -16,9 +16,10 @@ build:
 test:
 	docker compose run --rm test
 
-# Lint only (no tests)
+# Lint only (no tests) — backend via the test image, frontend via its own image
 lint:
 	docker compose run --rm --no-deps test sh -c "ruff check app/ tests/ && ruff format --check app/ tests/"
+	docker compose run --rm --no-deps frontend sh -c "pip install -q ruff==0.15.13 && ruff check . && ruff format --check ."
 
 # Tail API logs
 logs:

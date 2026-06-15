@@ -84,8 +84,8 @@ Tests run against a real PostgreSQL container (defined in `docker-compose.yml`).
 
 ### Run linter
 ```bash
-ruff check backend/
-ruff format --check backend/
+ruff check backend/ frontend/
+ruff format --check backend/ frontend/
 ```
 
 All commits must pass ruff lint and format checks. The pre-commit hook enforces this automatically:
@@ -102,8 +102,8 @@ Before opening a PR to `develop`:
 
 - [ ] Branch name follows `feature/*`, `fix/*`, `chore/*`, or `security/*` convention
 - [ ] All commits follow conventional commit format
-- [ ] `ruff check backend/` passes with zero errors
-- [ ] `ruff format --check backend/` passes
+- [ ] `ruff check backend/ frontend/` passes with zero errors
+- [ ] `ruff format --check backend/ frontend/` passes
 - [ ] New endpoints have corresponding tests in `backend/tests/`
 - [ ] No secrets, credentials, or internal identifiers committed
 - [ ] No padding comments. Only write comments that explain non-obvious logic.
@@ -113,7 +113,7 @@ Before opening a PR to `develop`:
 
 ## Code Style
 
-- **Python:** Ruff-enforced (see `backend/ruff.toml`). PEP 8 with line length 100.
+- **Python:** Ruff-enforced (see `backend/ruff.toml` and `frontend/ruff.toml`). PEP 8 with line length 100.
 - **Imports:** Sorted by ruff. Lazy imports inside functions where noted (torch/LangChain).
 - **Type hints:** Required on all public function signatures.
 - **Docstrings:** One-line summary only. No verbose parameter lists.

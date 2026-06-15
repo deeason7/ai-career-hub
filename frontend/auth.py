@@ -5,6 +5,7 @@ import streamlit as st
 
 from api_client import API_URL, api, detail, safe_json
 from components import show_error, show_success
+from session import cookie_set
 
 
 def page_auth(cookie_manager) -> None:
@@ -43,19 +44,8 @@ def page_auth(cookie_manager) -> None:
                             return
                         # Keep the refresh token in server-side session only
                         # (never a browser cookie) so api() can refresh on 401.
-                        st.session_state["refresh_token"] = resp.cookies.get(
-                            "refresh_token"
-                        )
-                        try:
-                            cookie_manager.set(
-                                "auth_token",
-                                st.session_state.token,
-                                max_age=3600,
-                            )
-                        except Exception:
-                            # Cookie bridge may not have hydrated yet; the
-                            # session still works via session_state this run.
-                            pass
+                        st.session_state["refresh_token"] = resp.cookies.get("refresh_token")
+                        cookie_set(cookie_manager, "auth_token", st.session_state.token)
                         me = safe_json(api("get", "/auth/me"), {})
                         st.session_state.user = me
                         show_success("Logged in!")
@@ -66,9 +56,7 @@ def page_auth(cookie_manager) -> None:
                             "Please wait **~30 seconds** and try again."
                         )
                     elif resp.status_code == 429:
-                        show_error(
-                            "Too many login attempts. Please wait 1 minute and try again."
-                        )
+                        show_error("Too many login attempts. Please wait 1 minute and try again.")
                     else:
                         show_error(detail(resp, "Login failed."))
 

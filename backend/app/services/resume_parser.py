@@ -29,6 +29,9 @@ class ParsedResume(BaseModel):
     education: list[dict] = Field(default_factory=list)  # [{degree, institution, year, gpa}]
     certifications: list[str] = Field(default_factory=list)
     projects: list[dict] = Field(default_factory=list)  # [{name, description, tech_stack}]
+    # Not extracted from the resume: set when the parse itself errored, so the
+    # API/UI can tell "parsing failed" apart from a genuinely empty result.
+    parse_failed: bool = False
 
 
 _PARSE_PROMPT_TEMPLATE = """You are an expert resume parser. Extract structured information from the resume text below.
@@ -102,5 +105,5 @@ def parse_resume(raw_text: str) -> ParsedResume:
         data = json.loads(raw_output)
         return ParsedResume(**data)
     except Exception as e:
-        logger.warning("Resume parsing failed, returning empty structure: %s", e)
-        return ParsedResume()
+        logger.warning("Resume parsing failed, marking the resume unparsed: %s", e)
+        return ParsedResume(parse_failed=True)

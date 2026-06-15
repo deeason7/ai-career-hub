@@ -5,15 +5,15 @@
 
 repos:
 
-  # ── Python linting + formatting (backend only) ─────────────────────────────
+  # ── Python linting + formatting ────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.12
     hooks:
       - id: ruff            # lint + auto-fix (isort, unused imports, etc.)
         args: [--fix]
-        files: ^backend/
+        files: ^(backend|frontend)/
       - id: ruff-format     # black-compatible formatter
-        files: ^backend/
+        files: ^(backend|frontend)/
 
   # ── General file hygiene ───────────────────────────────────────────────────
   - repo: https://github.com/pre-commit/pre-commit-hooks

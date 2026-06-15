@@ -1,7 +1,9 @@
-"""Tests for the agentic workflow graph and tool wrappers."""
+"""Tests for the agentic workflow graph, tool wrappers, and analyze endpoint."""
 
 import uuid
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # --- Tool wrapper tests ---
 # All tools use lazy imports inside each function body, so we patch at the
@@ -42,33 +44,6 @@ class TestToolScrapeJob:
         assert len(result["errors"]) == 1
         assert "Timed out" in result["errors"][0]
         assert result["steps_completed"][0]["status"] == "failed"
-
-
-class TestGetResumeText:
-    """Regression: analyze endpoint must read Resume.raw_text, not extracted_text."""
-
-    def test_returns_resume_raw_text(self):
-        from app.api.v1.endpoints import agent as agent_ep
-        from app.models.resume import Resume
-
-        rid, uid = uuid.uuid4(), uuid.uuid4()
-        resume = Resume(
-            id=rid,
-            user_id=uid,
-            name="SWE Resume",
-            original_filename="resume.pdf",
-            raw_text="Senior Python engineer with FastAPI and AWS experience.",
-            is_active=True,
-        )
-        session = MagicMock()
-        session.exec.return_value.first.return_value = resume
-        session.__enter__.return_value = session
-        session.__exit__.return_value = False
-
-        with patch.object(agent_ep, "Session", return_value=session):
-            text = agent_ep._get_resume_text(rid, uid)
-
-        assert "Senior Python engineer" in text
 
 
 class TestToolExtractMetadata:
@@ -334,3 +309,139 @@ class TestAgentGraph:
         assert len(result["steps"]) == 1
         assert result["steps"][0]["name"] == "scrape_job"
         assert len(result["errors"]) == 1
+
+    def test_on_step_sees_progress_and_errors_do_not_break_the_run(self):
+        from app.services.agent_graph import run_agent
+
+        mock_scrape = {
+            "job_description": None,
+            "errors": ["scrape_job: timed out"],
+            "steps_completed": [
+                {"name": "scrape_job", "status": "failed", "duration_ms": 1, "detail": "x"}
+            ],
+        }
+
+        seen: list[dict] = []
+
+        def spy(state: dict) -> None:
+            seen.append(state)
+            raise ValueError("callback bug")  # progress is best-effort
+
+        with (
+            patch("app.services.agent_graph.tool_scrape_job", return_value=mock_scrape),
+            patch("app.services.agent_graph._compiled_graph", None),
+        ):
+            result = run_agent(
+                job_url="https://example.com/bad",
+                resume_text="Some resume",
+                user_id="test-user-id",
+                on_step=spy,
+            )
+
+        # The run finished despite the broken callback, with the same outcome
+        # invoke() would have produced.
+        assert result["status"] == "failed"
+        assert seen
+        assert seen[-1]["steps_completed"][0]["name"] == "scrape_job"
+
+
+# --- Analyze endpoint tests (run_agent itself is mocked) ---
+
+
+_CANNED_RESULT = {
+    "status": "completed",
+    "steps": [{"name": "scrape_job", "status": "success", "duration_ms": 1, "detail": "ok"}],
+    "summary": {"company": "TestCo"},
+    "full_results": {},
+    "errors": [],
+    "total_duration_ms": 42,
+}
+
+# _run_agent_bg imports run_agent lazily at call time, so patching the source
+# module works for both the background and the inline path.
+_RUN_AGENT_PATCH = "app.services.agent_graph.run_agent"
+
+
+class TestAnalyzeEndpoint:
+    @pytest.mark.asyncio
+    async def test_requires_auth(self, client):
+        resp = await client.post(
+            "/api/v1/agent/analyze",
+            json={"job_url": "https://example.com/job/1", "resume_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_404_for_unknown_resume(self, client, auth_headers):
+        resp = await client.post(
+            "/api/v1/agent/analyze",
+            json={"job_url": "https://example.com/job/1", "resume_id": str(uuid.uuid4())},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_returns_202_then_success(
+        self, client, auth_headers, active_resume, fake_task_store
+    ):
+        with patch(_RUN_AGENT_PATCH, return_value=_CANNED_RESULT) as mock_run:
+            resp = await client.post(
+                "/api/v1/agent/analyze",
+                json={"job_url": "https://example.com/job/1", "resume_id": active_resume},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["status"] == "PENDING"
+
+        # Regression: the pipeline must receive the resume's raw_text.
+        assert "Experienced Python engineer" in mock_run.call_args.kwargs["resume_text"]
+
+        poll = await client.get(f"/api/v1/agent/task/{body['task_id']}", headers=auth_headers)
+        assert poll.status_code == 200
+        task = poll.json()
+        assert task["status"] == "SUCCESS"
+        assert task["result"]["status"] == "completed"
+        # The full checklist is pre-registered; the mocked run never flips steps.
+        assert task["steps"]["scrape_job"] == "pending"
+        assert len(task["steps"]) == 7
+
+    @pytest.mark.asyncio
+    async def test_failure_reported_via_poll(
+        self, client, auth_headers, active_resume, fake_task_store
+    ):
+        with patch(_RUN_AGENT_PATCH, side_effect=RuntimeError("boom")):
+            resp = await client.post(
+                "/api/v1/agent/analyze",
+                json={"job_url": "https://example.com/job/1", "resume_id": active_resume},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 202
+        poll = await client.get(
+            f"/api/v1/agent/task/{resp.json()['task_id']}", headers=auth_headers
+        )
+        task = poll.json()
+        assert task["status"] == "FAILURE"
+        assert task["error"]
+        assert task["result"] is None
+
+    @pytest.mark.asyncio
+    async def test_inline_when_store_unavailable(
+        self, client, auth_headers, active_resume, no_task_store
+    ):
+        with patch(_RUN_AGENT_PATCH, return_value=_CANNED_RESULT):
+            resp = await client.post(
+                "/api/v1/agent/analyze",
+                json={"job_url": "https://example.com/job/1", "resume_id": active_resume},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_poll_unknown_task_404(self, client, auth_headers, fake_task_store):
+        resp = await client.get(f"/api/v1/agent/task/{uuid.uuid4()}", headers=auth_headers)
+        assert resp.status_code == 404

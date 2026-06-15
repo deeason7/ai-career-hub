@@ -16,6 +16,7 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.db import async_engine, create_db_and_tables
 from app.core.limiter import limiter
+from app.services.llm_client import check_ollama_model
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,9 @@ async def lifespan(app: FastAPI):
         await create_db_and_tables()
     else:
         asyncio.create_task(_run_migrations_when_db_ready())
+    # Off the startup path: a broken Ollama fallback should be one boot-time
+    # warning, not a surprise the first time a generation falls back to it.
+    asyncio.create_task(asyncio.to_thread(check_ollama_model))
     yield
 
 
