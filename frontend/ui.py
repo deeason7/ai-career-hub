@@ -33,6 +33,8 @@ __all__ = [
     "metric_tile",
     "nav_to",
     "page_header",
+    "poll_outcome",
+    "poll_task",
     "render_qa_scores",
     "score_gauge",
     "score_tone",
@@ -205,6 +207,38 @@ def _classify(code: int | None) -> str:
     if code is None:
         return "network"
     return "server"
+
+
+def poll_task(path: str) -> tuple[int | None, dict]:
+    """One tick of an async-task poll: (http_status, payload); (None, {}) on a network blip."""
+    from api_client import api, safe_json  # lazy: keep this module import-light
+
+    try:
+        resp = api("get", path)
+    except requests.RequestException:
+        return None, {}
+    return resp.status_code, safe_json(resp, {}) or {}
+
+
+def poll_outcome(
+    http_status: int | None, task_status: str | None, elapsed: float, timeout_s: float
+) -> str:
+    """Classify one poll tick of a background task.
+
+    Transient trouble (a network blip, a 5xx) reads as "running" so a hiccup
+    doesn't kill the poll; the elapsed cap is the backstop.
+    """
+    if http_status == 404:
+        return "lost"  # unknown or expired task id
+    if http_status in (401, 403):
+        return "auth"
+    if task_status == "SUCCESS":
+        return "done"
+    if task_status == "FAILURE":
+        return "failed"
+    if elapsed > timeout_s:
+        return "timeout"
+    return "running"
 
 
 def loading(label: str = "Working…"):

@@ -1,5 +1,7 @@
 """Job match analysis page — ATS score, skill gap, interview prep."""
 
+import time
+
 import requests
 import streamlit as st
 
@@ -8,16 +10,70 @@ from ui import (
     chip_row,
     error_state,
     job_description_input,
+    loading,
     metric_tile,
     nav_to,
     page_header,
+    poll_outcome,
+    poll_task,
     score_tone,
     show_error,
 )
 
-# ATS + skill gap + interview questions ride one request through several LLM
-# calls; the 30s client default read-timed-out in prod when the model was cold.
-_ANALYZE_TIMEOUT_S = 90
+# The submit normally returns 202 in milliseconds; the generous timeout only
+# matters for the degraded inline mode (no task store), where several LLM
+# calls ride the one request.
+_SUBMIT_TIMEOUT_S = 90
+# Poll cap — three LLM calls usually land well under a minute; past this the
+# task is treated as stuck even if it might still finish server-side.
+_TASK_TIMEOUT_S = 180
+
+# Step keys come from the backend task; render them in pipeline order.
+_STEP_LABELS = {"ats": "ATS score", "skill_gap": "Skill gap", "interview": "Interview questions"}
+_STEP_ICONS = {"pending": "⬜", "running": "⏳", "done": "✅", "failed": "❌"}
+
+_OUTCOME_ERRORS = {
+    "failed": "Analysis failed on the server. Try again in a minute.",
+    "lost": "This analysis is no longer tracked (it may have expired). Run it again.",
+    "auth": "Your session expired during the analysis. Log in again, then retry.",
+    "timeout": "Still running after 3 minutes — the model may be overloaded. Try again shortly.",
+}
+
+
+def _steps_line(steps: dict) -> str:
+    """One caption line of step states, in pipeline order, e.g. '✅ ATS score · ⏳ Skill gap'."""
+    return " · ".join(
+        f"{_STEP_ICONS.get(steps.get(name, 'pending'), '⬜')} {label}"
+        for name, label in _STEP_LABELS.items()
+    )
+
+
+def _analysis_status() -> None:
+    """One poll tick — runs inside a fragment so only this block re-renders."""
+    task = st.session_state.get("jm_task")
+    if not task:
+        return
+    elapsed = time.time() - task["started"]
+    http_status, payload = poll_task(f"/analysis/task/{task['task_id']}")
+    outcome = poll_outcome(http_status, payload.get("status"), elapsed, _TASK_TIMEOUT_S)
+
+    if outcome == "running":
+        st.status(f"🔎 Analyzing your match… {int(elapsed)}s", state="running")
+        steps = payload.get("steps") or {}
+        if steps:
+            st.caption(_steps_line(steps))
+        st.caption("Runs in the background — switching pages won't cancel it.")
+        return
+
+    # Terminal state: stop polling and hand control back to a full-page run.
+    st.session_state.pop("jm_task", None)
+    if outcome == "done":
+        st.session_state["job_match_result"] = payload.get("result") or {}
+    elif outcome == "failed":
+        st.session_state["jm_error"] = payload.get("error") or _OUTCOME_ERRORS["failed"]
+    else:
+        st.session_state["jm_error"] = _OUTCOME_ERRORS[outcome]
+    st.rerun(scope="app")
 
 
 def page_job_match() -> None:
@@ -42,23 +98,22 @@ def page_job_match() -> None:
 
     jd = job_description_input("job_match", height=260)
 
-    if st.button("🔍 Analyze", type="primary"):
+    in_flight = bool(st.session_state.get("jm_task"))
+    if st.button("🔍 Analyze", type="primary", disabled=in_flight):
         if not jd.strip():
             show_error("Please paste a job description.")
             return
-        with st.spinner(
-            "Analyzing — ATS score, skill gap, interview prep. Usually under a minute…"
-        ):
+        with loading("Submitting analysis…"):
             try:
                 resp = api(
                     "post",
                     "/analysis/job-match",
                     json={"resume_id": selected_id, "job_description": jd},
-                    timeout=_ANALYZE_TIMEOUT_S,
+                    timeout=_SUBMIT_TIMEOUT_S,
                 )
             except requests.exceptions.Timeout:
                 show_error(
-                    f"Analysis timed out after {_ANALYZE_TIMEOUT_S}s — the model may be "
+                    f"The submit timed out after {_SUBMIT_TIMEOUT_S}s — the server may be "
                     "cold. Try again in a minute."
                 )
                 return
@@ -66,11 +121,26 @@ def page_job_match() -> None:
                 error_state("network")
                 return
 
-        if resp.status_code != 200:
+        if resp.status_code == 202:
+            task_id = safe_json(resp, {}).get("task_id")
+            st.session_state["jm_task"] = {"task_id": task_id, "started": time.time()}
+            st.session_state.pop("job_match_result", None)
+            st.rerun()
+        elif resp.status_code == 200:
+            # Degraded inline mode — the backend computed everything in this request.
+            st.session_state["job_match_result"] = safe_json(resp, {})
+        else:
             error_state(resp)
             return
 
-        st.session_state["job_match_result"] = safe_json(resp, {})
+    if in_flight:
+        # Poll inside a fragment: only the status block re-runs every 2s, so the
+        # page stays responsive and navigation never cancels the analysis.
+        st.fragment(_analysis_status, run_every="2s")()
+
+    jm_error = st.session_state.pop("jm_error", None)
+    if jm_error:
+        show_error(jm_error)
 
     # Rendered from state, outside the click branch, so the analysis survives
     # reruns (tweaking the JD or switching resumes no longer wipes it).
