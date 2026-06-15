@@ -5,6 +5,8 @@ import uuid
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -28,11 +30,35 @@ async def _override_session():
 app.dependency_overrides[get_async_session] = _override_session
 
 
+async def _ensure_test_database() -> None:
+    """Create the test database if it's missing (local first run); no-op when it exists (CI)."""
+    probe = create_async_engine(settings.SQLALCHEMY_ASYNC_DATABASE_URI)
+    try:
+        async with probe.connect():
+            return
+    except OperationalError:
+        pass  # database doesn't exist yet — create it below
+    finally:
+        await probe.dispose()
+
+    admin_url = (
+        f"postgresql+psycopg_async://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+        f"@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/postgres"
+    )
+    admin = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
+    try:
+        async with admin.connect() as conn:
+            await conn.execute(text(f'CREATE DATABASE "{settings.POSTGRES_DB}"'))
+    finally:
+        await admin.dispose()
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_db():
     """Start each run from a clean schema and tear it down afterwards."""
     import app.models  # noqa: F401 — register every table before create_all
 
+    await _ensure_test_database()
     async with TEST_ENGINE.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
         await conn.run_sync(SQLModel.metadata.create_all)
