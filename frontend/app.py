@@ -3,6 +3,8 @@ AI Career Hub — Streamlit Frontend (orchestrator)
 Thin routing layer — page logic lives in views/; navigation via st.navigation.
 """
 
+import time
+
 import requests
 import streamlit as st
 from streamlit_cookies_controller import CookieController
@@ -129,12 +131,16 @@ def _logout():
 
 
 # ─── Session Restore from Cookie ────────────────────────────────────────────
-# With the bridge now allowed to hydrate (see the CSS above), a stored auth
-# cookie is read back on reload so the session survives. cookie_get guards the
-# not-yet-hydrated first render.
+# The cookie bridge hydrates a beat AFTER the first script run, so a reload or
+# a duplicated tab must not conclude "logged out" from one empty read. Retry a
+# few short runs before showing login; any hydrated token restores immediately.
+# Bounded, so a genuinely signed-out visitor still sees login within ~1.5s.
+_RESTORE_TRIES = 5
+
 if not st.session_state.token:
     _cookie_token = cookie_get(cookie_manager, "auth_token")
     if _cookie_token:
+        st.session_state["_restore_tries"] = _RESTORE_TRIES  # settled
         st.session_state.token = _cookie_token
         _me = safe_json(api("get", "/auth/me"), {})
         if _me and _me.get("email"):
@@ -142,6 +148,13 @@ if not st.session_state.token:
         else:
             cookie_remove(cookie_manager, "auth_token")
             st.session_state.token = None
+    else:
+        _tries = st.session_state.get("_restore_tries", 0)
+        if _tries < _RESTORE_TRIES:
+            st.session_state["_restore_tries"] = _tries + 1
+            st.caption("⏳ Restoring session…")
+            time.sleep(0.3)
+            st.rerun()
 
 # ─── Page Routing ────────────────────────────────────────────────────────────
 if not st.session_state.token:
