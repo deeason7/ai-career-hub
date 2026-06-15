@@ -497,6 +497,24 @@ async def refine_cover_letter_endpoint(
     if not resume:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found.")
 
+    # Branching: refine from a chosen revision's text instead of the active letter.
+    base_text = cl.generated_text
+    parent_id: uuid.UUID | None = None
+    if payload.base_version is not None:
+        base_result = await session.exec(
+            select(CoverLetterRevision).where(
+                CoverLetterRevision.cover_letter_id == cover_letter_id,
+                CoverLetterRevision.version_number == payload.base_version,
+            )
+        )
+        base_rev = base_result.first()
+        if not base_rev:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Base revision not found."
+            )
+        base_text = base_rev.generated_text
+        parent_id = base_rev.id
+
     # Lock the parent row so concurrent refines serialize — otherwise two requests can
     # read the same max version and assign a duplicate version_number.
     from sqlalchemy import func  # noqa: PLC0415
@@ -515,7 +533,8 @@ async def refine_cover_letter_endpoint(
     revision = CoverLetterRevision(
         cover_letter_id=cover_letter_id,
         version_number=next_version,
-        generated_text=cl.generated_text,
+        parent_revision_id=parent_id,
+        generated_text=base_text,
         user_command=sanitize_text(payload.command),
     )
     session.add(revision)
@@ -526,7 +545,7 @@ async def refine_cover_letter_endpoint(
         _run_refine_bg,
         str(revision.id),
         str(cover_letter_id),
-        cl.generated_text,
+        base_text,
         resume.raw_text,
         cl.job_description,
         sanitize_text(payload.command),

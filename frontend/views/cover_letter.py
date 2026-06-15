@@ -144,16 +144,28 @@ _REFINE_PRESETS = {
 _REFINE_TIMEOUT_S = 150
 
 
-def _submit_refine(cl_id: str, command: str) -> None:
+def _submit_refine(cl_id: str, command: str, base_version: int | None = None) -> None:
     """Queue a refinement, switch on history auto-refresh, and rerun."""
+    payload: dict = {"command": command}
+    if base_version is not None:
+        payload["base_version"] = base_version
     with loading_spinner("Queuing refinement…"):
-        resp = api("post", f"/cover-letters/{cl_id}/refine", json={"command": command})
+        resp = api("post", f"/cover-letters/{cl_id}/refine", json=payload)
     if resp.status_code == 202:
         st.session_state["refine_polling"] = True
         toast_success("Refinement queued — the version history updates automatically.")
         st.rerun()
     else:
         show_error(detail(resp, "Refinement failed."))
+
+
+def _lineage_tag(rev: dict, id_to_version: dict) -> str:
+    """Compact ancestry label: ' ← v2' for a branch, '' when refined from the active letter."""
+    parent_id = rev.get("parent_revision_id")
+    if not parent_id:
+        return ""
+    parent_version = id_to_version.get(parent_id)
+    return f" ← v{parent_version}" if parent_version else ""
 
 
 def _is_processing(rev: dict) -> bool:
@@ -181,21 +193,23 @@ def _render_revision_history(cl_id: str) -> None:
         st.rerun(scope="app")
 
     count = len(revisions)
+    id_to_version = {rev["id"]: rev["version_number"] for rev in revisions}
     st.subheader(f"📋 Version History ({count} revision{'s' if count != 1 else ''})")
     for rev in revisions:
         v = rev["version_number"]
+        lineage = _lineage_tag(rev, id_to_version)
         cmd = rev["user_command"]
         cmd_label = cmd[:60] + ("…" if len(cmd) > 60 else "")
 
         if _is_processing(rev):
-            with st.expander(f'v{v} — "{cmd_label}"  |  ⏳ refining…', expanded=True):
+            with st.expander(f'v{v}{lineage} — "{cmd_label}"  |  ⏳ refining…', expanded=True):
                 st.info(
                     "✨ Applying your change and running the honesty check — "
                     "this updates on its own."
                 )
             continue
 
-        with st.expander(f'v{v} — "{cmd_label}"  |  {rev["created_at"][:10]}'):
+        with st.expander(f'v{v}{lineage} — "{cmd_label}"  |  {rev["created_at"][:10]}'):
             if rev.get("qa_score_honesty") is None:
                 st.caption("⚠️ QA score unavailable for this revision.")
             else:
@@ -210,7 +224,7 @@ def _render_revision_history(cl_id: str) -> None:
                 height=300,
                 key=f"rev_text_{rev['id']}",
             )
-            rc1, rc2 = st.columns(2)
+            rc1, rc2, rc3 = st.columns(3)
             rc1.download_button(
                 "⬇ TXT",
                 rev["generated_text"],
@@ -219,6 +233,13 @@ def _render_revision_history(cl_id: str) -> None:
                 use_container_width=True,
             )
             if rc2.button(
+                "🔀 Refine from this version",
+                key=f"branch_rev_{rev['id']}",
+                use_container_width=True,
+            ):
+                st.session_state["refine_base"] = {"cl_id": cl_id, "version": v}
+                st.rerun(scope="app")
+            if rc3.button(
                 "⭐ Activate this version",
                 key=f"activate_rev_{rev['id']}",
                 use_container_width=True,
@@ -302,12 +323,23 @@ def page_cover_letter() -> None:
             "what you ask and keeps every version in the history below."
         )
 
+        # A base picked via "Refine from this version" stays active (and visible)
+        # until cleared — every tweak branches off that revision instead.
+        base = st.session_state.get("refine_base")
+        base_version = base["version"] if base and base.get("cl_id") == active_cl_id else None
+        if base_version is not None:
+            bi1, bi2 = st.columns([4, 1])
+            bi1.info(f"🔀 Refining from **v{base_version}** — tweaks branch off that version.")
+            if bi2.button("↩ Active letter", key="clear_refine_base", use_container_width=True):
+                st.session_state.pop("refine_base", None)
+                st.rerun()
+
         st.markdown("**Quick tweaks**")
         preset_items = list(_REFINE_PRESETS.items())
         preset_cols = st.columns(len(preset_items))
         for i, (label, preset_command) in enumerate(preset_items):
             if preset_cols[i].button(label, key=f"preset_{label}", use_container_width=True):
-                _submit_refine(active_cl_id, preset_command)
+                _submit_refine(active_cl_id, preset_command, base_version)
 
         command = st.text_input(
             "Or describe your own change",
@@ -318,7 +350,7 @@ def page_cover_letter() -> None:
             if not command.strip():
                 show_error("Enter an instruction or pick a quick tweak above.")
             else:
-                _submit_refine(active_cl_id, command.strip())
+                _submit_refine(active_cl_id, command.strip(), base_version)
 
         # Auto-refresh only the version history while a refinement is in flight.
         run_every = "3s" if st.session_state.get("refine_polling") else None
