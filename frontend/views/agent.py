@@ -252,7 +252,8 @@ def _render_results(result: dict) -> None:
                 for rec in recs:
                     if isinstance(rec, dict):
                         st.markdown(
-                            f"- **{rec.get('skill', '')}**: {rec.get('resource', '')} ({rec.get('timeline', '')})"
+                            f"- **{rec.get('skill', '')}**: {rec.get('resource', '')} "
+                            f"on {rec.get('platform', '')} ({rec.get('timeline', '')})"
                         )
                     else:
                         st.markdown(f"- {rec}")
