@@ -70,6 +70,9 @@ services:
         condition: service_healthy
     volumes:
       - ./backend/app:/app/app
+      # Mount migrations too so newly added revisions are visible to
+      # `docker compose run api alembic …` without rebuilding the image.
+      - ./backend/migrations:/app/migrations
       - chroma_data:/app/chroma_data
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -116,7 +119,9 @@ services:
       POSTGRES_SERVER: db
       POSTGRES_USER: careerhub_admin
       POSTGRES_PASSWORD: 4oJ7TDoGIXsEgC7Pw748gXQT75UU3JBT
-      POSTGRES_DB: careerhub
+      # Dedicated test database — stops `make test` from wiping the dev `careerhub` DB.
+      # conftest creates it automatically on first run (TEST-SHARES-DEV-DB).
+      POSTGRES_DB: careerhub_test
       POSTGRES_PORT: "5432"
       SECRET_KEY: test-only-key-not-for-production
       TESTING: "true"
@@ -124,6 +129,10 @@ services:
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-localdevredis}
       CHROMA_PERSIST_DIR: /tmp/chroma_test
+      # Point the Ollama path at a closed port so unmocked LLM calls fail fast
+      # instead of doing real CPU inference (TEST-LIVE-OLLAMA) — keeps the suite at
+      # ~seconds and matches CI, which has no Ollama service.
+      OLLAMA_BASE_URL: http://127.0.0.1:1
     depends_on:
       db:
         condition: service_healthy
