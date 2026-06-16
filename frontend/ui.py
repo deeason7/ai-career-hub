@@ -52,11 +52,12 @@ __all__ = [
 # Semantic colors mirror the chips already used across the app, centralized so
 # every good/bad/warn surface agrees. The brand color lives in the theme
 # (.streamlit/config.toml); these are only for the few inline-HTML bits
-# (chips, pills) that Streamlit can't style natively.
+# (chips, pills) that Streamlit can't style natively. All five clear WCAG AA
+# (>=4.5:1) against the white pill text.
 _TONE_BG = {
     "good": "#1e7e34",
     "bad": "#b02a37",
-    "warn": "#b8860b",
+    "warn": "#8a6308",  # darkened from goldenrod (#b8860b only reached 3.25:1)
     "brand": "#4f46e5",
     "neutral": "#5a6472",
 }
