@@ -7,6 +7,7 @@ import streamlit as st
 from api_client import api, detail, safe_json
 from ui import (
     chip_row,
+    empty_state,
     lifecycle_badge,
     loading_spinner,
     page_header,
@@ -111,7 +112,12 @@ def page_resumes() -> None:
 
     resumes = safe_json(resumes_resp, [])
     if not resumes:
-        st.info("No resumes yet. Upload one above!")
+        empty_state(
+            "📄",
+            "No resumes yet",
+            "Upload your first resume with the form above to unlock scoring, "
+            "cover letters, and Quick Apply.",
+        )
         return
 
     st.subheader(f"Your Resumes ({len(resumes)})")

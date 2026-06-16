@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import streamlit as st
 
 from api_client import api, detail, safe_json
-from ui import nav_to, page_header, show_error, show_success, status_icon
+from ui import empty_state, nav_to, page_header, show_error, show_success, status_icon
 
 # UI order for the add-form and filter; promotion follows _STATUS_ORDER below.
 _STATUSES = ["wishlist", "applied", "phone_screen", "interview", "offer", "rejected", "accepted"]
@@ -104,7 +104,14 @@ def page_job_tracker() -> None:
     apps = safe_json(apps_resp, []) if apps_resp.status_code == 200 else []
 
     if not apps:
-        st.info("No applications yet. Add one above!")
+        if empty_state(
+            "📊",
+            "No applications tracked yet",
+            "Run Quick Apply or generate a cover letter and the job lands here "
+            "automatically — or add one with the form above.",
+            cta="Run Quick Apply",
+        ):
+            nav_to("agent")
         return
 
     for app in apps:

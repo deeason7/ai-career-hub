@@ -13,7 +13,7 @@ from components import (
     show_error,
     toast_success,
 )
-from ui import page_header, poll_outcome, poll_task
+from ui import empty_state, nav_to, page_header, poll_outcome, poll_task
 
 # Generation is usually 20-60s (draft + AI honesty review, with up to two
 # regenerations). Past this the task is almost certainly orphaned; the backend
@@ -129,6 +129,11 @@ def _render_active_letter() -> None:
         else:
             show_error("Could not generate PDF.")
     _show_rag_context()
+
+    st.divider()
+    if st.button("📊 Track this application", use_container_width=True):
+        nav_to("tracker")
+    st.caption("Generating a letter adds the job to your tracker automatically.")
 
 
 _REFINE_PRESETS = {
@@ -262,7 +267,13 @@ def page_cover_letter() -> None:
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
-        st.warning("⚠️ Upload a resume first in **My Resumes**.")
+        if empty_state(
+            "📄",
+            "Upload a resume to get started",
+            "Cover letters are drafted from your resume — upload one to start.",
+            cta="Upload a resume",
+        ):
+            nav_to("resumes")
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}
