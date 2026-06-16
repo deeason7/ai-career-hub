@@ -27,11 +27,13 @@ __all__ = [
     "empty_state",
     "error_state",
     "job_description_input",
+    "journey",
     "lifecycle_badge",
     "loading",
     "loading_spinner",
     "metric_tile",
     "nav_to",
+    "onboarding_steps",
     "page_header",
     "poll_outcome",
     "poll_task",
@@ -169,6 +171,65 @@ def empty_state(icon: str, title: str, body: str, cta: str | None = None) -> boo
     if cta:
         return st.button(cta, type="primary")
     return False
+
+
+def onboarding_steps(has_resume: bool, has_letter: bool, has_applied: bool) -> list[dict]:
+    """The 3-step onboarding journey, built from account state (pure — drives `journey`)."""
+    return [
+        {
+            "done": has_resume,
+            "icon": "📄",
+            "label": "Upload a resume",
+            "cta": "Upload your first resume",
+            "nav": "resumes",
+        },
+        {
+            "done": has_letter,
+            "icon": "✨",
+            "label": "Draft an application",
+            "cta": "Run Quick Apply",
+            "nav": "agent",
+        },
+        {
+            "done": has_applied,
+            "icon": "📊",
+            "label": "Apply & track",
+            "cta": "Open your tracker",
+            "nav": "tracker",
+        },
+    ]
+
+
+def _active_step(steps: list[dict]) -> int | None:
+    """Index of the first not-done step, or None when every step is done."""
+    return next((i for i, s in enumerate(steps) if not s.get("done")), None)
+
+
+def journey(steps: list[dict]) -> str | None:
+    """Render the onboarding stepper; return the active step's nav key if its CTA is clicked.
+
+    Done steps show a check, the first not-done step is highlighted with its CTA,
+    later steps are muted. The caller does the `nav_to`, keeping this a pure render
+    (mirrors `empty_state`). Pairs with `onboarding_steps`.
+    """
+    active = _active_step(steps)
+    clicked: str | None = None
+    for i, (col, step) in enumerate(zip(st.columns(len(steps)), steps, strict=True)):
+        with col:
+            if step.get("done"):
+                st.markdown("### ✅")
+                st.caption(step["label"])
+            elif i == active:
+                st.markdown(f"### {step['icon']}")
+                st.markdown(f"**{step['label']}**")
+                if step.get("cta") and st.button(
+                    step["cta"], type="primary", key=f"journey_{step['nav']}"
+                ):
+                    clicked = step["nav"]
+            else:
+                st.markdown(f"### {step['icon']}")
+                st.caption(step["label"])
+    return clicked
 
 
 def error_state(resp_or_kind: requests.Response | str) -> None:
