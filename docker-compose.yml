@@ -102,7 +102,9 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Local dev uses the HTTP-only conf; the prod nginx.conf needs TLS certs
+      # that don't exist locally (docker-compose.prod.yml keeps the prod conf).
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - api
       - frontend
