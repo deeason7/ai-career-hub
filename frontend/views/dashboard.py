@@ -6,10 +6,11 @@ import streamlit as st
 from api_client import api, safe_json
 from ui import (
     card,
-    empty_state,
     error_state,
+    journey,
     metric_tile,
     nav_to,
+    onboarding_steps,
     page_header,
     status_icon,
 )
@@ -56,17 +57,23 @@ def page_dashboard() -> None:
     jobs = stats["jobs"] if isinstance(stats["jobs"], dict) else {}
     cover_letters = stats["cover_letters"] if isinstance(stats["cover_letters"], list) else []
 
-    # First run: walk a new account to its first resume instead of showing zeros.
-    if not resumes:
-        if empty_state(
-            "📄",
-            "Start with your resume",
-            "Upload a resume once and every tool — scoring, cover letters, the "
-            "one-click agent — works from it.",
-            cta="Upload your first resume",
-        ):
-            nav_to("resumes")
-        return
+    by_status = jobs.get("by_status") or {}
+    has_resume, has_letter = bool(resumes), bool(cover_letters)
+    has_applied = any(s != "wishlist" and c for s, c in by_status.items())
+
+    # Onboarding stepper: walk a new account resume → draft → apply & track. It
+    # disappears once an application moves past "wishlist" — the journey is done
+    # and the full dashboard takes over. A brand-new account (no resume) sees the
+    # stepper alone, not a wall of zeros.
+    if not (has_resume and has_letter and has_applied):
+        st.subheader("👋 Get set up")
+        st.caption("Three steps from here to your first tracked application.")
+        nxt = journey(onboarding_steps(has_resume, has_letter, has_applied))
+        if nxt:
+            nav_to(nxt)
+        if not has_resume:
+            return
+        st.divider()
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -88,7 +95,6 @@ def page_dashboard() -> None:
         if st.button("Run Quick Apply", type="primary"):
             nav_to("agent")
 
-    by_status = jobs.get("by_status") or {}
     if by_status:
         st.subheader("Application Pipeline")
         cols = st.columns(len(by_status))

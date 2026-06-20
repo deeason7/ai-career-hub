@@ -8,6 +8,7 @@ import streamlit as st
 from api_client import api, safe_json
 from ui import (
     chip_row,
+    empty_state,
     error_state,
     loading,
     metric_tile,
@@ -106,7 +107,13 @@ def page_agent() -> None:
 
     resumes = safe_json(api("get", "/resumes/"), [])
     if not resumes:
-        st.info("Upload a resume first to use the agent.")
+        if empty_state(
+            "📄",
+            "Upload a resume to get started",
+            "Quick Apply analyzes your resume against a job posting — upload one first.",
+            cta="Upload a resume",
+        ):
+            nav_to("resumes")
         return
 
     resume_options = {f"{r['original_filename']}": r["id"] for r in resumes}
