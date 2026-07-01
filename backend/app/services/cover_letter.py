@@ -51,12 +51,12 @@ _REFINE_SYSTEM_PROMPT = (
 
 def _build_ollama_llm():
     """Return an Ollama LLM client for local dev."""
-    from langchain_community.llms import Ollama  # noqa: PLC0415
+    from langchain_ollama import OllamaLLM  # noqa: PLC0415
 
     from app.core.config import settings  # noqa: PLC0415
 
     logger.info("LLM backend: Ollama (%s)", settings.OLLAMA_LLM_MODEL)
-    return Ollama(
+    return OllamaLLM(
         model=settings.OLLAMA_LLM_MODEL,
         base_url=settings.OLLAMA_BASE_URL,
     )
@@ -64,9 +64,9 @@ def _build_ollama_llm():
 
 def _rag_retrieve(resume_text: str, job_description: str) -> tuple[str, int]:
     """FAISS-based RAG retrieval for Ollama path. Returns (context, chunks_used)."""
-    from langchain_community.embeddings import OllamaEmbeddings  # noqa: PLC0415
     from langchain_community.vectorstores import FAISS  # noqa: PLC0415
     from langchain_core.documents import Document  # noqa: PLC0415
+    from langchain_ollama import OllamaEmbeddings  # noqa: PLC0415
     from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: PLC0415
 
     from app.core.config import settings  # noqa: PLC0415
