@@ -1,6 +1,6 @@
 # Deployment Guide — AI Career Hub
 
-Production deployment on AWS. Platform version: **v4.0.2**.
+Production deployment on AWS, documented below, plus a free-tier alternative (Hugging Face Spaces + Streamlit Community Cloud) for a zero-cost deploy. Platform version: **v4.0.2**.
 
 ---
 
@@ -14,6 +14,7 @@ Production deployment on AWS. Platform version: **v4.0.2**.
 6. [TLS / HTTPS](#tls--https)
 7. [Developer Tooling](#developer-tooling)
 8. [Billing Controls](#billing-controls)
+9. [Free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud)](#free-tier-deployment-hugging-face-spaces--streamlit-community-cloud)
 
 ---
 
@@ -354,3 +355,75 @@ aws lambda invoke \
   --payload '{"action":"stop"}' \
   --region us-east-1 /dev/stdout
 ```
+
+---
+
+## Free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud)
+
+An alternative to the AWS stack above, for a $0/month deploy: the backend runs on a Hugging Face Space (Docker SDK), the frontend on Streamlit Community Cloud, and Postgres/Redis/the vector store move to their free managed equivalents (Neon/Upstash/Qdrant Cloud). Both app hosts sleep on inactivity and cold-start in seconds — no Wake-on-Visit machinery needed, but see [Keep-warm](#keep-warm) below. This is additive documentation; it does not change how the AWS path above works.
+
+### Managed data services
+
+| Service | Replaces | Notes |
+|---|---|---|
+| [Neon](https://neon.tech) | RDS PostgreSQL | Serverless Postgres, free tier. Set `POSTGRES_SERVER` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` to the Neon connection details, plus `DB_SSLMODE=require` |
+| [Upstash](https://upstash.com) | Redis (Docker Compose) | Serverless Redis, free tier. Set `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` to the Upstash connection details, plus `REDIS_SSL=true` |
+| [Qdrant Cloud](https://qdrant.tech) | ChromaDB | HF Spaces' free tier has no persistent disk, so the RAG vector store moves off local ChromaDB. Set `VECTOR_BACKEND=qdrant`, `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION` |
+
+### Backend on Hugging Face Spaces (Docker SDK)
+
+The existing `backend/Dockerfile` is used **as-is** — no changes needed. It's already HF-shaped: `python:3.11-slim`, a single `uvicorn` process, a non-root user, `EXPOSE 8000`, the CPU-only torch pin, and Alembic migrations that run as a non-blocking background task in `main.py` instead of gating startup.
+
+1. Create a new Space at [huggingface.co/new-space](https://huggingface.co/new-space) with **Docker** as the SDK.
+2. A Space is its own git repository and expects its `Dockerfile` at the repo root — ours lives at `backend/Dockerfile`. Push just that subdirectory:
+   ```bash
+   git remote add hf-space https://huggingface.co/spaces/<user>/<space-name>
+   git subtree push --prefix backend hf-space main
+   ```
+3. HF Spaces reads its config from YAML front matter in the Space's own `README.md` (a different file from this repo's root `README.md`). Paste this in:
+   ```
+   ---
+   title: AI Career Hub API
+   emoji: 🚀
+   colorFrom: indigo
+   colorTo: blue
+   sdk: docker
+   app_port: 8000
+   ---
+   ```
+   HF defaults to port 7860 — `app_port: 8000` maps it to our uvicorn port.
+
+### Secrets
+
+Set these as **Space secrets** (Settings → Variables and secrets) — they become runtime environment variables, the same role `.env.prod` plays on the AWS path:
+
+```
+POSTGRES_SERVER / POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB    (Neon)
+DB_SSLMODE=require
+REDIS_HOST / REDIS_PORT / REDIS_PASSWORD                             (Upstash)
+REDIS_SSL=true
+VECTOR_BACKEND=qdrant
+QDRANT_URL / QDRANT_API_KEY / QDRANT_COLLECTION
+GROQ_API_KEY
+SECRET_KEY                (must be ≥ 32 characters)
+ADMIN_SECRET              (must be ≥ 32 characters — required for /admin/* lifecycle endpoints)
+ALLOWED_ORIGINS           the frontend's *.streamlit.app URL
+PRODUCTION=true
+```
+
+> Expect a first-boot crash-loop: `Settings()` in `config.py` fails fast on any missing required var (`SECRET_KEY`, `POSTGRES_*`, ...). Set all of the secrets above, then restart the Space from the UI.
+
+### Frontend on Streamlit Community Cloud
+
+1. Deploy from [share.streamlit.io](https://share.streamlit.io) pointing at this repo, with main file path `frontend/app.py`. `frontend/Dockerfile` isn't used here — Community Cloud runs the app from source.
+2. Set one secret: `API_URL=https://<space>.hf.space/api/v1`. `frontend/api_client.py` already reads `API_URL` from the environment (it defaults to `http://api:8000/api/v1`, the Docker Compose service name, which doesn't apply here).
+3. Pin the Python version — see below.
+4. Back on the HF side, set `ALLOWED_ORIGINS` to this app's `*.streamlit.app` URL so the FastAPI CORS middleware accepts requests from it.
+
+### Python version pin
+
+Chose **not** to add a `.python-version` file at `frontend/` or the repo root. Streamlit Community Cloud's own docs describe the Python version as a choice made in the **Advanced settings** dialog at deploy time (changed later only by deleting and redeploying the app). Neither that page nor the recognized-dependency-file docs (`requirements.txt`, `pyproject.toml`, `environment.yml`, `Pipfile`, `uv.lock`) mention a `.python-version` or `runtime.txt` file controlling it. A committed file Streamlit silently ignores would be worse than no file at all. So: when deploying, open **Advanced settings** and choose **Python 3.12**.
+
+### Keep-warm
+
+An external scheduler should ping `GET /health/warm` roughly every 6 hours to keep both free tiers from cold-sleeping, and trigger the daily lifecycle cleanup on the same cadence as [Document Lifecycle Cleanup](#document-lifecycle-cleanup) above. The scheduler setup itself is documented separately, not repeated here.
