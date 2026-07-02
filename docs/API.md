@@ -35,9 +35,9 @@ https://careerhub.deeason.com.np/api/v1
 http://localhost:8000/api/v1        # local Docker
 ```
 
-Health and service-metadata endpoints (`GET /` and `GET /health`) live at the
-root, **outside** the `/api/v1` prefix, so that load balancers and uptime checks
-do not depend on the API version.
+Health and service-metadata endpoints (`GET /`, `GET /health`, and
+`GET /health/warm`) live at the root, **outside** the `/api/v1` prefix, so that
+load balancers and uptime checks do not depend on the API version.
 
 The API is versioned in the URL path. Breaking changes are introduced under a new
 prefix (`/api/v2`) rather than mutating `/api/v1`.
@@ -166,11 +166,20 @@ once a task has expired or never existed. The async operations are:
 Service metadata. **No auth.**
 
 ```json
-{ "service": "AI Career Hub", "version": "4.2.0", "status": "healthy", "docs": "/docs" }
+{ "service": "AI Career Hub", "version": "4.3.0", "status": "healthy", "docs": "/docs" }
 ```
 
 #### `GET /health`
 Liveness probe. **No auth.** Returns `{ "status": "ok" }`.
+
+#### `GET /health/warm`
+Deep warm-up probe. **No auth.** · Rate limit: 30/min. Touches Postgres (`SELECT 1`), Redis (`PING`), and the configured vector store with one cheap call each, then **always** returns `200` with per-dependency status — so a single degraded backend never makes the probe itself look down. An external scheduler hits it on a short interval to keep managed free-tier backends resident.
+
+```json
+{ "api": "ok", "db": "ok", "redis": "ok", "vector": { "backend": "qdrant", "status": "ok" }, "ts": 1751457600 }
+```
+
+`db` and `redis` are `ok` | `down` (`redis` is also `disabled` when unconfigured); `vector.status` is `ok` | `down`.
 
 ---
 
