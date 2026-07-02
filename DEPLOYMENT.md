@@ -362,6 +362,19 @@ aws lambda invoke \
 
 An alternative to the AWS stack above, for a $0/month deploy: the backend runs on a Hugging Face Space (Docker SDK), the frontend on Streamlit Community Cloud, and Postgres/Redis/the vector store move to their free managed equivalents (Neon/Upstash/Qdrant Cloud). Both app hosts sleep on inactivity and cold-start in seconds — no Wake-on-Visit machinery needed, but see [Keep-warm](#keep-warm) below. This is additive documentation; it does not change how the AWS path above works.
 
+### Continuous deployment — one branch, two environments
+
+Both targets deploy from `main`, from the **same commit**, via `pipeline.yml`. A push to `main` runs CI once, then two deploy jobs run in parallel, each scoped to its own GitHub Environment so AWS and free-tier secrets never mix:
+
+| Job | Environment | Target |
+|---|---|---|
+| `deploy` | `production` | AWS (ECR → SSM → EC2) |
+| `deploy-free` | `free-prod` | this HF Space (Streamlit redeploys itself from `main`) |
+
+`deploy-free` mirrors `backend/` to the Space with `huggingface_hub`, which triggers the Space's own Docker build — nothing is built in CI for the free path. It is gated by the repository variable `FREE_DEPLOY_ENABLED`, so it stays dormant until you switch it on.
+
+**One-time setup:** create a `free-prod` GitHub Environment (Settings → Environments) with an `HF_TOKEN` secret (an HF write token; add required reviewers there for an approval gate), then set repository variable `FREE_DEPLOY_ENABLED=true` (optionally `HF_SPACE` to override the default Space id). The manual `git subtree push` below is the by-hand equivalent, for a first or one-off deploy.
+
 ### Managed data services
 
 | Service | Replaces | Notes |
@@ -380,7 +393,7 @@ The existing `backend/Dockerfile` is used **as-is** — no changes needed. It's 
    git remote add hf-space https://huggingface.co/spaces/<user>/<space-name>
    git subtree push --prefix backend hf-space main
    ```
-3. HF Spaces reads its config from YAML front matter in the Space's own `README.md` (a different file from this repo's root `README.md`). Paste this in:
+3. HF Spaces reads its config from YAML front matter in a `README.md` at the Space root. Ours is committed at `backend/README.md`, so the CD sync ships it automatically — reproduced here for reference:
    ```
    ---
    title: AI Career Hub API
@@ -426,4 +439,4 @@ Chose **not** to add a `.python-version` file at `frontend/` or the repo root. S
 
 ### Keep-warm
 
-An external scheduler should ping `GET /health/warm` roughly every 6 hours to keep both free tiers from cold-sleeping, and trigger the daily lifecycle cleanup on the same cadence as [Document Lifecycle Cleanup](#document-lifecycle-cleanup) above. The scheduler setup itself is documented separately, not repeated here.
+An external scheduler should ping `GET /health/warm` roughly every 6 hours to keep both free tiers from cold-sleeping, and trigger the daily lifecycle cleanup on the same cadence as [Document Lifecycle Cleanup](#document-lifecycle-cleanup) above. A ready-to-deploy Cloudflare Worker for exactly this lives in `infra/keep-warm/` (6-hourly `/health/warm` + the daily cleanup + optional alerting) — see its `README.md`.
