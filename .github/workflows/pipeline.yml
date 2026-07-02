@@ -298,3 +298,59 @@ jobs:
             --query "[Status, StandardOutputContent, StandardErrorContent]" \
             --output text
           echo "::warning::Rolled back to $PREV_SHA — verify the site manually."
+
+  # Free-tier target — deploys from the SAME main commit as the AWS job above,
+  # in parallel, scoped to its own environment. Off until vars.FREE_DEPLOY_ENABLED
+  # is 'true' (and the free-prod environment + HF_TOKEN exist). The Space builds
+  # backend/Dockerfile itself; the Streamlit frontend redeploys from main on its own.
+  deploy-free:
+    name: Deploy (free-tier)
+    runs-on: ubuntu-latest
+    needs: ci
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event_name == 'push'
+      && vars.FREE_DEPLOY_ENABLED == 'true'
+    environment: free-prod
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the Hugging Face client
+        run: pip install "huggingface_hub>=0.25"
+
+      - name: Mirror backend/ to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE || 'Deeason/careerhub' }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          api.upload_folder(
+              repo_id=os.environ["HF_SPACE"],
+              repo_type="space",
+              folder_path="backend",
+              commit_message="Sync backend from GitHub",
+              # Mirror: drop anything on the Space that no longer exists here.
+              delete_patterns=["*"],
+              ignore_patterns=[
+                  "**/__pycache__/**",
+                  "**/.pytest_cache/**",
+                  "**/.ruff_cache/**",
+                  "*.pyc",
+                  ".env",
+              ],
+          )
+          print(f"Synced backend/ -> {os.environ['HF_SPACE']}")
+          PY
