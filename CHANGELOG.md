@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-07-02
+
+Managed-provider portability: a pluggable vector backend, TLS datastores, and a keep-warm probe.
+
+### Added
+- Pluggable vector store: `VECTOR_BACKEND=qdrant` selects a Qdrant backend alongside the default ChromaDB, using a single collection with a mandatory per-user payload filter for tenant isolation and deterministic point ids for idempotent re-embedding (`QDRANT_URL` · `QDRANT_API_KEY` · `QDRANT_COLLECTION`).
+- `GET /health/warm` — a deep warm-up probe that exercises Postgres, Redis, and the vector store; unauthenticated, rate-limited, and always `200` with per-dependency status, for keeping managed free-tier services resident.
+- TLS options for hosted datastores: `DB_SSLMODE` appends a Postgres `sslmode`, and `REDIS_SSL` switches Redis connections to `rediss://` (e.g. Neon, Upstash).
+- Free-tier deployment guide (Hugging Face Spaces + Streamlit Community Cloud) alongside the existing AWS path.
+
+### Changed
+- Migrated the LLM stack to langchain-core / langgraph 1.x, moving the Ollama fallback onto the split-out `langchain-ollama` package.
+
+### Security
+- Cleared outstanding dependency advisories surfaced by `pip-audit` through the langchain 1.x upgrade.
+
 ## [4.2.0] - 2026-06-15
 
 Async analysis, resilience under rate limits, and refine branching.

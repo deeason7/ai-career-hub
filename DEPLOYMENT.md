@@ -1,6 +1,6 @@
 # Deployment Guide — AI Career Hub
 
-Production deployment on AWS, documented below, plus a free-tier alternative (Hugging Face Spaces + Streamlit Community Cloud) for a zero-cost deploy. Platform version: **v4.0.2**.
+Production deployment on AWS, documented below, plus a free-tier alternative (Hugging Face Spaces + Streamlit Community Cloud) for a zero-cost deploy. Platform version: **v4.3.0**.
 
 ---
 
