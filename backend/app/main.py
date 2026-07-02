@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -15,7 +16,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.db import async_engine, create_db_and_tables
-from app.core.limiter import limiter
+from app.core.limiter import limiter, rate_limit
 from app.services.llm_client import check_ollama_model
 
 logger = logging.getLogger(__name__)
@@ -204,3 +205,53 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/health/warm", tags=["Health"])
+@rate_limit("30/minute")
+async def health_warm(request: Request):
+    """Touch the DB, cache and vector store with one cheap call each.
+
+    A scheduled cron hits this on a short interval so the managed free-tier
+    backends (which suspend after a few minutes idle) never see a cold start
+    on a real user request. The response body carries per-dependency status
+    instead of a 5xx so a single degraded backend doesn't make the probe
+    itself look down.
+    """
+    from sqlalchemy import text
+
+    db_state = "ok"
+    try:
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        db_state = "down"
+
+    # The task-state module already keeps a lazily-created async client around
+    # for polling job progress — reuse it rather than opening a second pool
+    # against the same Redis instance just to send a PING.
+    redis_state = "disabled"
+    try:
+        from app.services.task_state import _get_redis
+
+        redis_client = _get_redis()
+        if redis_client is not None:
+            await redis_client.ping()
+            redis_state = "ok"
+    except Exception:
+        redis_state = "down"
+
+    try:
+        from app.services.embedding_service import vector_healthcheck
+
+        vector_state = vector_healthcheck()
+    except Exception as exc:
+        vector_state = {"backend": "unknown", "status": "down", "detail": str(exc)}
+
+    return {
+        "api": "ok",
+        "db": db_state,
+        "redis": redis_state,
+        "vector": vector_state,
+        "ts": int(time.time()),
+    }

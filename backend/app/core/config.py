@@ -14,30 +14,39 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
     POSTGRES_PORT: int = 5432
+    # e.g. "require" for TLS-only hosts like Neon; blank keeps the AWS RDS default
+    DB_SSLMODE: str = ""
 
     @computed_field
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Sync URI — used by Alembic and synchronous background tasks."""
-        return (
+        uri = (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
             "?connect_timeout=10"
         )
+        if self.DB_SSLMODE:
+            uri += f"&sslmode={self.DB_SSLMODE}"
+        return uri
 
     @computed_field
     def SQLALCHEMY_ASYNC_DATABASE_URI(self) -> str:
         """Async URI — FastAPI request handlers via SQLAlchemy async engine."""
-        return (
+        uri = (
             f"postgresql+psycopg_async://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
             "?connect_timeout=10"
         )
+        if self.DB_SSLMODE:
+            uri += f"&sslmode={self.DB_SSLMODE}"
+        return uri
 
     # Redis — used for rate limiting and future caching.
     # Defaults to the Docker Compose service name; override in non-Docker environments.
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: str = ""
+    REDIS_SSL: bool = False  # True switches the Redis clients to rediss:// (e.g. Upstash)
 
     # AI — Ollama (local dev default)
     OLLAMA_BASE_URL: str = "http://ollama:11434"
@@ -48,8 +57,12 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"
 
-    # ChromaDB — persistent vector store for RAG
+    # Vector store for RAG embeddings — "chroma" (persistent local) or "qdrant" (managed)
+    VECTOR_BACKEND: str = "chroma"
     CHROMA_PERSIST_DIR: str = "/app/chroma_data"
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
+    QDRANT_COLLECTION: str = "careerhub"
 
     @computed_field
     def USE_GROQ(self) -> bool:

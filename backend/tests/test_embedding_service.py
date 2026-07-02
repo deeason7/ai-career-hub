@@ -1,4 +1,4 @@
-"""Tests for the ChromaDB embedding service and RAG endpoints."""
+"""Tests for the pluggable embedding service across vector backends."""
 
 import uuid
 from unittest.mock import MagicMock, patch
@@ -6,31 +6,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-# --- Fixtures ---
-
-
-@pytest.fixture(autouse=True)
-def _isolate_chroma(tmp_path):
-    """Use an in-memory ChromaDB client for every test."""
-    import chromadb
-
-    from app.services import embedding_service
-
-    test_client = chromadb.EphemeralClient()
-    embedding_service._client = test_client
-    yield
-    embedding_service._client = None
-
-
-@pytest.fixture()
-def user_id():
-    return uuid.uuid4()
-
-
-@pytest.fixture()
-def source_id():
-    return uuid.uuid4()
-
+_EMBEDDING_DIM = 384
 
 _SAMPLE_RESUME = (
     "John Doe — Software Engineer\n\n"
@@ -52,11 +28,9 @@ _SAMPLE_JD = (
     "experience with Docker, CI/CD, and database systems."
 )
 
-_EMBEDDING_DIM = 384
-
 
 def _mock_model():
-    """Return a mock sentence-transformers model."""
+    """Return a fake sentence-transformers model with deterministic 384-dim vectors."""
     model = MagicMock()
 
     def _encode(texts, **kwargs):
@@ -66,156 +40,265 @@ def _mock_model():
     return model
 
 
-# --- embed_document ---
+def _chroma_store():
+    """Build a ChromaVectorStore backed by an in-memory client."""
+    import chromadb
+
+    from app.services.embedding_service import ChromaVectorStore
+
+    return ChromaVectorStore(client=chromadb.EphemeralClient())
 
 
-class TestEmbedDocument:
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_creates_chunks(self, _mock, user_id, source_id):
-        from app.services.embedding_service import embed_document
+def _qdrant_store():
+    """Build a QdrantVectorStore backed by an in-memory client (no network)."""
+    from qdrant_client import QdrantClient
 
-        count = embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
-        assert count > 0
+    from app.services.embedding_service import QdrantVectorStore
 
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_idempotent(self, _mock, user_id, source_id):
-        from app.services.embedding_service import embed_document, get_embedding_stats
-
-        embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
-        first_stats = get_embedding_stats(user_id)
-
-        embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
-        second_stats = get_embedding_stats(user_id)
-
-        assert first_stats["total_chunks"] == second_stats["total_chunks"]
-
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_empty_text_returns_zero(self, _mock, user_id, source_id):
-        from app.services.embedding_service import embed_document
-
-        assert embed_document(user_id, "resume", source_id, "") == 0
-        assert embed_document(user_id, "resume", source_id, "   ") == 0
+    return QdrantVectorStore(client=QdrantClient(location=":memory:"), collection="test_vectors")
 
 
-# --- retrieve_context ---
+# --- Fixtures ---
 
 
-class TestRetrieveContext:
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_returns_ranked_results(self, _mock, user_id, source_id):
-        from app.services.embedding_service import embed_document, retrieve_context
+@pytest.fixture(autouse=True)
+def _isolate():
+    """Mock the shared embedding model and reset the store singleton per test."""
+    from app.services import embedding_service
 
-        embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
-        results = retrieve_context(user_id, _SAMPLE_JD, top_k=3)
+    with patch("app.services.ats_scorer._get_model", return_value=_mock_model()):
+        embedding_service.reset_client()
+        yield
+        embedding_service.reset_client()
 
-        assert len(results) > 0
-        assert len(results) <= 3
+
+@pytest.fixture(params=["chroma", "qdrant"])
+def store(request):
+    """A live store for each backend, exercised through identical assertions."""
+    if request.param == "chroma":
+        return _chroma_store()
+    return _qdrant_store()
+
+
+@pytest.fixture()
+def inject_store(store):
+    """Wire the parametrized store into the module so public functions use it."""
+    from app.services import embedding_service
+
+    embedding_service._store = store
+    return store
+
+
+@pytest.fixture()
+def user_id():
+    return uuid.uuid4()
+
+
+@pytest.fixture()
+def source_id():
+    return uuid.uuid4()
+
+
+# --- Public API parity across both backends ---
+
+
+class TestBackendParity:
+    def test_embed_retrieve_delete_count_stats(self, inject_store, user_id, source_id):
+        from app.services import embedding_service as es
+
+        n = es.embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
+        assert n > 0
+        assert inject_store.count(user_id) == n
+        stats = es.get_embedding_stats(user_id)
+        assert stats == {"total_chunks": n, "chunks_by_type": {"resume": n}}
+
+        results = es.retrieve_context(user_id, _SAMPLE_JD, top_k=3)
+        assert 0 < len(results) <= 3
+        distances = [r["distance"] for r in results]
+        assert distances == sorted(distances)  # closest-first ordering is preserved
         for r in results:
-            assert "chunk_text" in r
-            assert "source_type" in r
-            assert "distance" in r
-
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_filters_by_source_type(self, _mock, user_id, source_id):
-        from app.services.embedding_service import embed_document, retrieve_context
-
-        embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
-        cl_id = uuid.uuid4()
-        embed_document(user_id, "cover_letter", cl_id, "Dear Hiring Manager...")
-
-        resume_only = retrieve_context(user_id, _SAMPLE_JD, source_types=["resume"])
-        for r in resume_only:
+            assert set(r) == {"chunk_text", "source_type", "source_id", "chunk_index", "distance"}
             assert r["source_type"] == "resume"
+            assert isinstance(r["distance"], float)
 
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_empty_collection_returns_empty(self, _mock, user_id):
-        from app.services.embedding_service import retrieve_context
+        deleted = es.delete_embeddings(user_id, source_id)
+        assert deleted == n
+        assert inject_store.count(user_id) == 0
+        assert es.get_embedding_stats(user_id) == {"total_chunks": 0, "chunks_by_type": {}}
+        assert es.retrieve_context(user_id, _SAMPLE_JD) == []
 
-        results = retrieve_context(user_id, _SAMPLE_JD)
-        assert results == []
+    def test_user_isolation(self, inject_store, source_id):
+        from app.services import embedding_service as es
 
+        owner, other = uuid.uuid4(), uuid.uuid4()
+        es.embed_document(owner, "resume", source_id, _SAMPLE_RESUME)
 
-# --- delete_embeddings ---
+        assert es.get_embedding_stats(owner)["total_chunks"] > 0
+        assert es.get_embedding_stats(other)["total_chunks"] == 0
+        assert inject_store.count(other) == 0
+        assert es.retrieve_context(other, _SAMPLE_JD) == []
 
+    def test_reembedding_is_idempotent(self, inject_store, user_id, source_id):
+        from app.services import embedding_service as es
 
-class TestDeleteEmbeddings:
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_removes_all_chunks(self, _mock, user_id, source_id):
-        from app.services.embedding_service import (
-            delete_embeddings,
-            embed_document,
-            get_embedding_stats,
-        )
+        es.embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
+        first = es.get_embedding_stats(user_id)["total_chunks"]
+        es.embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
+        second = es.get_embedding_stats(user_id)["total_chunks"]
 
-        embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
-        assert get_embedding_stats(user_id)["total_chunks"] > 0
+        assert first > 0
+        assert first == second
 
-        deleted = delete_embeddings(user_id, source_id)
-        assert deleted > 0
-        assert get_embedding_stats(user_id)["total_chunks"] == 0
+    def test_source_type_filter(self, inject_store, user_id):
+        from app.services import embedding_service as es
 
+        es.embed_document(user_id, "resume", uuid.uuid4(), _SAMPLE_RESUME)
+        es.embed_document(user_id, "cover_letter", uuid.uuid4(), "Dear Hiring Manager, thank you.")
 
-# --- get_embedding_stats ---
+        resume_only = es.retrieve_context(user_id, _SAMPLE_JD, source_types=["resume"])
+        assert resume_only
+        assert all(r["source_type"] == "resume" for r in resume_only)
 
+    def test_empty_text_returns_zero(self, inject_store, user_id, source_id):
+        from app.services import embedding_service as es
 
-class TestGetEmbeddingStats:
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_counts_by_type(self, _mock, user_id, source_id):
-        from app.services.embedding_service import embed_document, get_embedding_stats
+        assert es.embed_document(user_id, "resume", source_id, "") == 0
+        assert es.embed_document(user_id, "resume", source_id, "   ") == 0
+        assert inject_store.count(user_id) == 0
 
-        embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
-        cl_id = uuid.uuid4()
-        embed_document(user_id, "cover_letter", cl_id, "Dear Hiring Manager, I am writing...")
+    def test_empty_collection_returns_empty(self, inject_store, user_id):
+        from app.services import embedding_service as es
 
-        stats = get_embedding_stats(user_id)
-        assert stats["total_chunks"] > 0
-        assert "resume" in stats["chunks_by_type"]
-        assert "cover_letter" in stats["chunks_by_type"]
+        assert es.retrieve_context(user_id, _SAMPLE_JD) == []
 
-    def test_empty_user(self, user_id):
-        from app.services.embedding_service import get_embedding_stats
-
-        stats = get_embedding_stats(user_id)
-        assert stats == {"total_chunks": 0, "chunks_by_type": {}}
-
-
-# --- reindex_all_documents ---
-
-
-class TestReindex:
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_reindex_processes_all_docs(self, _mock, user_id):
-        from app.services.embedding_service import get_embedding_stats, reindex_all_documents
+    def test_reindex_processes_all_docs(self, inject_store, user_id):
+        from app.services import embedding_service as es
 
         docs = [
             {"source_type": "resume", "source_id": str(uuid.uuid4()), "text": _SAMPLE_RESUME},
             {"source_type": "job_description", "source_id": str(uuid.uuid4()), "text": _SAMPLE_JD},
         ]
-        result = reindex_all_documents(user_id, docs)
+        result = es.reindex_all_documents(user_id, docs)
         assert result["documents_processed"] == 2
         assert result["total_chunks"] > 0
+        assert es.get_embedding_stats(user_id)["total_chunks"] == result["total_chunks"]
 
-        stats = get_embedding_stats(user_id)
-        assert stats["total_chunks"] == result["total_chunks"]
+
+# --- Store interface exercised directly (backend-explicit) ---
+
+
+class TestStoreInterfaceDirect:
+    def test_upsert_query_count_delete_stats(self, store, user_id, source_id):
+        model = _mock_model()
+        chunks = ["alpha experience python", "beta education degree", "gamma skills docker"]
+        embeddings = model.encode(chunks).tolist()
+        sid = str(source_id)
+        ids = [f"{sid}_{i}" for i in range(len(chunks))]
+        metadatas = [
+            {"source_type": "resume", "source_id": sid, "chunk_index": i}
+            for i in range(len(chunks))
+        ]
+
+        store.upsert(user_id, ids, embeddings, chunks, metadatas)
+        assert store.count(user_id) == 3
+
+        query = model.encode(["python developer"]).tolist()[0]
+        results = store.query(user_id, query, top_k=2)
+        assert len(results) == 2
+        assert all(r["source_type"] == "resume" for r in results)
+
+        assert store.stats(user_id) == {"total_chunks": 3, "chunks_by_type": {"resume": 3}}
+
+        assert store.delete_by_source(user_id, source_id) == 3
+        assert store.count(user_id) == 0
+        assert store.stats(user_id) == {"total_chunks": 0, "chunks_by_type": {}}
+
+
+# --- Backend selection (config-gated factory) ---
+
+
+class TestBackendFactory:
+    def test_defaults_to_chroma(self, monkeypatch):
+        from app.core.config import settings
+        from app.services import embedding_service as es
+
+        monkeypatch.setattr(settings, "VECTOR_BACKEND", "chroma")
+        es.reset_client()
+        assert isinstance(es._get_store(), es.ChromaVectorStore)
+
+    def test_selects_qdrant_when_configured(self, monkeypatch):
+        from app.core.config import settings
+        from app.services import embedding_service as es
+
+        monkeypatch.setattr(settings, "VECTOR_BACKEND", "qdrant")
+        es.reset_client()
+        assert isinstance(es._get_store(), es.QdrantVectorStore)
+
+    def test_store_is_a_singleton(self, monkeypatch):
+        from app.core.config import settings
+        from app.services import embedding_service as es
+
+        monkeypatch.setattr(settings, "VECTOR_BACKEND", "chroma")
+        es.reset_client()
+        assert es._get_store() is es._get_store()
+
+
+# --- Health checks ---
+
+
+class TestHealthcheck:
+    def test_store_healthcheck_ok(self, store):
+        assert store.healthcheck() == {"status": "ok", "detail": None}
+
+    def test_store_healthcheck_reports_down_without_raising(self):
+        from app.services.embedding_service import QdrantVectorStore
+
+        bad = MagicMock()
+        bad.get_collections.side_effect = RuntimeError("cluster unreachable")
+        result = QdrantVectorStore(client=bad, collection="x").healthcheck()
+
+        assert result["status"] == "down"
+        assert "cluster unreachable" in result["detail"]
+
+    def test_vector_healthcheck_reports_active_backend(self, monkeypatch):
+        from app.core.config import settings
+        from app.services import embedding_service as es
+
+        monkeypatch.setattr(settings, "VECTOR_BACKEND", "chroma")
+        es._store = _chroma_store()
+        assert es.vector_healthcheck() == {"backend": "chroma", "status": "ok", "detail": None}
+
+    def test_vector_healthcheck_never_raises_when_down(self, monkeypatch):
+        from app.core.config import settings
+        from app.services import embedding_service as es
+        from app.services.embedding_service import QdrantVectorStore
+
+        monkeypatch.setattr(settings, "VECTOR_BACKEND", "qdrant")
+        bad = MagicMock()
+        bad.get_collections.side_effect = RuntimeError("boom")
+        es._store = QdrantVectorStore(client=bad, collection="x")
+
+        assert es.vector_healthcheck() == {"backend": "qdrant", "status": "down", "detail": "boom"}
 
 
 # --- cover_letter _chroma_retrieve fallback ---
 
 
 class TestChromaRetrieveFallback:
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_returns_none_when_empty(self, _mock, user_id):
+    def test_returns_none_when_empty(self, user_id):
+        from app.services import embedding_service as es
         from app.services.cover_letter import _chroma_retrieve
 
-        result = _chroma_retrieve(user_id, _SAMPLE_JD)
-        assert result is None
+        es._store = _chroma_store()
+        assert _chroma_retrieve(user_id, _SAMPLE_JD) is None
 
-    @patch("app.services.embedding_service._get_model", return_value=_mock_model())
-    def test_returns_context_when_data_exists(self, _mock, user_id, source_id):
+    def test_returns_context_when_data_exists(self, user_id, source_id):
+        from app.services import embedding_service as es
         from app.services.cover_letter import _chroma_retrieve
-        from app.services.embedding_service import embed_document
 
-        embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
+        es._store = _chroma_store()
+        es.embed_document(user_id, "resume", source_id, _SAMPLE_RESUME)
+
         result = _chroma_retrieve(user_id, _SAMPLE_JD)
         assert result is not None
         context, chunks_used = result

@@ -97,8 +97,10 @@ def _get_redis() -> aioredis.Redis | None:
     port = int(os.getenv("REDIS_PORT", "6379"))
     password = os.getenv("REDIS_PASSWORD") or None
     auth = f":{password}@" if password else ""
+    ssl = os.getenv("REDIS_SSL", "false").lower() in {"1", "true", "yes"}
+    scheme = "rediss" if ssl else "redis"
     _redis = aioredis.from_url(
-        f"redis://{auth}{host}:{port}/1",
+        f"{scheme}://{auth}{host}:{port}/1",
         encoding="utf-8",
         decode_responses=True,
         max_connections=5,
