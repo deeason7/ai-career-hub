@@ -50,12 +50,12 @@ def _extract_via_instructor(jd_snippet: str, fallback: dict) -> dict:
 
 def _extract_via_langchain(jd_snippet: str, fallback: dict) -> dict:
     try:
-        from langchain_community.llms import Ollama  # noqa: PLC0415
         from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
+        from langchain_ollama import OllamaLLM  # noqa: PLC0415
 
         from app.core.config import settings  # noqa: PLC0415
 
-        llm = Ollama(model=settings.OLLAMA_LLM_MODEL, base_url=settings.OLLAMA_BASE_URL)
+        llm = OllamaLLM(model=settings.OLLAMA_LLM_MODEL, base_url=settings.OLLAMA_BASE_URL)
         prompt = PromptTemplate.from_template(
             "Extract the company name and job title from this posting.\n"
             "Reply with exactly two lines:\n"

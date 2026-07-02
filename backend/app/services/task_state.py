@@ -29,8 +29,10 @@ def _redis_url() -> str | None:
     port = int(os.getenv("REDIS_PORT", "6379"))
     password = os.getenv("REDIS_PASSWORD") or None
     auth = f":{password}@" if password else ""
+    ssl = os.getenv("REDIS_SSL", "false").lower() in {"1", "true", "yes"}
+    scheme = "rediss" if ssl else "redis"
     # DB 2 keeps task state apart from the token deny-list (DB 1).
-    return f"redis://{auth}{host}:{port}/2"
+    return f"{scheme}://{auth}{host}:{port}/2"
 
 
 def _get_redis() -> aioredis.Redis | None:
