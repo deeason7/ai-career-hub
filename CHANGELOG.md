@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Scheduled keep-warm + daily lifecycle cron via GitHub Actions (`.github/workflows/keepwarm.yml`); the Cloudflare Worker under `infra/keep-warm/` remains as a documented alternative scheduler.
+
 ## [4.3.1] - 2026-07-03
 
 ### Fixed

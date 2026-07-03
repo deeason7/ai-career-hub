@@ -24,6 +24,7 @@ listed default.
 | `POSTGRES_PASSWORD` | ✅ | — | Database password |
 | `POSTGRES_DB` | ✅ | — | Database name |
 | `POSTGRES_PORT` | — | `5432` | Database port |
+| `DB_SSLMODE` | — | `""` | Appended as `sslmode=` on both URIs when set — use `require` for TLS-only hosts like Neon; leave blank for RDS / local Docker |
 
 Two SQLAlchemy URIs are derived from these values: a **sync** URI (`postgresql+psycopg://…`) used by
 Alembic and synchronous background tasks, and an **async** URI (`postgresql+psycopg_async://…`) used by
@@ -42,6 +43,15 @@ request handlers. Both append `connect_timeout=10`.
 
 Redis backs the slowapi rate limiter, the JWT revocation deny-list, and the async task store that drives
 job-match and agent progress.
+
+## Vector store
+
+| Variable | Required | Default | Description |
+|---|:--:|---|---|
+| `VECTOR_BACKEND` | — | `chroma` | `qdrant` selects the Qdrant Cloud backend; anything else uses local ChromaDB |
+| `QDRANT_URL` | — | `""` | Qdrant cluster URL, including the port — needed when `VECTOR_BACKEND=qdrant` |
+| `QDRANT_API_KEY` | — | `""` | Qdrant API key |
+| `QDRANT_COLLECTION` | — | `careerhub` | Collection name — one shared collection, isolated per user by a mandatory payload filter |
 
 ## Authentication & Security
 
