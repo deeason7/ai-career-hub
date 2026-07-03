@@ -90,6 +90,23 @@ class TestModuleImports:
         assert _classify(None) == "network"
         assert _classify(500) == "server"
 
+    def test_onboarding_steps_done_flags(self):
+        # Each milestone's done flag mirrors account state; nav keys are stable.
+        from ui import onboarding_steps
+
+        steps = onboarding_steps(has_resume=True, has_letter=False, has_applied=False)
+        assert [s["done"] for s in steps] == [True, False, False]
+        assert [s["nav"] for s in steps] == ["resumes", "agent", "tracker"]
+
+    def test_onboarding_active_step(self):
+        # The active step is the first not-done one; None once fully onboarded.
+        from ui import _active_step, onboarding_steps
+
+        assert _active_step(onboarding_steps(False, False, False)) == 0
+        assert _active_step(onboarding_steps(True, False, False)) == 1
+        assert _active_step(onboarding_steps(True, True, False)) == 2
+        assert _active_step(onboarding_steps(True, True, True)) is None
+
     def test_poll_outcome(self):
         # One tick of a task poll: terminal vs transient classification.
         from ui import poll_outcome

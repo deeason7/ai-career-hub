@@ -75,10 +75,10 @@ def _build_llm():
             temperature=0,
         )
     else:
-        from langchain_community.llms import Ollama  # noqa: PLC0415
+        from langchain_ollama import OllamaLLM  # noqa: PLC0415
 
         logger.info("Using Ollama for resume parsing")
-        return Ollama(
+        return OllamaLLM(
             model=settings.OLLAMA_LLM_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
         )

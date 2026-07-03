@@ -188,6 +188,7 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | POST | `/api/v1/admin/lifecycle/run` | Secret header | — | Trigger document cleanup |
 | PUT | `/api/v1/webhooks/n8n/cover-letters/{id}/callback` | Webhook secret | — | n8n result callback |
 | GET | `/health` | — | — | Liveness check |
+| GET | `/health/warm` | — | — | Deep warm-up probe (DB + Redis + vector); always `200` with per-dependency status |
 
 ---
 

@@ -11,12 +11,12 @@
 -r requirements.txt
 
 # --- Testing ---
-pytest==8.3.5
-pytest-asyncio==0.26.0
+pytest==9.1.0
+pytest-asyncio==1.4.0
 
 # --- Linting & Type Checking ---
 ruff==0.15.13
-mypy==1.11.1
+mypy==2.1.0
 
 # --- Git Hooks ---
 pre-commit==4.6.0

@@ -33,8 +33,10 @@ _INTERVIEW_SYSTEM_PROMPT = (
 
 _SKILL_GAP_SYSTEM_PROMPT = (
     "You are a career development advisor. For a job seeker missing certain skills, "
-    "provide specific, actionable learning recommendations. Include the skill name, "
-    "a concrete resource (course name and platform), and a realistic timeline."
+    "provide exactly one specific, actionable learning recommendation per missing skill. "
+    "For each, give the skill name, a concrete resource (e.g. a named course or book), "
+    "the platform that hosts it (e.g. Coursera, Udemy, the official docs), and a realistic "
+    "timeline. Recommend only real, well-known resources — never invent course names."
 )
 _REFINE_SYSTEM_PROMPT = (
     "You are editing an existing cover letter based on a specific user command.\n\n"
@@ -49,12 +51,12 @@ _REFINE_SYSTEM_PROMPT = (
 
 def _build_ollama_llm():
     """Return an Ollama LLM client for local dev."""
-    from langchain_community.llms import Ollama  # noqa: PLC0415
+    from langchain_ollama import OllamaLLM  # noqa: PLC0415
 
     from app.core.config import settings  # noqa: PLC0415
 
     logger.info("LLM backend: Ollama (%s)", settings.OLLAMA_LLM_MODEL)
-    return Ollama(
+    return OllamaLLM(
         model=settings.OLLAMA_LLM_MODEL,
         base_url=settings.OLLAMA_BASE_URL,
     )
@@ -62,9 +64,9 @@ def _build_ollama_llm():
 
 def _rag_retrieve(resume_text: str, job_description: str) -> tuple[str, int]:
     """FAISS-based RAG retrieval for Ollama path. Returns (context, chunks_used)."""
-    from langchain_community.embeddings import OllamaEmbeddings  # noqa: PLC0415
     from langchain_community.vectorstores import FAISS  # noqa: PLC0415
     from langchain_core.documents import Document  # noqa: PLC0415
+    from langchain_ollama import OllamaEmbeddings  # noqa: PLC0415
     from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: PLC0415
 
     from app.core.config import settings  # noqa: PLC0415
@@ -298,8 +300,9 @@ def _skill_gap_via_instructor(
     from app.services.llm_schemas import SkillGapResult  # noqa: PLC0415
 
     user_prompt = (
-        f"The candidate is missing these skills: {', '.join(priority_gaps)}\n"
-        "Provide 3 specific, actionable learning recommendations."
+        f"The candidate is missing these {len(priority_gaps)} skills: {', '.join(priority_gaps)}\n"
+        "Provide exactly one learning recommendation for each skill listed — each with the "
+        "skill, a concrete resource, the platform that hosts it, and a realistic timeline."
     )
     try:
         result = call_structured(
@@ -321,8 +324,8 @@ def _skill_gap_via_langchain(priority_gaps: list[str]) -> list[str]:
     llm = _build_ollama_llm()
     prompt = PromptTemplate.from_template(
         "For a job seeker missing these skills: {skills}\n"
-        "Give 3 specific, actionable learning recommendations "
-        "(course name, platform, timeline).\n"
+        "Give one specific, actionable learning recommendation per skill "
+        "(skill, concrete resource, platform, timeline).\n"
         "Be concise. Format as a numbered list."
     )
     result = (prompt | llm).invoke({"skills": ", ".join(priority_gaps)})

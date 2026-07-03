@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -6,11 +7,14 @@ from typing import Any
 import bcrypt
 import jwt
 import redis.asyncio as aioredis
+from redis.exceptions import RedisError
 
 from app.core.config import settings
 
 ALGORITHM = "HS256"
 REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+logger = logging.getLogger(__name__)
 
 
 def get_password_hash(password: str) -> str:
@@ -93,8 +97,10 @@ def _get_redis() -> aioredis.Redis | None:
     port = int(os.getenv("REDIS_PORT", "6379"))
     password = os.getenv("REDIS_PASSWORD") or None
     auth = f":{password}@" if password else ""
+    ssl = os.getenv("REDIS_SSL", "false").lower() in {"1", "true", "yes"}
+    scheme = "rediss" if ssl else "redis"
     _redis = aioredis.from_url(
-        f"redis://{auth}{host}:{port}/1",
+        f"{scheme}://{auth}{host}:{port}/1",
         encoding="utf-8",
         decode_responses=True,
         max_connections=5,
@@ -104,12 +110,24 @@ def _get_redis() -> aioredis.Redis | None:
 
 async def revoke_token(jti: str, ttl_seconds: int) -> None:
     client = _get_redis()
-    if client:
+    if not client:
+        return
+    try:
         await client.setex(f"revoked:{jti}", ttl_seconds, "1")
+    except (RedisError, OSError) as exc:
+        # Fail open to match is_token_revoked: a Redis hiccup shouldn't 500 a
+        # logout. The token simply stays valid until it expires on its own.
+        logger.warning("could not revoke jti=%s; it will expire naturally: %s", jti, exc)
 
 
 async def is_token_revoked(jti: str) -> bool:
     client = _get_redis()
     if not client:
         return False
-    return await client.exists(f"revoked:{jti}") == 1
+    try:
+        return await client.exists(f"revoked:{jti}") == 1
+    except (RedisError, OSError) as exc:
+        # Fail open: a Redis outage must not lock out every authenticated user.
+        # A revoked token may be honored until its short TTL lapses; log it.
+        logger.warning("revocation check failed for jti=%s; allowing request: %s", jti, exc)
+        return False

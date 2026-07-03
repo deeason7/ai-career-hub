@@ -8,6 +8,7 @@ import streamlit as st
 from api_client import api, safe_json
 from ui import (
     chip_row,
+    empty_state,
     error_state,
     job_description_input,
     loading,
@@ -87,7 +88,13 @@ def page_job_match() -> None:
 
     resumes = safe_json(api("get", "/resumes/"), []) if st.session_state.token else []
     if not isinstance(resumes, list) or not resumes:
-        st.warning("⚠️ Upload a resume first in **My Resumes**.")
+        if empty_state(
+            "📄",
+            "Upload a resume to get started",
+            "Job Match scores your resume against a job description — upload one first.",
+            cta="Upload a resume",
+        ):
+            nav_to("resumes")
         return
 
     resume_options = {r["name"]: r["id"] for r in resumes}

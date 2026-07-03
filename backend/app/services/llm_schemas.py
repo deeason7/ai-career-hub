@@ -38,17 +38,18 @@ class InterviewQuestions(BaseModel):
 
 
 class SkillRecommendation(BaseModel):
-    """A single learning recommendation."""
+    """A single learning recommendation for one missing skill."""
 
     skill: str
     resource: str
+    platform: str
     timeline: str
 
 
 class SkillGapResult(BaseModel):
-    """Skill gap analysis output."""
+    """Skill gap analysis output — one concrete recommendation per priority gap."""
 
-    recommendations: list[SkillRecommendation] = Field(default_factory=list)
+    recommendations: list[SkillRecommendation] = Field(min_length=1, max_length=5)
 
 
 class JobExtraction(BaseModel):
