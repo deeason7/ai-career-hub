@@ -44,10 +44,12 @@ async function runWarm(env) {
     problems.push(`/health/warm unreachable: ${err.message}`);
   }
 
-  // Keep the Streamlit frontend resident. Any response means the container woke;
-  // only a 5xx or a network error is worth an alert (a 4xx still warmed it).
+  // Keep the Streamlit frontend resident. Any response means the edge took the
+  // hit; only a 5xx or a network error is worth an alert (a 3xx/4xx still
+  // counts as traffic). redirect: "manual" — Streamlit's edge sends cookie-less
+  // clients in a redirect loop, so following would throw and false-alarm.
   try {
-    const res = await fetchWithTimeout(env.FRONTEND_URL, { method: "HEAD" });
+    const res = await fetchWithTimeout(env.FRONTEND_URL, { method: "HEAD", redirect: "manual" });
     if (res.status >= 500) problems.push(`frontend returned HTTP ${res.status}`);
   } catch (err) {
     problems.push(`frontend unreachable: ${err.message}`);
