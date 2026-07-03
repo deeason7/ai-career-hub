@@ -1,0 +1,17 @@
+name = "careerhub-keepwarm"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+# 6-hourly warm (HF sleeps ~48h, so this is comfortable margin) + a daily
+# 03:00 UTC lifecycle cleanup. event.cron in the worker branches on these.
+[triggers]
+crons = ["0 */6 * * *", "0 3 * * *"]
+
+# Public (non-secret) config — edit to your deployed URLs.
+[vars]
+API_BASE = "https://YOUR-SPACE.hf.space"
+FRONTEND_URL = "https://YOUR-APP.streamlit.app"
+
+# Secrets are NOT stored here. Set them once with wrangler:
+#   wrangler secret put ADMIN_SECRET    # must equal the backend's ADMIN_SECRET
+#   wrangler secret put ALERT_WEBHOOK   # optional Discord webhook; skip to disable alerts
