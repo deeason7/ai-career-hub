@@ -21,6 +21,13 @@ Upload your resume, score it against job descriptions, generate honest cover let
 > Hosted on AWS (EC2 t3.small + RDS PostgreSQL db.t3.micro, private VPC).
 > **Cost-optimised:** Always-on Mon–Fri 9 AM–6 PM ET for recruiter access. Wake-on-Visit (~90s cold start) outside business hours.
 
+The same commit also serves a **zero-cost mirror** on managed free tiers (Streamlit Community Cloud + Hugging Face Spaces + Neon + Upstash + Qdrant Cloud), selected entirely by environment config — see [DEPLOYMENT.md](./DEPLOYMENT.md):
+
+| Service | URL |
+|---|---|
+| **Application (free tier)** | https://deeason-career.streamlit.app |
+| **API health (free tier)** | https://deeason-careerhub.hf.space/health/warm |
+
 ---
 
 ## Features
@@ -345,6 +352,17 @@ Off-Hours:
 ## Release History
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
+
+### v4.3.1 — Single-Database Redis Support
+- **Managed-Redis compatibility** — the task-store and token-deny-list clients pin logical DBs `2`/`1` on a real Redis; `REDIS_DB_TASKS` / `REDIS_DB_DENYLIST` now override them for single-database providers like Upstash
+- **Hardened connection URLs** — Redis passwords are percent-encoded in every connection URL, so special characters can't corrupt the parse
+
+### v4.3.0 — Managed-Provider Portability
+- **Pluggable vector store** — `VECTOR_BACKEND=qdrant` selects a Qdrant Cloud backend alongside the default ChromaDB: one shared collection, a mandatory per-user payload filter, deterministic point ids for idempotent re-embedding
+- **TLS options for hosted datastores** — `DB_SSLMODE` (Neon) and `REDIS_SSL` (Upstash `rediss://`)
+- **`GET /health/warm`** — a deep warm-up probe touching Postgres, Redis and the vector store; always `200` with per-dependency status
+- **Free-tier CD** — a `deploy-free` pipeline job ships the backend to a Hugging Face Space from the same `main` commit as the AWS deploy, gated by a `free-prod` GitHub Environment
+- **Dependency refresh** — langchain-core / langgraph 1.x migration (Ollama fallback on `langchain-ollama`), plus cryptography, faiss-cpu, mypy and actions bumps
 
 ### v4.2.0 — Async Analysis, Resilience & Refine Branching
 - **Async job-match & agentic analysis** — both now return `202` and run as background tasks with a Redis-backed task store; the UI polls and renders a live step checklist that survives navigating away mid-run
