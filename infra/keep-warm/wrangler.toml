@@ -9,8 +9,8 @@ crons = ["0 */6 * * *", "0 3 * * *"]
 
 # Public (non-secret) config — edit to your deployed URLs.
 [vars]
-API_BASE = "https://YOUR-SPACE.hf.space"
-FRONTEND_URL = "https://YOUR-APP.streamlit.app"
+API_BASE = "https://deeason-careerhub.hf.space"
+FRONTEND_URL = "https://deeason-career.streamlit.app"
 
 # Secrets are NOT stored here. Set them once with wrangler:
 #   wrangler secret put ADMIN_SECRET    # must equal the backend's ADMIN_SECRET

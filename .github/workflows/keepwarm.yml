@@ -1,0 +1,61 @@
+name: Keep Warm
+
+# The free-tier providers (Neon, Upstash, Qdrant, HF Space, Streamlit) suspend
+# when idle, and that stack has no scheduler of its own — this workflow is both
+# the keep-alive ping and the app's daily lifecycle cron. A failed run emails
+# the repo owner, which doubles as uptime alerting. Note: schedules fire from
+# the default branch only.
+on:
+  schedule:
+    - cron: "0 */6 * * *" # keep everything resident
+    - cron: "0 3 * * *" # daily lifecycle cleanup
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  API_BASE: https://deeason-careerhub.hf.space
+  FRONTEND_URL: https://deeason-career.streamlit.app
+
+jobs:
+  warm:
+    name: Warm the stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Warm API + datastores
+        # One cheap call touches Postgres, Redis and the vector store at once.
+        run: |
+          body=$(curl -sS --max-time 60 "$API_BASE/health/warm")
+          echo "$body"
+          for dep in db redis; do
+            echo "$body" | grep -Eq "\"$dep\":\"(ok|disabled)\"" \
+              || { echo "::error::$dep is not ok"; exit 1; }
+          done
+          echo "$body" | grep -q '"status":"ok"' \
+            || { echo "::error::vector store is not ok"; exit 1; }
+
+      - name: Ping the frontend
+        # Any response means the edge took the hit; Streamlit sends cookie-less
+        # clients a redirect loop, so don't follow (-L) — the 3xx itself is fine.
+        run: |
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 "$FRONTEND_URL")
+          echo "frontend HTTP $code"
+          [ "$code" -lt 500 ]
+
+  cleanup:
+    name: Lifecycle cleanup
+    # Only on the daily schedule (or a manual dispatch) — not every warm cycle.
+    if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: free-prod
+    steps:
+      - name: Purge expired documents (15-day TTL)
+        run: |
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 \
+            -X POST -H "X-Admin-Secret: ${{ secrets.ADMIN_SECRET }}" \
+            "$API_BASE/api/v1/admin/lifecycle/run")
+          echo "cleanup HTTP $code"
+          [ "$code" = "200" ]
