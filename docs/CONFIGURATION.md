@@ -36,6 +36,9 @@ request handlers. Both append `connect_timeout=10`.
 | `REDIS_HOST` | — | `redis` | Redis host |
 | `REDIS_PORT` | — | `6379` | Redis port |
 | `REDIS_PASSWORD` | — | `""` | Redis auth password (blank = no auth) |
+| `REDIS_SSL` | — | `false` | `true` switches all Redis clients to `rediss://` (TLS-only providers like Upstash) |
+| `REDIS_DB_TASKS` | — | `2` | Logical DB for the async task store — set `0` on single-database providers |
+| `REDIS_DB_DENYLIST` | — | `1` | Logical DB for the JWT deny-list — set `0` on single-database providers |
 
 Redis backs the slowapi rate limiter, the JWT revocation deny-list, and the async task store that drives
 job-match and agent progress.

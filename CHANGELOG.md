@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.3.1] - 2026-07-03
+
+### Fixed
+- Redis clients now work on single-database providers: the task-store and token-deny-list DB indexes are overridable via `REDIS_DB_TASKS` / `REDIS_DB_DENYLIST` (Upstash rejects `SELECT` above database 0), and passwords are URL-quoted in every connection URL so special characters can't corrupt the parse.
+
 ## [4.3.0] - 2026-07-02
 
 Managed-provider portability: a pluggable vector backend, TLS datastores, and a keep-warm probe.

@@ -5,6 +5,7 @@ import logging
 import os
 import uuid
 from typing import Any
+from urllib.parse import quote
 
 import redis
 import redis.asyncio as aioredis
@@ -28,11 +29,13 @@ def _redis_url() -> str | None:
         return None
     port = int(os.getenv("REDIS_PORT", "6379"))
     password = os.getenv("REDIS_PASSWORD") or None
-    auth = f":{password}@" if password else ""
+    auth = f":{quote(password, safe='')}@" if password else ""
     ssl = os.getenv("REDIS_SSL", "false").lower() in {"1", "true", "yes"}
     scheme = "rediss" if ssl else "redis"
-    # DB 2 keeps task state apart from the token deny-list (DB 1).
-    return f"{scheme}://{auth}{host}:{port}/2"
+    # DB 2 keeps task state apart from the token deny-list (DB 1) on a real
+    # Redis; single-database providers like Upstash only allow DB 0.
+    db = os.getenv("REDIS_DB_TASKS", "2")
+    return f"{scheme}://{auth}{host}:{port}/{db}"
 
 
 def _get_redis() -> aioredis.Redis | None:

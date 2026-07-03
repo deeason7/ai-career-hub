@@ -380,7 +380,7 @@ Both targets deploy from `main`, from the **same commit**, via `pipeline.yml`. A
 | Service | Replaces | Notes |
 |---|---|---|
 | [Neon](https://neon.tech) | RDS PostgreSQL | Serverless Postgres, free tier. Set `POSTGRES_SERVER` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` to the Neon connection details, plus `DB_SSLMODE=require` |
-| [Upstash](https://upstash.com) | Redis (Docker Compose) | Serverless Redis, free tier. Set `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` to the Upstash connection details, plus `REDIS_SSL=true` |
+| [Upstash](https://upstash.com) | Redis (Docker Compose) | Serverless Redis, free tier. Set `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` to the Upstash connection details, plus `REDIS_SSL=true` and `REDIS_DB_TASKS=0` / `REDIS_DB_DENYLIST=0` (Upstash supports only database 0) |
 | [Qdrant Cloud](https://qdrant.tech) | ChromaDB | HF Spaces' free tier has no persistent disk, so the RAG vector store moves off local ChromaDB. Set `VECTOR_BACKEND=qdrant`, `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION` |
 
 ### Backend on Hugging Face Spaces (Docker SDK)
@@ -415,6 +415,7 @@ POSTGRES_SERVER / POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB    (Neon)
 DB_SSLMODE=require
 REDIS_HOST / REDIS_PORT / REDIS_PASSWORD                             (Upstash)
 REDIS_SSL=true
+REDIS_DB_TASKS=0 / REDIS_DB_DENYLIST=0     (Upstash supports only database 0)
 VECTOR_BACKEND=qdrant
 QDRANT_URL / QDRANT_API_KEY / QDRANT_COLLECTION
 GROQ_API_KEY

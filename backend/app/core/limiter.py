@@ -7,6 +7,7 @@ in-memory when Redis is not configured (local dev without Redis).
 
 import os
 from collections.abc import Callable
+from urllib.parse import quote
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -25,7 +26,9 @@ _redis_scheme = "rediss" if _redis_ssl else "redis"
 if _redis_host and not _testing:
     # Build authenticated URI when password is set, plain URI otherwise.
     if _redis_password:
-        _storage_uri = f"{_redis_scheme}://:{_redis_password}@{_redis_host}:{_redis_port}/0"
+        _storage_uri = (
+            f"{_redis_scheme}://:{quote(_redis_password, safe='')}@{_redis_host}:{_redis_port}/0"
+        )
     else:
         _storage_uri = f"{_redis_scheme}://{_redis_host}:{_redis_port}/0"
     limiter = Limiter(key_func=get_remote_address, storage_uri=_storage_uri)
