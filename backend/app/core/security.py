@@ -3,6 +3,7 @@ import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 import bcrypt
 import jwt
@@ -96,11 +97,14 @@ def _get_redis() -> aioredis.Redis | None:
         return None
     port = int(os.getenv("REDIS_PORT", "6379"))
     password = os.getenv("REDIS_PASSWORD") or None
-    auth = f":{password}@" if password else ""
+    auth = f":{quote(password, safe='')}@" if password else ""
     ssl = os.getenv("REDIS_SSL", "false").lower() in {"1", "true", "yes"}
     scheme = "rediss" if ssl else "redis"
+    # Deny-list sits in DB 1 on a real Redis; single-database providers like
+    # Upstash only allow DB 0.
+    db = os.getenv("REDIS_DB_DENYLIST", "1")
     _redis = aioredis.from_url(
-        f"{scheme}://{auth}{host}:{port}/1",
+        f"{scheme}://{auth}{host}:{port}/{db}",
         encoding="utf-8",
         decode_responses=True,
         max_connections=5,
