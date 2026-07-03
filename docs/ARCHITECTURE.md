@@ -29,7 +29,7 @@ flowchart TB
     end
 
     api --> rds[(RDS PostgreSQL 16<br/>private VPC subnet)]
-    api --> chroma[(ChromaDB<br/>per-user vector collections)]
+    api --> chroma[(Vector store<br/>ChromaDB default · Qdrant Cloud option)]
     api -->|USE_GROQ| groq[Groq · LLaMA 3.1 8B Instant]
     api -.->|local dev| ollama[Ollama · llama3.2:3b]
     api -.->|optional| n8n[n8n Cloud]
@@ -173,11 +173,15 @@ service, so the whole process holds a single copy in memory.
 
 ## Retrieval (RAG)
 
-The embedding service (`services/embedding_service.py`) maintains a **persistent per-user ChromaDB
-collection**. Resumes are chunked (≈400 chars / 60 overlap) and embedded on upload; cover letters and job
-descriptions are indexed after generation. Retrieval is cosine-similarity search, and the service falls
-back to an ephemeral FAISS index if ChromaDB is unavailable. It reuses the same `all-MiniLM-L6-v2`
-singleton as the ATS scorer.
+The embedding service (`services/embedding_service.py`) sits behind a small **`VectorStore` abstraction**
+with two interchangeable backends, selected by `VECTOR_BACKEND`. The default is a **persistent per-user
+ChromaDB collection** (falling back to an ephemeral FAISS index if ChromaDB is unavailable); `qdrant`
+selects **Qdrant Cloud** instead — one shared collection with a mandatory per-user payload filter and
+deterministic (uuid5) point ids, so re-embedding the same chunk is idempotent. That option exists because
+free container hosts wipe local disk on rebuild, which would silently destroy a Chroma store. In both
+backends resumes are chunked (≈400 chars / 60 overlap) and embedded on upload, cover letters and job
+descriptions are indexed after generation, retrieval is cosine-similarity search, and the same
+`all-MiniLM-L6-v2` singleton is shared with the ATS scorer.
 
 ---
 

@@ -1,4 +1,8 @@
-# Keep-warm worker (Cloudflare)
+# Keep-warm worker (Cloudflare) — alternative scheduler
+
+> The default scheduler is the GitHub Actions workflow (`.github/workflows/keepwarm.yml`);
+> deploy this worker instead when Actions scheduling isn't wanted (exact cron timing,
+> no repo-activity expiry, Discord alerting).
 
 Laptop-free scheduler for the free-tier stack. One deep-warm call keeps
 Neon + Upstash + Qdrant resident; the frontend is probed too; and the daily
