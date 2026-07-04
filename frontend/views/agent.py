@@ -11,12 +11,12 @@ from ui import (
     empty_state,
     error_state,
     loading,
-    metric_tile,
     nav_to,
     page_header,
+    pipeline_progress,
     poll_outcome,
     poll_task,
-    score_tone,
+    score_hero,
 )
 
 # The submit normally returns 202 in milliseconds; the generous timeout only
@@ -45,6 +45,24 @@ _STEP_ICONS = {
     "running": "⏳",
     "pending": "⬜",
 }
+# Short labels + icons for the pipeline strip (mirrors the landing vignette).
+_STEP_NODES = {
+    "scrape_job": ("🔗", "scrape"),
+    "extract_metadata": ("🏷️", "extract"),
+    "search_company": ("🔎", "research"),
+    "score_ats": ("🎯", "score"),
+    "analyze_gaps": ("🧩", "gaps"),
+    "write_cover_letter": ("✉️", "letter"),
+    "generate_questions": ("🎤", "questions"),
+}
+# Backend step statuses → the strip's visual states.
+_NODE_STATES = {
+    "success": "done",
+    "failed": "failed",
+    "skipped": "skipped",
+    "running": "running",
+    "pending": "pending",
+}
 
 _OUTCOME_ERRORS = {
     "failed": "The agent run failed on the server. Try again in a minute.",
@@ -54,17 +72,38 @@ _OUTCOME_ERRORS = {
 }
 
 
-def _agent_checklist(steps: dict, running: bool) -> list[str]:
-    """Checklist lines in pipeline order; the first pending step shows as running."""
-    lines = []
+def _step_states(steps: dict, running: bool) -> dict[str, str]:
+    """Effective state per step in pipeline order; first pending becomes running."""
+    states = {}
     current_marked = False
-    for name, label in _STEP_LABELS.items():
+    for name in _STEP_LABELS:
         state = steps.get(name, "pending")
         if state == "pending" and running and not current_marked:
             state = "running"
             current_marked = True
-        lines.append(f"{_STEP_ICONS.get(state, '⬜')} {label}")
-    return lines
+        states[name] = state
+    return states
+
+
+def _agent_checklist(steps: dict, running: bool) -> list[str]:
+    """Checklist lines in pipeline order; the first pending step shows as running."""
+    return [
+        f"{_STEP_ICONS.get(state, '⬜')} {_STEP_LABELS[name]}"
+        for name, state in _step_states(steps, running).items()
+    ]
+
+
+def _pipeline_nodes(states: dict) -> list[dict]:
+    """Map step states onto the strip's node dicts, in pipeline order."""
+    return [
+        {
+            "icon": _STEP_NODES[name][0],
+            "label": _STEP_NODES[name][1],
+            "state": _NODE_STATES.get(state, "pending"),
+        }
+        for name, state in states.items()
+        if name in _STEP_NODES
+    ]
 
 
 def _agent_status() -> None:
@@ -77,9 +116,12 @@ def _agent_status() -> None:
     outcome = poll_outcome(http_status, payload.get("status"), elapsed, _RUN_TIMEOUT_S)
 
     if outcome == "running":
+        states = _step_states(payload.get("steps") or {}, running=True)
         with st.status(f"🤖 Agent working… {int(elapsed)}s", state="running", expanded=True):
-            for line in _agent_checklist(payload.get("steps") or {}, running=True):
-                st.markdown(line)
+            pipeline_progress(_pipeline_nodes(states))
+            current = next((n for n, s in states.items() if s == "running"), None)
+            if current:
+                st.caption(f"⏳ {_STEP_LABELS[current]}…")
         st.caption("Runs in the background — switching pages won't cancel it.")
         return
 
@@ -204,8 +246,13 @@ def _render_results(result: dict) -> None:
     else:
         st.error(f"❌ Agent failed — {duration}ms")
 
+    # The strip shows the whole run at a glance; steps the graph never reached
+    # (an early exit) stay pending-gray rather than posing as skipped.
+    ran = {s.get("name"): s.get("status", "pending") for s in steps}
+    pipeline_progress(_pipeline_nodes({n: ran.get(n, "pending") for n in _STEP_LABELS}))
+
     # Step execution trace
-    with st.expander("📊 Execution Trace", expanded=True):
+    with st.expander("📊 Execution Trace", expanded=False):
         for step in steps:
             icon = {"success": "✅", "failed": "❌", "skipped": "⏭️"}.get(step["status"], "❓")
             st.markdown(f"{icon} **{step['name']}** — {step['detail']} ({step['duration_ms']}ms)")
@@ -228,14 +275,14 @@ def _render_results(result: dict) -> None:
     ats = full.get("ats_result")
     if ats:
         st.subheader("📊 ATS Score")
-        score = ats.get("score", 0)
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            metric_tile("Overall", f"{score}/100", tone=score_tone(score))
-        with col2:
-            metric_tile("Semantic", f"{ats.get('semantic_score', 0)}/100")
-        with col3:
-            metric_tile("Keywords", f"{ats.get('keyword_score', 0)}/100")
+        score_hero(
+            ats.get("score", 0),
+            [
+                {"label": "🧠 Semantic", "value": ats.get("semantic_score", 0)},
+                {"label": "🔑 Keywords", "value": ats.get("keyword_score", 0)},
+            ],
+            center_label="ATS match",
+        )
 
         if ats.get("matched_keywords"):
             st.markdown("**Matched:**")

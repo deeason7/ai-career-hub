@@ -17,6 +17,7 @@ from ui import (
     page_header,
     poll_outcome,
     poll_task,
+    score_hero,
     score_tone,
     show_error,
 )
@@ -172,36 +173,19 @@ def _render_analysis(data: dict) -> None:
         sem_score = ats.get("semantic_score", 0)
         kw_score = ats.get("keyword_score", 0)
         struct_score = ats.get("structure_score", 0)
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            metric_tile(
-                "ATS Score",
-                f"{score}%",
-                tone=score_tone(score),
-                help="Composite: 50% semantic + 30% keyword + 20% structure",
-            )
-        with c2:
-            metric_tile(
-                "🧠 Semantic",
-                f"{sem_score}%",
-                tone=score_tone(sem_score),
-                help="Sentence-transformer cosine similarity — catches synonyms",
-            )
-        with c3:
-            metric_tile(
-                "🔑 Keywords",
-                f"{kw_score}%",
-                tone=score_tone(kw_score),
-                help="Exact + bigram keyword overlap",
-            )
-        with c4:
-            metric_tile(
-                "📐 Structure",
-                f"{struct_score}%",
-                tone=score_tone(struct_score),
-                help="Section presence and resume length",
-            )
-        st.progress(int(score) / 100)
+        score_hero(
+            score,
+            [
+                {"label": "🧠 Semantic", "value": sem_score, "note": "50% weight"},
+                {"label": "🔑 Keywords", "value": kw_score, "note": "30%"},
+                {"label": "📐 Structure", "value": struct_score, "note": "20%"},
+            ],
+            center_label="ATS match",
+        )
+        st.caption(
+            "Semantic = sentence-transformer similarity (catches synonyms) · "
+            "Keywords = exact + bigram overlap · Structure = section presence & length."
+        )
         if sem_score >= 70:
             st.success("🧠 High semantic alignment — your resume language closely matches the JD.")
         elif sem_score >= 45:

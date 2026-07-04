@@ -63,13 +63,13 @@ def render_qa_scores(honesty: int | None, tone: int | None, flags: str | None) -
     """
     if honesty is None:
         return
-    c1, c2 = st.columns(2)
-    if honesty >= _HONESTY_OK:
-        c1.success(f"🟢 Honesty {honesty}/10")
-    else:
-        c1.error(f"🔴 Honesty {honesty}/10")
-    if tone is not None:
-        c2.info(f"🎯 Tone {tone}/10")
+    ok = honesty >= _HONESTY_OK
+    color = "#1e7e34" if ok else "#b02a37"
+    tone_chip = f'<span class="ch-qa-tone">🎯 Tone {tone}/10</span>' if tone is not None else ""
+    st.html(
+        f'<div class="ch-qa"><span class="ch-qa-stamp" style="--c:{color}">'
+        f"{'✓' if ok else '✗'} Honesty {honesty}/10</span>{tone_chip}</div>"
+    )
     if not flags:
         return
 
