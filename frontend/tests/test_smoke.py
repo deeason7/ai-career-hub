@@ -121,6 +121,42 @@ class TestModuleImports:
         assert poll_outcome(503, None, 5, 180) == "running"  # store hiccup = transient
         assert poll_outcome(200, "STARTED", 181, 180) == "timeout"
 
+    def test_agent_step_states(self):
+        # The strip and the checklist share one state map: first pending runs.
+        from views.agent import _step_states
+
+        states = _step_states({"scrape_job": "success"}, True)
+        assert states["scrape_job"] == "success"
+        assert states["extract_metadata"] == "running"
+        assert list(states.values()).count("running") == 1
+        assert all(s == "pending" for s in _step_states({}, False).values())
+
+    def test_pipeline_html_states(self):
+        from ui import _pipeline_html
+
+        html = _pipeline_html(
+            [
+                {"icon": "🔗", "label": "scrape", "state": "done"},
+                {"icon": "🏷️", "label": "extract", "state": "running"},
+                {"icon": "🔎", "label": "research", "state": "pending"},
+            ]
+        )
+        assert html.count("ch-pn-done") == 1
+        assert html.count("ch-pn-running") == 1
+        assert html.count("ch-pl-link") == 2  # connectors between nodes only
+
+    def test_score_hero_html(self):
+        # Ring target + per-part tracks; values clamp into 0–100.
+        from ui import _score_hero_html
+
+        html = _score_hero_html(
+            82, [{"label": "Semantic", "value": 74, "note": "50% weight"}], "ATS match"
+        )
+        assert "--target:82%" in html
+        assert "--w:74%" in html and "50% weight" in html
+        assert "ATS match" in html
+        assert "--target:100%" in _score_hero_html(140, [], "x")
+
     def test_agent_checklist(self):
         # The first pending step shows as running — but only while the task runs.
         from views.agent import _agent_checklist
