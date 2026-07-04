@@ -16,6 +16,7 @@ from ui import nav_to
 
 _STEP_KEY = "tour_step"  # int while touring · None = ended · absent = never started
 _OFFER_KEY = "tour_offer_dismissed"
+_PROMPT_KEY = "tour_prompted"  # welcome dialog shown this session, whatever the outcome
 _FINISHED_KEY = "_tour_finished"  # one-shot: celebrate on the run after Finish
 
 # A believable posting so visitors can feel Job Match and Cover Letter without
@@ -144,6 +145,38 @@ def start() -> None:
     st.session_state[_OFFER_KEY] = True  # the invite's job is done either way
     nav_to("home")  # switch_page reruns; falls through only if the registry is gone
     st.rerun()
+
+
+@st.dialog("👋 Welcome to AI Career Hub")
+def _prompt_dialog() -> None:
+    st.markdown(
+        "**Take the 60-second tour?** It walks every feature in order — resumes, "
+        "ATS scoring, cover letters, the Quick Apply agent, and the tracker — on "
+        "your real account, with a sample job ready to load."
+    )
+    go, later = st.columns(2)
+    if go.button(
+        "🚀 Start the tour", type="primary", use_container_width=True, key="tour_prompt_go"
+    ):
+        start()
+    if later.button("Maybe later", use_container_width=True, key="tour_prompt_later"):
+        st.rerun()
+
+
+def prompt() -> None:
+    """Unmissable first-visit invite — a dialog on Home, once per session.
+
+    The flag is set before showing, so the rerun from an ✕-dismiss can't
+    re-open it; after any dismissal the slim offer() row stays as the fallback.
+    """
+    if (
+        _STEP_KEY in st.session_state
+        or st.session_state.get(_OFFER_KEY)
+        or st.session_state.get(_PROMPT_KEY)
+    ):
+        return
+    st.session_state[_PROMPT_KEY] = True
+    _prompt_dialog()
 
 
 def offer() -> None:

@@ -44,6 +44,10 @@ def page_dashboard() -> None:
     if not st.session_state.token:
         return
 
+    # Streamlit allows one open dialog per run — wait until the disclaimer
+    # modal (app.py) has been accepted before offering the tour dialog.
+    if st.session_state.get("disclaimer_accepted"):
+        tour.prompt()
     tour.offer()
 
     try:

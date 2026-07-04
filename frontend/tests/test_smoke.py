@@ -269,6 +269,22 @@ class TestModuleImports:
         for needle in ("resume", "ats", "cover letter", "skill gap", "quick apply", "tracker"):
             assert needle in page
 
+    def test_tour_prompt_once_per_session(self, monkeypatch):
+        # The welcome dialog fires once; an active or dismissed tour suppresses it.
+        import streamlit as st
+
+        import tour
+
+        shown = []
+        monkeypatch.setattr(tour, "_prompt_dialog", lambda: shown.append(1))
+        tour.prompt()
+        tour.prompt()
+        assert len(shown) == 1
+        st.session_state.clear()
+        st.session_state["tour_step"] = 3
+        tour.prompt()
+        assert len(shown) == 1
+
     def test_landing_overlay_once_per_session(self, monkeypatch):
         # Closing is CSS-only (invisible to the server), so the overlay must
         # render exactly once; the next rerun falls back to the inline story.
