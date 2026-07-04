@@ -220,3 +220,51 @@ class TestModuleImports:
         import importlib
 
         importlib.import_module("views.agent")
+
+    def test_tour_importable(self):
+        import importlib
+
+        importlib.import_module("tour")
+
+    def test_showcase_importable(self):
+        import importlib
+
+        importlib.import_module("showcase")
+
+    def test_tour_steps_use_registered_nav_keys(self):
+        # Every step must point at a key app.py registers, or Next strands the user.
+        from tour import STEPS
+
+        nav_keys = {"home", "agent", "resumes", "job_match", "cover_letter", "tracker", "legal"}
+        assert {s["page"] for s in STEPS} <= nav_keys
+        # The route opens and closes on Home.
+        assert STEPS[0]["page"] == "home"
+        assert STEPS[-1]["page"] == "home"
+
+    def test_tour_resync(self):
+        # On-route stays put; off-route hides; wandering lands on the nearest step.
+        from tour import STEPS, _resync
+
+        assert _resync(2, STEPS[2]["page"]) == 2
+        assert _resync(2, "legal") is None
+        assert _resync(1, "home") == 0  # early wander home → the opening step
+        assert _resync(len(STEPS) - 2, "home") == len(STEPS) - 1  # late → the finale
+
+    def test_seed_shared_jd(self):
+        # Seeding fills the shared JD and drops each page's stale widget copy.
+        import streamlit as st
+
+        from components import seed_shared_jd
+
+        st.session_state["jd_input_job_match"] = "stale"
+        seed_shared_jd("fresh jd")
+        assert st.session_state["shared_jd"] == "fresh jd"
+        assert "jd_input_job_match" not in st.session_state
+
+    def test_showcase_covers_every_feature(self):
+        # The landing story names each core surface of the product.
+        from showcase import _page_html
+
+        page = _page_html().lower()
+        for needle in ("resume", "ats", "cover letter", "skill gap", "quick apply", "tracker"):
+            assert needle in page
