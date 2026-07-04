@@ -62,6 +62,16 @@ def _run_agent_bg(task_id: str, job_url: str, resume_text: str, user_id: str) ->
     def on_step(state: dict) -> None:
         for record in state.get("steps_completed", []):
             task_state.set_step_sync(task_id, record["name"], record["status"])
+        # Mirror what the scraper read as soon as it exists, so the client can
+        # flag a login-wall stub while the later steps are still running.
+        jd = state.get("job_description")
+        if jd:
+            meta = {"read_chars": len(jd)}
+            metadata = state.get("job_metadata") or {}
+            if metadata.get("company"):
+                meta["company"] = metadata["company"]
+                meta["role"] = metadata.get("role")
+            task_state.set_meta_sync(task_id, meta)
 
     try:
         result = run_agent(
@@ -149,5 +159,6 @@ async def poll_agent_task(
         "status": task["status"],
         "steps": task["steps"],
         "result": task["result"] if task["status"] == "SUCCESS" else None,
+        "meta": task.get("meta"),
         "error": task.get("error"),
     }

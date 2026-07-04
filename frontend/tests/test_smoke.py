@@ -121,6 +121,15 @@ class TestModuleImports:
         assert poll_outcome(503, None, 5, 180) == "running"  # store hiccup = transient
         assert poll_outcome(200, "STARTED", 181, 180) == "timeout"
 
+    def test_agent_read_line(self):
+        # The live caption flags a suspiciously short scrape (login wall).
+        from views.agent import _SHORT_JD_CHARS, _read_line
+
+        ok = _read_line({"read_chars": 4200, "company": "Acme", "role": "Dev"})
+        assert "4,200" in ok and "Acme" in ok and "login wall" not in ok
+        assert "login wall" in _read_line({"read_chars": 300})
+        assert _SHORT_JD_CHARS <= 1200  # keep the bar under real posting lengths
+
     def test_agent_step_states(self):
         # The strip and the checklist share one state map: first pending runs.
         from views.agent import _step_states

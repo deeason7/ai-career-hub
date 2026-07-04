@@ -408,6 +408,44 @@ class TestAnalyzeEndpoint:
         assert len(task["steps"]) == 7
 
     @pytest.mark.asyncio
+    async def test_poll_surfaces_scrape_meta(
+        self, client, auth_headers, active_resume, fake_task_store
+    ):
+        # The bg runner mirrors what the scraper read into task meta mid-run,
+        # so the client can flag a login-wall stub before the run finishes.
+        def fake_run(job_url, resume_text, user_id, on_step=None):
+            if on_step:
+                on_step(
+                    {
+                        "steps_completed": [
+                            {
+                                "name": "scrape_job",
+                                "status": "success",
+                                "duration_ms": 1,
+                                "detail": "ok",
+                            }
+                        ],
+                        "job_description": "x" * 1200,
+                        "job_metadata": {"company": "Acme", "role": "Dev"},
+                    }
+                )
+            return _CANNED_RESULT
+
+        with patch(_RUN_AGENT_PATCH, side_effect=fake_run):
+            resp = await client.post(
+                "/api/v1/agent/analyze",
+                json={"job_url": "https://example.com/job/1", "resume_id": active_resume},
+                headers=auth_headers,
+            )
+
+        poll = await client.get(
+            f"/api/v1/agent/task/{resp.json()['task_id']}", headers=auth_headers
+        )
+        task = poll.json()
+        assert task["meta"] == {"read_chars": 1200, "company": "Acme", "role": "Dev"}
+        assert task["steps"]["scrape_job"] == "success"
+
+    @pytest.mark.asyncio
     async def test_failure_reported_via_poll(
         self, client, auth_headers, active_resume, fake_task_store
     ):

@@ -71,6 +71,21 @@ _OUTCOME_ERRORS = {
     "timeout": "Still running after 6 minutes — the job site or model may be slow. Try again.",
 }
 
+# Real postings run 1,500+ chars; login-wall stubs (LinkedIn's authwall
+# especially) are a few hundred. Below this, warn that the scrape looks partial.
+_SHORT_JD_CHARS = 800
+
+
+def _read_line(meta: dict) -> str:
+    """Live caption of what the scraper got — a login-wall stub shows up early."""
+    chars = meta.get("read_chars", 0)
+    line = f"📄 Read {chars:,} characters"
+    if meta.get("company"):
+        line += f" — {meta.get('role') or '?'} @ {meta['company']}"
+    if chars < _SHORT_JD_CHARS:
+        line += " · ⚠️ short for a posting (login wall?)"
+    return line
+
 
 def _step_states(steps: dict, running: bool) -> dict[str, str]:
     """Effective state per step in pipeline order; first pending becomes running."""
@@ -122,6 +137,9 @@ def _agent_status() -> None:
             current = next((n for n, s in states.items() if s == "running"), None)
             if current:
                 st.caption(f"⏳ {_STEP_LABELS[current]}…")
+            meta = payload.get("meta") or {}
+            if meta.get("read_chars"):
+                st.caption(_read_line(meta))
         st.caption("Runs in the background — switching pages won't cancel it.")
         return
 
@@ -169,6 +187,11 @@ def page_agent() -> None:
         )
     with col2:
         selected_resume = st.selectbox("Resume", options=list(resume_options.keys()))
+
+    st.caption(
+        "⚠️ Login-walled sites (LinkedIn especially) can return partial text — the run "
+        "shows exactly what was read, so check it before trusting the scores."
+    )
 
     in_flight = bool(st.session_state.get("agent_task"))
     if st.button(
@@ -250,6 +273,29 @@ def _render_results(result: dict) -> None:
     # (an early exit) stay pending-gray rather than posing as skipped.
     ran = {s.get("name"): s.get("status", "pending") for s in steps}
     pipeline_progress(_pipeline_nodes({n: ran.get(n, "pending") for n in _STEP_LABELS}))
+
+    # Show exactly what the scraper read before any conclusions — a login-walled
+    # page yields a stub, and every score below is only as good as this text.
+    jd_text = (result.get("full_results") or {}).get("job_description") or ""
+    if jd_text:
+        looks_short = len(jd_text) < _SHORT_JD_CHARS
+        with st.expander(
+            f"📄 What the agent read — {len(jd_text):,} characters", expanded=looks_short
+        ):
+            if looks_short:
+                st.warning(
+                    "That's short for a full posting — the site may have served a login "
+                    "wall (LinkedIn often does). Every score and letter below is only as "
+                    "good as this text. If it's incomplete, paste the posting into "
+                    "Job Match manually."
+                )
+            st.text_area(
+                "Scraped text",
+                jd_text,
+                height=220,
+                disabled=True,
+                label_visibility="collapsed",
+            )
 
     # Step execution trace
     with st.expander("📊 Execution Trace", expanded=False):
