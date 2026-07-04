@@ -10,6 +10,7 @@ import streamlit as st
 from streamlit_cookies_controller import CookieController
 
 import tour
+import ui
 from api_client import API_URL, api, safe_json
 from auth import page_auth
 from session import cookie_get, cookie_remove
@@ -27,6 +28,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="auto",
 )
+
+# App-wide look: pill buttons, card shadows, focus rings, the score ring and
+# pipeline styles. Injected before routing so the login screen gets it too.
+ui.inject_theme()
 
 cookie_manager = CookieController()
 

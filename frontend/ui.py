@@ -26,6 +26,7 @@ __all__ = [
     "chip_row",
     "empty_state",
     "error_state",
+    "inject_theme",
     "job_description_input",
     "journey",
     "lifecycle_badge",
@@ -35,10 +36,12 @@ __all__ = [
     "nav_to",
     "onboarding_steps",
     "page_header",
+    "pipeline_progress",
     "poll_outcome",
     "poll_task",
     "render_qa_scores",
     "score_gauge",
+    "score_hero",
     "score_tone",
     "section",
     "show_error",
@@ -74,6 +77,132 @@ _STATUS_META = {
     "accepted": ("✅", "good"),
     "rejected": ("❌", "bad"),
 }
+
+# One stylesheet for the whole app, injected each run from app.py. Native
+# widgets are restyled through Streamlit's data-testid hooks (stable in 1.5x —
+# re-check on a major Streamlit bump); the ch-* classes back our own
+# components (score ring, pipeline strip, QA verdict).
+_THEME_CSS = """
+<style>
+  :root { --ch-brand:#4f46e5; --ch-brand-2:#9333ea; --ch-ink:#1c1e26;
+    --ch-muted:#5a6472; --ch-line:#e3e5ee; --ch-surface:#f7f8fb; }
+
+  /* Buttons: pill shape, lift on hover, gentle press. */
+  .stButton button, .stFormSubmitButton button, .stDownloadButton button {
+    border-radius:999px !important;
+    transition:transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+  .stButton button:hover, .stFormSubmitButton button:hover,
+  .stDownloadButton button:hover {
+    transform:translateY(-1px); box-shadow:0 6px 18px rgba(28,30,38,.12); }
+  .stButton button:active, .stFormSubmitButton button:active {
+    transform:translateY(0) scale(.99); }
+  .stButton button[kind="primary"], .stFormSubmitButton button[kind="primaryFormSubmit"] {
+    background:linear-gradient(92deg, var(--ch-brand), #6d28d9); border:none; }
+  .stButton button[kind="primary"]:hover { filter:brightness(1.06); }
+
+  /* Bordered containers read as cards. */
+  [data-testid="stVerticalBlockBorderWrapper"] { border-radius:16px;
+    box-shadow:0 4px 18px rgba(28,30,38,.05); transition:box-shadow .2s ease; }
+  [data-testid="stVerticalBlockBorderWrapper"]:hover {
+    box-shadow:0 10px 28px rgba(28,30,38,.09); }
+
+  /* Metrics become tiles without touching call sites. */
+  [data-testid="stMetric"] { background:var(--ch-surface);
+    border:1px solid var(--ch-line); border-radius:14px; padding:.8rem 1rem; }
+  [data-testid="stMetricValue"] { font-weight:800; }
+  [data-testid="stMetricLabel"] { color:var(--ch-muted); }
+
+  /* Inputs: brand focus ring. */
+  [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea {
+    border-radius:10px; }
+  [data-testid="stTextInput"] div[data-baseweb="input"]:focus-within,
+  [data-testid="stTextArea"] div[data-baseweb="textarea"]:focus-within {
+    border-color:var(--ch-brand); box-shadow:0 0 0 3px rgba(79,70,229,.14); }
+
+  /* Tabs: bolder, brand highlight. */
+  .stTabs [data-baseweb="tab"] { font-weight:600; }
+  .stTabs [data-baseweb="tab"]:hover { color:var(--ch-brand); }
+  .stTabs [data-baseweb="tab-highlight"] { background-color:var(--ch-brand);
+    height:3px; border-radius:3px; }
+
+  /* Expanders, progress, dialogs, sidebar nav. */
+  [data-testid="stExpander"] details { border-radius:12px; }
+  [data-testid="stExpander"] summary:hover { color:var(--ch-brand); }
+  .stProgress > div > div > div > div {
+    background:linear-gradient(90deg, var(--ch-brand), var(--ch-brand-2));
+    border-radius:6px; }
+  [data-testid="stDialog"] div[role="dialog"] { border-radius:20px; }
+  [data-testid="stSidebarNav"] a { border-radius:10px;
+    transition:background .15s ease; }
+  [data-testid="stSidebarNav"] a:hover { background:rgba(79,70,229,.08); }
+
+  /* Score ring: an animated conic gauge (static where @property is missing). */
+  @property --chp { syntax:'<percentage>'; inherits:false; initial-value:0%; }
+  .ch-hero-score { display:flex; flex-wrap:wrap; align-items:center; gap:1.6rem;
+    background:#fff; border:1px solid var(--ch-line); border-radius:16px;
+    padding:1.2rem 1.4rem; box-shadow:0 12px 32px rgba(28,30,38,.08); }
+  .ch-ring { width:126px; height:126px; border-radius:50%; flex:none;
+    background:conic-gradient(var(--rc) var(--chp), #eceef6 0);
+    display:grid; place-items:center;
+    animation:ch-ring-fill .9s ease-out forwards; }
+  @keyframes ch-ring-fill { from { --chp:0%; } to { --chp:var(--target); } }
+  .ch-ring-in { width:96px; height:96px; border-radius:50%; background:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-weight:800; font-size:1.8rem; color:var(--ch-ink); }
+  .ch-ring-in small { font-size:.6rem; font-weight:600; color:var(--ch-muted);
+    letter-spacing:.08em; text-transform:uppercase; }
+  .ch-tracks { flex:1; min-width:220px; }
+  .ch-tr { display:flex; align-items:center; gap:.6rem; margin:.5rem 0;
+    font-size:.8rem; color:var(--ch-muted); }
+  .ch-tr > span { width:110px; flex:none; }
+  .ch-tr b { color:var(--ch-ink); white-space:nowrap; }
+  .ch-track { flex:1; height:8px; border-radius:4px; background:#eceef6;
+    overflow:hidden; }
+  .ch-track i { display:block; height:100%; border-radius:4px; width:var(--w);
+    background:var(--c); transform-origin:left;
+    animation:ch-grow .7s ease-out both; }
+  @keyframes ch-grow { from { transform:scaleX(0); } }
+
+  /* Pipeline strip: the landing-page vignette, driven by real step states. */
+  .ch-pl { display:flex; flex-wrap:wrap; align-items:flex-start; gap:2px; }
+  .ch-pn { display:flex; flex-direction:column; align-items:center; gap:3px;
+    width:60px; }
+  .ch-pn span { width:38px; height:38px; border-radius:50%; background:#fff;
+    border:2px solid var(--ch-line); display:grid; place-items:center;
+    font-size:1rem; transition:border-color .2s ease, background .2s ease; }
+  .ch-pn small { font-size:.62rem; color:var(--ch-muted); }
+  .ch-pl i.ch-pl-link { width:10px; height:2px; background:var(--ch-line);
+    margin-top:18px; }
+  .ch-pn-done span { border-color:var(--ch-brand); background:#eef0fe; }
+  .ch-pn-running span { border-color:var(--ch-brand);
+    animation:ch-pn-pulse 1.4s ease-in-out infinite; }
+  .ch-pn-failed span { border-color:#b02a37; background:#fdecee; }
+  .ch-pn-skipped span { border-style:dashed; opacity:.65; }
+  .ch-pn-pending span { opacity:.75; }
+  @keyframes ch-pn-pulse {
+    0%, 100% { box-shadow:0 0 0 0 rgba(79,70,229,.4); }
+    50% { box-shadow:0 0 0 7px rgba(79,70,229,0); }
+  }
+
+  /* QA verdict: the judge stamp from the landing story, on real scores. */
+  .ch-qa { display:flex; align-items:center; gap:.9rem; margin:.3rem 0 .5rem; }
+  .ch-qa-stamp { display:inline-block; transform:rotate(-2deg); background:#fff;
+    border:2px solid var(--c); color:var(--c); font-weight:700; font-size:.85rem;
+    padding:.3rem .7rem; border-radius:8px; }
+  .ch-qa-tone { display:inline-block; background:var(--ch-surface);
+    border:1px solid var(--ch-line); color:var(--ch-ink); font-weight:600;
+    font-size:.8rem; padding:.3rem .7rem; border-radius:999px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation:none !important; transition:none !important; }
+  }
+</style>
+"""
+
+
+def inject_theme() -> None:
+    """Mount the app-wide stylesheet — app.py calls this once per run."""
+    st.html(_THEME_CSS)
 
 
 def score_tone(value: float, good: float = 70, ok: float = 45) -> str:
@@ -124,6 +253,55 @@ def score_gauge(value: float, label: str, max: int = 100) -> None:
     display = f"{value:.0f}%" if max == 100 else f"{value:g}/{max}"
     metric_tile(label, display, tone=score_tone(ratio * 100))
     st.progress(ratio)
+
+
+def _clamp_pct(value: float) -> int:
+    return int(0 if value < 0 else 100 if value > 100 else value)
+
+
+def _score_hero_html(score: float, parts: list[dict], center_label: str) -> str:
+    """Ring + component tracks; each part is {label, value, note?}."""
+    pct = _clamp_pct(score)
+    ring_color = _TONE_BG[score_tone(pct)]
+    rows = []
+    for p in parts:
+        v = _clamp_pct(p.get("value", 0))
+        note = f" · {p['note']}" if p.get("note") else ""
+        rows.append(
+            f'<div class="ch-tr"><span>{p["label"]}</span>'
+            f'<div class="ch-track"><i style="--w:{v}%; --c:{_TONE_BG[score_tone(v)]}"></i></div>'
+            f"<b>{v}%{note}</b></div>"
+        )
+    return (
+        '<div class="ch-hero-score">'
+        f'<div class="ch-ring" style="--target:{pct}%; --rc:{ring_color}">'
+        f'<div class="ch-ring-in">{pct}<small>{html.escape(center_label)}</small></div></div>'
+        f'<div class="ch-tracks">{"".join(rows)}</div>'
+        "</div>"
+    )
+
+
+def score_hero(score: float, parts: list[dict], center_label: str = "score") -> None:
+    """The flagship scorecard: animated ring + a track per component score."""
+    st.html(_score_hero_html(score, parts, center_label))
+
+
+def _pipeline_html(nodes: list[dict]) -> str:
+    """Node strip; each node is {icon, label, state} with state ∈ the ch-pn-* set."""
+    bits = []
+    for i, n in enumerate(nodes):
+        bits.append(
+            f'<div class="ch-pn ch-pn-{n["state"]}"><span>{n["icon"]}</span>'
+            f"<small>{html.escape(n['label'])}</small></div>"
+        )
+        if i < len(nodes) - 1:
+            bits.append('<i class="ch-pl-link"></i>')
+    return f'<div class="ch-pl">{"".join(bits)}</div>'
+
+
+def pipeline_progress(nodes: list[dict]) -> None:
+    """Live pipeline strip — the landing-page vignette wired to real step states."""
+    st.html(_pipeline_html(nodes))
 
 
 def chip_row(items: list, tone: str = "neutral") -> None:
