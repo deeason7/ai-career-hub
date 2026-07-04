@@ -10,6 +10,8 @@ from session import cookie_set
 
 
 def page_auth(cookie_manager) -> None:
+    # First arrival gets the product story full-screen; ✕ drops into sign-in.
+    showcase.render_overlay()
     st.title("🚀 AI Career Hub")
     tab_login, tab_register = st.tabs(["🔐 Login", "📝 Register"])
 

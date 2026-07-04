@@ -268,3 +268,19 @@ class TestModuleImports:
         page = _page_html().lower()
         for needle in ("resume", "ats", "cover letter", "skill gap", "quick apply", "tracker"):
             assert needle in page
+
+    def test_landing_overlay_once_per_session(self, monkeypatch):
+        # Closing is CSS-only (invisible to the server), so the overlay must
+        # render exactly once; the next rerun falls back to the inline story.
+        import streamlit as st
+
+        import showcase
+
+        calls = []
+        monkeypatch.setattr(st, "html", lambda body: calls.append(body))
+        showcase.render_overlay()
+        showcase.render_overlay()
+        assert len(calls) == 1
+        assert 'id="ch-dismiss"' in calls[0]
+        # Both close triggers point at the same checkbox: the ✕ pill + the CTA.
+        assert calls[0].count('for="ch-dismiss"') == 2

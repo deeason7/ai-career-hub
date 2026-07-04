@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+_SEEN_KEY = "landing_story_seen"
+
 _CSS = """
 <style>
   .ch-show { max-width:1020px; margin:0 auto; padding:.6rem 0 2.4rem; color:#1c1e26; }
@@ -275,14 +277,48 @@ _HERO = (
     "</div>"
 )
 
-_CTA = (
-    '<div class="ch-cta ch-reveal">'
-    '<div class="ch-cta-title">Ready? Create your free account in the form above ↑</div>'
+_FINEPRINT = (
     '<p class="ch-fineprint">AI-generated content can be wrong — review everything '
     "before you send it. Documents expire after 15 days unless you keep them. "
     "Details in 📜 Legal &amp; Info after you sign in.</p>"
-    "</div>"
 )
+
+_CTA = (
+    '<div class="ch-cta ch-reveal">'
+    '<div class="ch-cta-title">Ready? Create your free account in the form above ↑</div>'
+    f"{_FINEPRINT}</div>"
+)
+
+# Inside the overlay the sign-in form is *behind* the story, so the CTA is a
+# second close trigger (same checkbox as the ✕ pill).
+_CTA_OVERLAY = (
+    '<div class="ch-cta">'
+    '<label class="ch-cta-close" for="ch-dismiss">Create your free account →</label>'
+    f"{_FINEPRINT}</div>"
+)
+
+# The overlay closes without JavaScript (st.html strips scripts): a hidden
+# checkbox flips display:none on its sibling when either label is clicked.
+_OVERLAY_CSS = """
+<style>
+  .ch-dismiss { display:none; }
+  .ch-dismiss:checked + .ch-overlay { display:none; }
+  .ch-overlay { position:fixed; inset:0; z-index:999999; background:#ffffff;
+    overflow-y:auto; overscroll-behavior:contain; padding:0 1.2rem 2rem;
+    animation:ch-fade .45s ease-out both; }
+  .ch-overlay .ch-show { padding-top:3.2rem; }
+  .ch-close { position:fixed; top:1rem; right:1.2rem; z-index:2; background:#fff;
+    border:1px solid #e3e5ee; border-radius:999px; padding:.45rem 1rem;
+    font-size:.85rem; font-weight:600; color:#3b3f4d; cursor:pointer;
+    box-shadow:0 4px 16px rgba(28,30,38,.08); }
+  .ch-close:hover { border-color:#4f46e5; color:#4f46e5; }
+  .ch-cta-close { display:inline-block; background:#4f46e5; color:#fff;
+    font-weight:700; padding:.7rem 1.5rem; border-radius:999px; cursor:pointer; }
+  .ch-cta-close:hover { background:#4338ca; }
+  @keyframes ch-fade { from { opacity:0; } to { opacity:1; } }
+  @media (prefers-reduced-motion: reduce) { .ch-overlay { animation:none; } }
+</style>
+"""
 
 
 def _feature_section(i: int, feat: dict) -> str:
@@ -297,11 +333,40 @@ def _feature_section(i: int, feat: dict) -> str:
     )
 
 
-def _page_html() -> str:
+def _story_html(cta: str) -> str:
     sections = "".join(_feature_section(i, f) for i, f in enumerate(_FEATURES))
-    return f'{_CSS}<div class="ch-show">{_HERO}{sections}{_CTA}</div>'
+    return f'<div class="ch-show">{_HERO}{sections}{cta}</div>'
+
+
+def _page_html() -> str:
+    return f"{_CSS}{_story_html(_CTA)}"
+
+
+def _overlay_html() -> str:
+    return (
+        f"{_CSS}{_OVERLAY_CSS}"
+        '<input class="ch-dismiss" id="ch-dismiss" type="checkbox">'
+        '<div class="ch-overlay">'
+        '<label class="ch-close" for="ch-dismiss">✕ Skip to sign in</label>'
+        f"{_story_html(_CTA_OVERLAY)}"
+        "</div>"
+    )
 
 
 def render() -> None:
-    """The full story — auth.py mounts this under the login/register tabs."""
+    """The inline story — auth.py mounts this under the login/register tabs."""
     st.html(_page_html())
+
+
+def render_overlay() -> None:
+    """First arrival only: the story as a full-screen, closeable overlay.
+
+    Closing is client-side CSS, invisible to the server — so the overlay
+    renders exactly once per session, and every rerun after that (a failed
+    login, a tab dance) falls back to the inline story instead of re-blocking
+    the form.
+    """
+    if st.session_state.get(_SEEN_KEY):
+        return
+    st.session_state[_SEEN_KEY] = True
+    st.html(_overlay_html())
