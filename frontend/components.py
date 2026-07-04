@@ -110,6 +110,17 @@ def job_description_input(page_key: str, height: int = 280, label: str = "Job De
     return jd
 
 
+def seed_shared_jd(text: str) -> None:
+    """Programmatically fill the shared JD (the tour's sample job uses this).
+
+    Owns the same keys as job_description_input: update the shared value and
+    drop each page's widget copy so its next render re-seeds from the new text.
+    """
+    st.session_state[_SHARED_JD_KEY] = text
+    for page_key in ("job_match", "cover_letter"):
+        st.session_state.pop(f"jd_input_{page_key}", None)
+
+
 def _job_url_import(page_key: str) -> None:
     """'Import from URL' expander; on success writes the JD into the shared field."""
     from api_client import api, detail, safe_json

@@ -3,6 +3,7 @@
 import requests
 import streamlit as st
 
+import tour
 from api_client import api, safe_json
 from ui import (
     card,
@@ -42,6 +43,8 @@ def page_dashboard() -> None:
 
     if not st.session_state.token:
         return
+
+    tour.offer()
 
     try:
         stats = _load_stats(st.session_state.token)
