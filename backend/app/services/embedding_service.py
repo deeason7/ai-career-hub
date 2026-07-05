@@ -23,6 +23,10 @@ _store: "VectorStore | None" = None
 class VectorStore(abc.ABC):
     """Backend-agnostic interface for the RAG vector store."""
 
+    # Backend id health probes report — the store that was actually built,
+    # which is not necessarily what VECTOR_BACKEND says (the "quadrant" lesson).
+    name: str
+
     @abc.abstractmethod
     def upsert(
         self,
@@ -63,6 +67,8 @@ class VectorStore(abc.ABC):
 
 class ChromaVectorStore(VectorStore):
     """ChromaDB backend: an isolated, persistent collection per user."""
+
+    name = "chroma"
 
     def __init__(self, client=None):
         self._client = client
@@ -162,6 +168,8 @@ class ChromaVectorStore(VectorStore):
 
 class QdrantVectorStore(VectorStore):
     """Qdrant backend: one shared collection, isolated by a mandatory user_id filter."""
+
+    name = "qdrant"
 
     def __init__(self, client=None, collection: str | None = None):
         self._client = client
@@ -453,14 +461,16 @@ def reindex_all_documents(user_id: uuid.UUID, documents: list[dict]) -> dict:
 
 def vector_healthcheck() -> dict:
     """Cheap liveness probe for the active vector backend; never raises."""
-    from app.core.config import settings  # noqa: PLC0415
-
-    backend = settings.VECTOR_BACKEND
     try:
-        result = _get_store().healthcheck()
+        store = _get_store()
+        result = store.healthcheck()
     except Exception as exc:
-        return {"backend": backend, "status": "down", "detail": str(exc)}
-    return {"backend": backend, "status": result["status"], "detail": result.get("detail")}
+        from app.core.config import settings  # noqa: PLC0415
+
+        return {"backend": settings.VECTOR_BACKEND, "status": "down", "detail": str(exc)}
+    # Name the store the factory built, not the configured string — the two
+    # diverged once ("quadrant") and the probe reported the typo as healthy.
+    return {"backend": store.name, "status": result["status"], "detail": result.get("detail")}
 
 
 def reset_client() -> None:

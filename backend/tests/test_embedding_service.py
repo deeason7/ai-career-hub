@@ -242,6 +242,20 @@ class TestBackendFactory:
         es.reset_client()
         assert es._get_store() is es._get_store()
 
+    def test_rejects_unknown_backend_at_validation(self):
+        from pydantic import ValidationError
+
+        from app.core.config import Settings
+
+        with pytest.raises(ValidationError):
+            Settings(VECTOR_BACKEND="quadrant")
+
+    def test_accepts_the_two_known_backends(self):
+        from app.core.config import Settings
+
+        assert Settings(VECTOR_BACKEND="chroma").VECTOR_BACKEND == "chroma"
+        assert Settings(VECTOR_BACKEND="qdrant").VECTOR_BACKEND == "qdrant"
+
 
 # --- Health checks ---
 
@@ -279,6 +293,15 @@ class TestHealthcheck:
         es._store = QdrantVectorStore(client=bad, collection="x")
 
         assert es.vector_healthcheck() == {"backend": "qdrant", "status": "down", "detail": "boom"}
+
+    def test_vector_healthcheck_names_the_resolved_store(self, monkeypatch):
+        """If config and factory ever diverge again, the probe must expose it."""
+        from app.core.config import settings
+        from app.services import embedding_service as es
+
+        monkeypatch.setattr(settings, "VECTOR_BACKEND", "chroma")
+        es._store = _qdrant_store()
+        assert es.vector_healthcheck()["backend"] == "qdrant"
 
 
 # --- cover_letter _chroma_retrieve fallback ---
