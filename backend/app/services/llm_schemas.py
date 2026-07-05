@@ -61,3 +61,23 @@ class JobExtraction(BaseModel):
     preferred_skills: list[str] = Field(default_factory=list)
     experience_level: str = Field(default="not specified")
     description_summary: str = Field(..., max_length=500)
+
+
+class ResumeExtraction(BaseModel):
+    """Structured fields extracted from a resume."""
+
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    linkedin_url: str | None = None
+    github_url: str | None = None
+    summary: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    programming_languages: list[str] = Field(default_factory=list)
+    frameworks: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+    experience: list[dict] = Field(default_factory=list)  # {title, company, duration, ...}
+    education: list[dict] = Field(default_factory=list)  # {degree, institution, year, gpa}
+    certifications: list[str] = Field(default_factory=list)
+    projects: list[dict] = Field(default_factory=list)  # {name, description, tech_stack}
