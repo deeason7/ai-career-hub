@@ -37,10 +37,12 @@ jobs:
             body=$(curl -sS --max-time 60 "$API_BASE/health/warm") \
               || { bad=" api-unreachable"; echo "attempt $attempt: curl failed"; continue; }
             echo "attempt $attempt: $body"
+            # Dep checks accept both the {status,detail} object and the legacy
+            # string shape, so the cron can't false-alarm mid Space rebuild.
             for dep in db redis; do
-              echo "$body" | grep -Eq "\"$dep\":\"(ok|disabled)\"" || bad="$bad $dep"
+              echo "$body" | grep -Eq "\"$dep\":(\"(ok|disabled)\"|\{\"status\":\"(ok|disabled)\")" || bad="$bad $dep"
             done
-            echo "$body" | grep -q '"status":"ok"' || bad="$bad vector"
+            echo "$body" | grep -Eq '"vector":\{[^}]*"status":"ok"' || bad="$bad vector"
             if [ -z "$bad" ]; then exit 0; fi
           done
           echo "::error::still unhealthy after 3 attempts:$bad"

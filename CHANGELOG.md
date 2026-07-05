@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Scheduled keep-warm + daily lifecycle cron via GitHub Actions (`.github/workflows/keepwarm.yml`); the Cloudflare Worker under `infra/keep-warm/` remains as a documented alternative scheduler.
+- Boot-time warning when a configured Redis is unreachable — each client's database is probed once at startup, so a dead or misconfigured Redis is one log line instead of a surprise on the first request that needs it.
+
+### Changed
+- `/health/warm` reports `db` and `redis` as `{status, detail}` objects like the vector block — a failing dependency now names its exception instead of a bare `"down"`. Both keep-warm schedulers accept the old and new shapes.
+- The shared Redis clients verify connections idle for more than 30 seconds before reusing them (`health_check_interval`), so provider-reaped idle connections reconnect instead of failing the first command after a quiet gap.
 
 ### Fixed
 - The keep-warm probe retries before alerting: free-tier datastores can drop idle connections between pings and read "down" for a single sample, which turned one 2-second Redis blip into a failure email.
