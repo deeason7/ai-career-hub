@@ -22,25 +22,36 @@ jobs:
   warm:
     name: Warm the stack
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Warm API + datastores
         # One cheap call touches Postgres, Redis and the vector store at once.
+        # The first hit doubles as the wake-up call: these providers drop idle
+        # connections between pings, so a dependency can read "down" for one
+        # sample and be fine seconds later (redis did on 2026-07-05). Probe up
+        # to three times and only alert if the stack stays unhealthy.
         run: |
-          body=$(curl -sS --max-time 60 "$API_BASE/health/warm")
-          echo "$body"
-          for dep in db redis; do
-            echo "$body" | grep -Eq "\"$dep\":\"(ok|disabled)\"" \
-              || { echo "::error::$dep is not ok"; exit 1; }
+          for attempt in 1 2 3; do
+            if [ "$attempt" -gt 1 ]; then sleep 30; fi
+            bad=""
+            body=$(curl -sS --max-time 60 "$API_BASE/health/warm") \
+              || { bad=" api-unreachable"; echo "attempt $attempt: curl failed"; continue; }
+            echo "attempt $attempt: $body"
+            for dep in db redis; do
+              echo "$body" | grep -Eq "\"$dep\":\"(ok|disabled)\"" || bad="$bad $dep"
+            done
+            echo "$body" | grep -q '"status":"ok"' || bad="$bad vector"
+            if [ -z "$bad" ]; then exit 0; fi
           done
-          echo "$body" | grep -q '"status":"ok"' \
-            || { echo "::error::vector store is not ok"; exit 1; }
+          echo "::error::still unhealthy after 3 attempts:$bad"
+          exit 1
 
       - name: Ping the frontend
         # Any response means the edge took the hit; Streamlit sends cookie-less
         # clients a redirect loop, so don't follow (-L) — the 3xx itself is fine.
         run: |
-          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 "$FRONTEND_URL")
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 \
+            --retry 3 --retry-all-errors --retry-delay 10 "$FRONTEND_URL")
           echo "frontend HTTP $code"
           [ "$code" -lt 500 ]
 
