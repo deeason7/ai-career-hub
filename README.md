@@ -353,6 +353,13 @@ Off-Hours:
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
 
+### v4.3.2 — Observability & Resilience Hardening
+- **Richer health signals** — `/health/warm` reports `db` and `redis` as `{status, detail}` with the failing exception, and `VECTOR_BACKEND` is validated at startup with the probe naming the store actually selected (a typo fails fast instead of silently falling back)
+- **Self-healing connections** — shared Redis clients re-check connections idle over 30s (`health_check_interval`) so provider-reaped sockets reconnect instead of failing the next command; an unreachable Redis surfaces as a boot-time warning
+- **Quieter alerting** — the keep-warm probe retries before emailing, so a single-sample idle blip no longer pages
+- **Sturdier AI + UI** — resume parsing runs through the same schema-validated path as the other AI features, and the Resumes page degrades to an honest retry state when the backend is cold instead of crashing
+- **Dependency refresh** — `qdrant-client` 1.18.0 to match the managed cluster
+
 ### v4.3.1 — Single-Database Redis Support
 - **Managed-Redis compatibility** — the task-store and token-deny-list clients pin logical DBs `2`/`1` on a real Redis; `REDIS_DB_TASKS` / `REDIS_DB_DENYLIST` now override them for single-database providers like Upstash
 - **Hardened connection URLs** — Redis passwords are percent-encoded in every connection URL, so special characters can't corrupt the parse
