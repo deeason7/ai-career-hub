@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Guided product tour: a Back/Next rail that walks every page of the live app in journey order, re-syncs if you wander, can seed a sample job description, and restarts from the sidebar; Home offers it to newcomers.
+- Animated feature showcase on the sign-in screen — the landing now tells the whole product story (resumes + retrieval, ATS scoring, judged cover letters, skill gap, the Quick Apply agent, and the tracker) in pure CSS, with scroll-driven reveals where the browser supports them.
+
 ## [4.3.2] - 2026-07-06
 
 ### Added

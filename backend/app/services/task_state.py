@@ -177,6 +177,17 @@ def set_result_sync(task_id: str, result: dict) -> None:
         logger.warning("could not store result for task %s: %s", task_id, exc)
 
 
+def set_meta_sync(task_id: str, meta: dict) -> None:
+    """Attach small mid-run metadata (e.g. what the scraper read); best-effort."""
+    client = _get_redis_sync()
+    if client is None:
+        return
+    try:
+        client.hset(_key(task_id), mapping={"meta": json.dumps(meta)})
+    except redis.RedisError as exc:
+        logger.warning("could not record meta on task %s: %s", task_id, exc)
+
+
 async def get(task_id: str) -> dict | None:
     """Fetch a task as {kind, user_id, status, steps, result, error}; None if unknown.
 
@@ -199,5 +210,6 @@ async def get(task_id: str) -> dict | None:
         "status": data.get("status", "PENDING"),
         "steps": steps,
         "result": json.loads(data["result"]) if data.get("result") else None,
+        "meta": json.loads(data["meta"]) if data.get("meta") else None,
         "error": data.get("error"),
     }
