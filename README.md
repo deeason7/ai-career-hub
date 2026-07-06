@@ -353,6 +353,12 @@ Off-Hours:
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
 
+### v4.4.0 — Guided Product Tour & Landing Showcase
+- **Guided product tour** — a Back/Next rail that walks every page in journey order (Home → Resumes → Job Match → Cover Letter → Tracker → Quick Apply), seeds a sample job description, and restarts from the sidebar; Home offers it to first-time visitors
+- **Animated landing showcase** — the sign-in screen tells the whole product story in pure CSS (ATS gauge, judged cover letters, the agentic pipeline, the tracker), with scroll-driven reveals where the browser supports them
+- **App-wide visual refresh** — a shared theme layer, score rings, a live agent-pipeline strip, and a QA-judge stamp across the analysis views
+- **Scrape transparency** — the agent surfaces what it actually read from a posting, with a warning when a login wall left the scrape thin
+
 ### v4.3.2 — Observability & Resilience Hardening
 - **Richer health signals** — `/health/warm` reports `db` and `redis` as `{status, detail}` with the failing exception, and `VECTOR_BACKEND` is validated at startup with the probe naming the store actually selected (a typo fails fast instead of silently falling back)
 - **Self-healing connections** — shared Redis clients re-check connections idle over 30s (`health_check_interval`) so provider-reaped sockets reconnect instead of failing the next command; an unreachable Redis surfaces as a boot-time warning
