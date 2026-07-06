@@ -24,7 +24,14 @@ async def test_warm_probe_reports_ok_dependencies(client):
     from app.services import embedding_service as es
 
     es.reset_client()
-    res = await client.get("/health/warm")
+
+    # CI runs no Redis service, so stub a healthy client instead of leaning on a
+    # live one — this test pins the probe's ok-shape, not real connectivity.
+    healthy = AsyncMock()
+    healthy.ping.return_value = True
+
+    with patch("app.services.task_state._get_redis", return_value=healthy):
+        res = await client.get("/health/warm")
 
     assert res.status_code == 200
     body = res.json()
