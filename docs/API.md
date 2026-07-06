@@ -166,7 +166,7 @@ once a task has expired or never existed. The async operations are:
 Service metadata. **No auth.**
 
 ```json
-{ "service": "AI Career Hub", "version": "4.3.1", "status": "healthy", "docs": "/docs" }
+{ "service": "AI Career Hub", "version": "4.3.2", "status": "healthy", "docs": "/docs" }
 ```
 
 #### `GET /health`
