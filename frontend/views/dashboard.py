@@ -3,6 +3,7 @@
 import requests
 import streamlit as st
 
+import tour
 from api_client import api, safe_json
 from ui import (
     card,
@@ -42,6 +43,12 @@ def page_dashboard() -> None:
 
     if not st.session_state.token:
         return
+
+    # Streamlit allows one open dialog per run — wait until the disclaimer
+    # modal (app.py) has been accepted before offering the tour dialog.
+    if st.session_state.get("disclaimer_accepted"):
+        tour.prompt()
+    tour.offer()
 
     try:
         stats = _load_stats(st.session_state.token)

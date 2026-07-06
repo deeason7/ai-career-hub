@@ -3,17 +3,16 @@
 import requests
 import streamlit as st
 
+import showcase
 from api_client import API_URL, api, detail, safe_json
 from components import show_error, show_success
 from session import cookie_set
 
 
 def page_auth(cookie_manager) -> None:
+    # First arrival gets the product story full-screen; ✕ drops into sign-in.
+    showcase.render_overlay()
     st.title("🚀 AI Career Hub")
-    st.markdown(
-        "An AI-powered platform for job seekers — multi-resume management, "
-        "RAG cover letters, ATS scoring, and more."
-    )
     tab_login, tab_register = st.tabs(["🔐 Login", "📝 Register"])
 
     with tab_login:
@@ -97,3 +96,6 @@ def page_auth(cookie_manager) -> None:
                         )
                     else:
                         show_error(detail(resp, "Registration failed."))
+
+    # The product story scrolls below the sign-in card — the landing is the demo.
+    showcase.render()

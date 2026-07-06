@@ -9,6 +9,8 @@ import requests
 import streamlit as st
 from streamlit_cookies_controller import CookieController
 
+import tour
+import ui
 from api_client import API_URL, api, safe_json
 from auth import page_auth
 from session import cookie_get, cookie_remove
@@ -26,6 +28,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="auto",
 )
+
+# App-wide look: pill buttons, card shadows, focus rings, the score ring and
+# pipeline styles. Injected before routing so the login screen gets it too.
+ui.inject_theme()
 
 cookie_manager = CookieController()
 
@@ -212,7 +218,16 @@ else:
         st.divider()
         _user = st.session_state.user or {}
         st.markdown(f"👤 **{_user.get('full_name', 'User')}**  \n`{_user.get('email', '')}`")
+        if st.button("🧭 Product tour", use_container_width=True):
+            tour.start()
         if st.button("🚪 Logout", use_container_width=True):
             _logout()
+
+    # The tour rail draws above whatever page runs next. Resolve the active nav
+    # key by identity against the registry built above — st.navigation returns
+    # the same st.Page object it was handed.
+    _current = next((k for k, p in st.session_state["_nav"].items() if p is nav), None)
+    if _current:
+        tour.render(_current)
 
     nav.run()

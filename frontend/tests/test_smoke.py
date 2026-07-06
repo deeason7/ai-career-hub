@@ -121,6 +121,51 @@ class TestModuleImports:
         assert poll_outcome(503, None, 5, 180) == "running"  # store hiccup = transient
         assert poll_outcome(200, "STARTED", 181, 180) == "timeout"
 
+    def test_agent_read_line(self):
+        # The live caption flags a suspiciously short scrape (login wall).
+        from views.agent import _SHORT_JD_CHARS, _read_line
+
+        ok = _read_line({"read_chars": 4200, "company": "Acme", "role": "Dev"})
+        assert "4,200" in ok and "Acme" in ok and "login wall" not in ok
+        assert "login wall" in _read_line({"read_chars": 300})
+        assert _SHORT_JD_CHARS <= 1200  # keep the bar under real posting lengths
+
+    def test_agent_step_states(self):
+        # The strip and the checklist share one state map: first pending runs.
+        from views.agent import _step_states
+
+        states = _step_states({"scrape_job": "success"}, True)
+        assert states["scrape_job"] == "success"
+        assert states["extract_metadata"] == "running"
+        assert list(states.values()).count("running") == 1
+        assert all(s == "pending" for s in _step_states({}, False).values())
+
+    def test_pipeline_html_states(self):
+        from ui import _pipeline_html
+
+        html = _pipeline_html(
+            [
+                {"icon": "🔗", "label": "scrape", "state": "done"},
+                {"icon": "🏷️", "label": "extract", "state": "running"},
+                {"icon": "🔎", "label": "research", "state": "pending"},
+            ]
+        )
+        assert html.count("ch-pn-done") == 1
+        assert html.count("ch-pn-running") == 1
+        assert html.count("ch-pl-link") == 2  # connectors between nodes only
+
+    def test_score_hero_html(self):
+        # Ring target + per-part tracks; values clamp into 0–100.
+        from ui import _score_hero_html
+
+        html = _score_hero_html(
+            82, [{"label": "Semantic", "value": 74, "note": "50% weight"}], "ATS match"
+        )
+        assert "--target:82%" in html
+        assert "--w:74%" in html and "50% weight" in html
+        assert "ATS match" in html
+        assert "--target:100%" in _score_hero_html(140, [], "x")
+
     def test_agent_checklist(self):
         # The first pending step shows as running — but only while the task runs.
         from views.agent import _agent_checklist
@@ -220,3 +265,83 @@ class TestModuleImports:
         import importlib
 
         importlib.import_module("views.agent")
+
+    def test_tour_importable(self):
+        import importlib
+
+        importlib.import_module("tour")
+
+    def test_showcase_importable(self):
+        import importlib
+
+        importlib.import_module("showcase")
+
+    def test_tour_steps_use_registered_nav_keys(self):
+        # Every step must point at a key app.py registers, or Next strands the user.
+        from tour import STEPS
+
+        nav_keys = {"home", "agent", "resumes", "job_match", "cover_letter", "tracker", "legal"}
+        assert {s["page"] for s in STEPS} <= nav_keys
+        # The route opens and closes on Home.
+        assert STEPS[0]["page"] == "home"
+        assert STEPS[-1]["page"] == "home"
+
+    def test_tour_resync(self):
+        # On-route stays put; off-route hides; wandering lands on the nearest step.
+        from tour import STEPS, _resync
+
+        assert _resync(2, STEPS[2]["page"]) == 2
+        assert _resync(2, "legal") is None
+        assert _resync(1, "home") == 0  # early wander home → the opening step
+        assert _resync(len(STEPS) - 2, "home") == len(STEPS) - 1  # late → the finale
+
+    def test_seed_shared_jd(self):
+        # Seeding fills the shared JD and drops each page's stale widget copy.
+        import streamlit as st
+
+        from components import seed_shared_jd
+
+        st.session_state["jd_input_job_match"] = "stale"
+        seed_shared_jd("fresh jd")
+        assert st.session_state["shared_jd"] == "fresh jd"
+        assert "jd_input_job_match" not in st.session_state
+
+    def test_showcase_covers_every_feature(self):
+        # The landing story names each core surface of the product.
+        from showcase import _page_html
+
+        page = _page_html().lower()
+        for needle in ("resume", "ats", "cover letter", "skill gap", "quick apply", "tracker"):
+            assert needle in page
+
+    def test_tour_prompt_once_per_session(self, monkeypatch):
+        # The welcome dialog fires once; an active or dismissed tour suppresses it.
+        import streamlit as st
+
+        import tour
+
+        shown = []
+        monkeypatch.setattr(tour, "_prompt_dialog", lambda: shown.append(1))
+        tour.prompt()
+        tour.prompt()
+        assert len(shown) == 1
+        st.session_state.clear()
+        st.session_state["tour_step"] = 3
+        tour.prompt()
+        assert len(shown) == 1
+
+    def test_landing_overlay_once_per_session(self, monkeypatch):
+        # Closing is CSS-only (invisible to the server), so the overlay must
+        # render exactly once; the next rerun falls back to the inline story.
+        import streamlit as st
+
+        import showcase
+
+        calls = []
+        monkeypatch.setattr(st, "html", lambda body: calls.append(body))
+        showcase.render_overlay()
+        showcase.render_overlay()
+        assert len(calls) == 1
+        assert 'id="ch-dismiss"' in calls[0]
+        # Both close triggers point at the same checkbox: the ✕ pill + the CTA.
+        assert calls[0].count('for="ch-dismiss"') == 2
