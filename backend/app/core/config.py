@@ -1,10 +1,12 @@
+from typing import Literal
+
 from pydantic import computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Career Hub"
-    VERSION: str = "4.3.1"
+    VERSION: str = "4.3.2"
     API_V1_STR: str = "/api/v1"
     PRODUCTION: bool = False  # Set to True via env var in production to hide /docs
 
@@ -57,8 +59,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"
 
-    # Vector store for RAG embeddings — "chroma" (persistent local) or "qdrant" (managed)
-    VECTOR_BACKEND: str = "chroma"
+    # Vector store for RAG embeddings — "chroma" (persistent local) or "qdrant" (managed).
+    # Literal so a typo'd value refuses to boot instead of silently selecting Chroma.
+    VECTOR_BACKEND: Literal["chroma", "qdrant"] = "chroma"
     CHROMA_PERSIST_DIR: str = "/app/chroma_data"
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""

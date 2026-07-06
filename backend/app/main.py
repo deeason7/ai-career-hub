@@ -86,6 +86,33 @@ async def _run_migrations_when_db_ready() -> None:
     )
 
 
+def _check_redis_reachable() -> None:
+    """Ping each configured Redis DB once at boot; WARN when one is unreachable."""
+    # All the Redis clients are lazy, so a dead or misconfigured Redis stays
+    # invisible until the first request needs it. Probe per DB index — Upstash
+    # taught us a database can be rejected while the server itself is fine.
+    import redis as redis_lib  # noqa: PLC0415
+
+    from app.core.security import _redis_url as _denylist_url  # noqa: PLC0415
+    from app.services.task_state import _redis_url as _tasks_url  # noqa: PLC0415
+
+    for purpose, url in (("task state", _tasks_url()), ("token deny-list", _denylist_url())):
+        if url is None:
+            continue
+        probe = redis_lib.Redis.from_url(url, socket_connect_timeout=5, socket_timeout=5)
+        try:
+            probe.ping()
+        except Exception as exc:
+            logger.warning(
+                "[startup] Redis (%s) is configured but unreachable — %s: %s",
+                purpose,
+                type(exc).__name__,
+                exc,
+            )
+        finally:
+            probe.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create tables in dev; run migrations async in prod."""
@@ -93,9 +120,10 @@ async def lifespan(app: FastAPI):
         await create_db_and_tables()
     else:
         asyncio.create_task(_run_migrations_when_db_ready())
-    # Off the startup path: a broken Ollama fallback should be one boot-time
-    # warning, not a surprise the first time a generation falls back to it.
+    # Off the startup path: a broken Ollama fallback or an unreachable Redis
+    # should be one boot-time warning, not a surprise mid-request later.
     asyncio.create_task(asyncio.to_thread(check_ollama_model))
+    asyncio.create_task(asyncio.to_thread(_check_redis_reachable))
     yield
 
 
@@ -220,26 +248,28 @@ async def health_warm(request: Request):
     """
     from sqlalchemy import text
 
-    db_state = "ok"
+    db_state = {"status": "ok", "detail": None}
     try:
         async with async_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-    except Exception:
-        db_state = "down"
+    except Exception as exc:
+        db_state = {"status": "down", "detail": f"{type(exc).__name__}: {exc}"}
 
     # The task-state module already keeps a lazily-created async client around
     # for polling job progress — reuse it rather than opening a second pool
     # against the same Redis instance just to send a PING.
-    redis_state = "disabled"
+    redis_state = {"status": "disabled", "detail": None}
     try:
         from app.services.task_state import _get_redis
 
         redis_client = _get_redis()
         if redis_client is not None:
             await redis_client.ping()
-            redis_state = "ok"
-    except Exception:
-        redis_state = "down"
+            redis_state = {"status": "ok", "detail": None}
+    except Exception as exc:
+        # Carry the exception like the vector block does — a bare "down" made
+        # the 07-05 blip undiagnosable from the probe body alone.
+        redis_state = {"status": "down", "detail": f"{type(exc).__name__}: {exc}"}
 
     try:
         from app.services.embedding_service import vector_healthcheck

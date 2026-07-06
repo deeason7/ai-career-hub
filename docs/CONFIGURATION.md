@@ -48,7 +48,7 @@ job-match and agent progress.
 
 | Variable | Required | Default | Description |
 |---|:--:|---|---|
-| `VECTOR_BACKEND` | — | `chroma` | `qdrant` selects the Qdrant Cloud backend; anything else uses local ChromaDB |
+| `VECTOR_BACKEND` | — | `chroma` | `chroma` or `qdrant` only — any other value refuses to boot |
 | `QDRANT_URL` | — | `""` | Qdrant cluster URL, including the port — needed when `VECTOR_BACKEND=qdrant` |
 | `QDRANT_API_KEY` | — | `""` | Qdrant API key |
 | `QDRANT_COLLECTION` | — | `careerhub` | Collection name — one shared collection, isolated per user by a mandatory payload filter |

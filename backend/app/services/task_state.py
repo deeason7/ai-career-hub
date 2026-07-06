@@ -46,7 +46,16 @@ def _get_redis() -> aioredis.Redis | None:
     url = _redis_url()
     if url is None:
         return None
-    _redis = aioredis.from_url(url, encoding="utf-8", decode_responses=True, max_connections=5)
+    # health_check_interval: managed providers reap idle connections, and this
+    # client can sit untouched for hours between keep-warm pings — verify a
+    # connection idle >30s before reusing it (bit the warm probe on 07-05).
+    _redis = aioredis.from_url(
+        url,
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=5,
+        health_check_interval=30,
+    )
     return _redis
 
 
@@ -63,7 +72,11 @@ def _get_redis_sync() -> redis.Redis | None:
     if url is None:
         return None
     _redis_sync = redis.Redis.from_url(
-        url, encoding="utf-8", decode_responses=True, max_connections=5
+        url,
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=5,
+        health_check_interval=30,
     )
     return _redis_sync
 

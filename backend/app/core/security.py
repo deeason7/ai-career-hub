@@ -87,11 +87,7 @@ def verify_refresh_token(token: str) -> tuple[str, str] | None:
 _redis: aioredis.Redis | None = None
 
 
-def _get_redis() -> aioredis.Redis | None:
-    """Return the module-level Redis client, initialised lazily on first call."""
-    global _redis
-    if _redis is not None:
-        return _redis
+def _redis_url() -> str | None:
     host = os.getenv("REDIS_HOST", "")
     if not host:
         return None
@@ -103,11 +99,23 @@ def _get_redis() -> aioredis.Redis | None:
     # Deny-list sits in DB 1 on a real Redis; single-database providers like
     # Upstash only allow DB 0.
     db = os.getenv("REDIS_DB_DENYLIST", "1")
+    return f"{scheme}://{auth}{host}:{port}/{db}"
+
+
+def _get_redis() -> aioredis.Redis | None:
+    """Return the module-level Redis client, initialised lazily on first call."""
+    global _redis
+    if _redis is not None:
+        return _redis
+    url = _redis_url()
+    if url is None:
+        return None
     _redis = aioredis.from_url(
-        f"{scheme}://{auth}{host}:{port}/{db}",
+        url,
         encoding="utf-8",
         decode_responses=True,
         max_connections=5,
+        health_check_interval=30,
     )
     return _redis
 

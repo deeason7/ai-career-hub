@@ -2,12 +2,14 @@
 
 import json
 
+import requests
 import streamlit as st
 
 from api_client import api, detail, safe_json
 from ui import (
     chip_row,
     empty_state,
+    error_state,
     lifecycle_badge,
     loading_spinner,
     page_header,
@@ -105,9 +107,16 @@ def page_resumes() -> None:
                     else:
                         show_error(detail(resp, "Upload failed."))
 
-    resumes_resp = api("get", "/resumes/")
+    try:
+        resumes_resp = api("get", "/resumes/")
+    except requests.exceptions.RequestException as exc:
+        resp = getattr(exc, "response", None)
+        error_state(resp if resp is not None else "network")
+        if st.button("🔄 Retry"):
+            st.rerun()
+        return
     if resumes_resp.status_code != 200:
-        show_error("Could not fetch resumes.")
+        error_state(resumes_resp)
         return
 
     resumes = safe_json(resumes_resp, [])

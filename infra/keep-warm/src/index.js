@@ -32,7 +32,13 @@ async function runWarm(env) {
       problems.push(`/health/warm returned HTTP ${res.status}`);
     } else {
       const body = await res.json();
-      const deps = { db: body.db, redis: body.redis, vector: body.vector?.status };
+      // db/redis moved from bare strings to {status, detail} objects; read
+      // either shape so the worker tracks the API without a lockstep deploy.
+      const deps = {
+        db: body.db?.status ?? body.db,
+        redis: body.redis?.status ?? body.redis,
+        vector: body.vector?.status,
+      };
       for (const [name, state] of Object.entries(deps)) {
         // "disabled" = that dependency isn't configured on this deploy, not a fault.
         if (state && state !== "ok" && state !== "disabled") {

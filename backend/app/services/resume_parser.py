@@ -4,35 +4,24 @@ import json
 import logging
 import re
 
-from pydantic import BaseModel, Field
+from app.services.llm_schemas import ResumeExtraction
 
 logger = logging.getLogger(__name__)
 
 
-class ParsedResume(BaseModel):
-    """Structured output of a parsed resume."""
+class ParsedResume(ResumeExtraction):
+    """Stored parse result: the extracted fields plus the app-side failure marker."""
 
-    full_name: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    location: str | None = None
-    linkedin_url: str | None = None
-    github_url: str | None = None
-    summary: str | None = None
-    skills: list[str] = Field(default_factory=list)
-    programming_languages: list[str] = Field(default_factory=list)
-    frameworks: list[str] = Field(default_factory=list)
-    tools: list[str] = Field(default_factory=list)
-    experience: list[dict] = Field(
-        default_factory=list
-    )  # [{title, company, duration, description}]
-    education: list[dict] = Field(default_factory=list)  # [{degree, institution, year, gpa}]
-    certifications: list[str] = Field(default_factory=list)
-    projects: list[dict] = Field(default_factory=list)  # [{name, description, tech_stack}]
     # Not extracted from the resume: set when the parse itself errored, so the
     # API/UI can tell "parsing failed" apart from a genuinely empty result.
     parse_failed: bool = False
 
+
+_PARSE_SYSTEM_PROMPT = (
+    "You are an expert resume parser. Extract structured information from the "
+    "resume text the user provides. Report only facts present in the text — "
+    "use null or empty lists for anything missing; never invent data."
+)
 
 _PARSE_PROMPT_TEMPLATE = """You are an expert resume parser. Extract structured information from the resume text below.
 Return ONLY a valid JSON object matching this exact schema. Do not include explanations.
@@ -84,26 +73,54 @@ def _build_llm():
         )
 
 
-def parse_resume(raw_text: str) -> ParsedResume:
+def _parse_via_instructor(raw_text: str) -> ParsedResume:
+    """Groq path: schema-validated extraction through the shared instructor client."""
+    from app.services.llm_client import call_structured  # noqa: PLC0415
+
+    extraction = call_structured(
+        response_model=ResumeExtraction,
+        system_prompt=_PARSE_SYSTEM_PROMPT,
+        user_prompt=raw_text[:4000],
+        temperature=0.0,
+    )
+    return ParsedResume(**extraction.model_dump())
+
+
+def _parse_via_langchain(raw_text: str) -> ParsedResume:
+    """Legacy prompt-to-JSON path: Ollama's default, and the Groq fallback."""
     from langchain_core.prompts import PromptTemplate  # noqa: PLC0415
 
+    prompt = PromptTemplate.from_template(_PARSE_PROMPT_TEMPLATE)
+    llm = _build_llm()
+    chain = prompt | llm
+
+    result = chain.invoke({"resume_text": raw_text[:4000]})
+
+    # ChatGroq returns an AIMessage; Ollama returns a string
+    raw_output = result.content if hasattr(result, "content") else str(result)
+    raw_output = raw_output.strip()
+
+    # Strip markdown code fences if present (handles ```json, ```JSON, trailing whitespace)
+    raw_output = re.sub(r"^```(?:json)?\s*\n?", "", raw_output, flags=re.IGNORECASE)
+    raw_output = re.sub(r"\n?```\s*$", "", raw_output)
+
+    data = json.loads(raw_output)
+    return ParsedResume(**data)
+
+
+def parse_resume(raw_text: str) -> ParsedResume:
+    from app.core.config import settings  # noqa: PLC0415
+
+    # This was the one Groq feature still doing manual json.loads on raw LLM
+    # output — instructor first, then the legacy path as a second chance, and
+    # only then the parse_failed marker.
+    if settings.USE_GROQ:
+        try:
+            return _parse_via_instructor(raw_text)
+        except Exception as e:
+            logger.warning("instructor resume parse failed (%s) — trying the legacy path", e)
     try:
-        prompt = PromptTemplate.from_template(_PARSE_PROMPT_TEMPLATE)
-        llm = _build_llm()
-        chain = prompt | llm
-
-        result = chain.invoke({"resume_text": raw_text[:4000]})
-
-        # ChatGroq returns an AIMessage; Ollama returns a string
-        raw_output = result.content if hasattr(result, "content") else str(result)
-        raw_output = raw_output.strip()
-
-        # Strip markdown code fences if present (handles ```json, ```JSON, trailing whitespace)
-        raw_output = re.sub(r"^```(?:json)?\s*\n?", "", raw_output, flags=re.IGNORECASE)
-        raw_output = re.sub(r"\n?```\s*$", "", raw_output)
-
-        data = json.loads(raw_output)
-        return ParsedResume(**data)
+        return _parse_via_langchain(raw_text)
     except Exception as e:
         logger.warning("Resume parsing failed, marking the resume unparsed: %s", e)
         return ParsedResume(parse_failed=True)

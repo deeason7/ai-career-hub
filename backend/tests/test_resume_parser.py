@@ -97,3 +97,61 @@ def test_successful_parse_carries_no_marker(monkeypatch):
     assert parsed.parse_failed is False
     assert parsed.full_name == "Jane Doe"
     assert parsed.skills == ["Python"]
+
+
+def test_groq_path_goes_through_instructor(monkeypatch):
+    from app.core.config import settings
+    from app.services.llm_schemas import ResumeExtraction
+
+    seen = {}
+
+    def fake_call_structured(**kwargs):
+        seen.update(kwargs)
+        return ResumeExtraction(full_name="Jane Doe", skills=["Python"])
+
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.llm_client.call_structured", fake_call_structured)
+
+    parsed = resume_parser.parse_resume("Jane Doe — Python developer")
+
+    assert parsed.parse_failed is False
+    assert parsed.full_name == "Jane Doe"
+    assert seen["response_model"] is ResumeExtraction
+
+
+def test_groq_instructor_failure_falls_back_to_legacy(monkeypatch):
+    from langchain_core.runnables import RunnableLambda
+
+    from app.core.config import settings
+
+    def boom(**_kwargs):
+        raise ValueError("schema mismatch")
+
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.llm_client.call_structured", boom)
+    fake_llm = RunnableLambda(lambda _prompt: '{"full_name": "Jane Doe"}')
+    monkeypatch.setattr(resume_parser, "_build_llm", lambda: fake_llm)
+
+    parsed = resume_parser.parse_resume("Jane Doe — Python developer")
+
+    assert parsed.parse_failed is False
+    assert parsed.full_name == "Jane Doe"
+
+
+def test_groq_both_paths_failing_sets_the_marker(monkeypatch):
+    from app.core.config import settings
+
+    def boom(**_kwargs):
+        raise ValueError("schema mismatch")
+
+    def dead_llm():
+        raise RuntimeError("ollama unreachable")
+
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.llm_client.call_structured", boom)
+    monkeypatch.setattr(resume_parser, "_build_llm", dead_llm)
+
+    parsed = resume_parser.parse_resume("Some resume text")
+
+    assert parsed.parse_failed is True
+    assert parsed.skills == []

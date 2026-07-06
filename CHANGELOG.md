@@ -10,7 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Guided product tour: a Back/Next rail that walks every page of the live app in journey order, re-syncs if you wander, can seed a sample job description, and restarts from the sidebar; Home offers it to newcomers.
 - Animated feature showcase on the sign-in screen — the landing now tells the whole product story (resumes + retrieval, ATS scoring, judged cover letters, skill gap, the Quick Apply agent, and the tracker) in pure CSS, with scroll-driven reveals where the browser supports them.
+
+## [4.3.2] - 2026-07-06
+
+### Added
 - Scheduled keep-warm + daily lifecycle cron via GitHub Actions (`.github/workflows/keepwarm.yml`); the Cloudflare Worker under `infra/keep-warm/` remains as a documented alternative scheduler.
+- Boot-time warning when a configured Redis is unreachable — each client's database is probed once at startup, so a dead or misconfigured Redis is one log line instead of a surprise on the first request that needs it.
+
+### Changed
+- `/health/warm` reports `db` and `redis` as `{status, detail}` objects like the vector block — a failing dependency now names its exception instead of a bare `"down"`. Both keep-warm schedulers accept the old and new shapes.
+- The shared Redis clients verify connections idle for more than 30 seconds before reusing them (`health_check_interval`), so provider-reaped idle connections reconnect instead of failing the first command after a quiet gap.
+- `VECTOR_BACKEND` is validated against the supported set (`chroma`, `qdrant`) at startup, and `/health/warm` now reports the vector store that was actually selected rather than the configured string, so a typo fails fast instead of silently falling back to Chroma.
+- Resume parsing runs through the same schema-validated structured-output path as the other AI features, so a malformed model response is caught and marked instead of slipping through as raw text.
+- Bumped `qdrant-client` to 1.18.0 to match the managed cluster and clear the client/server version-skew warning.
+
+### Fixed
+- The keep-warm probe retries before alerting: free-tier datastores can drop idle connections between pings and read "down" for a single sample, which turned one 2-second Redis blip into a failure email.
+- The Resumes page no longer crashes when the backend is unreachable or cold — it now shows an honest "couldn't reach the server / still waking up" state with a retry, matching the dashboard.
 
 ## [4.3.1] - 2026-07-03
 

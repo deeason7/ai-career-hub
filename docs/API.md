@@ -166,7 +166,7 @@ once a task has expired or never existed. The async operations are:
 Service metadata. **No auth.**
 
 ```json
-{ "service": "AI Career Hub", "version": "4.3.1", "status": "healthy", "docs": "/docs" }
+{ "service": "AI Career Hub", "version": "4.3.2", "status": "healthy", "docs": "/docs" }
 ```
 
 #### `GET /health`
@@ -176,10 +176,10 @@ Liveness probe. **No auth.** Returns `{ "status": "ok" }`.
 Deep warm-up probe. **No auth.** · Rate limit: 30/min. Touches Postgres (`SELECT 1`), Redis (`PING`), and the configured vector store with one cheap call each, then **always** returns `200` with per-dependency status — so a single degraded backend never makes the probe itself look down. An external scheduler hits it on a short interval to keep managed free-tier backends resident.
 
 ```json
-{ "api": "ok", "db": "ok", "redis": "ok", "vector": { "backend": "qdrant", "status": "ok" }, "ts": 1751457600 }
+{ "api": "ok", "db": { "status": "ok", "detail": null }, "redis": { "status": "ok", "detail": null }, "vector": { "backend": "qdrant", "status": "ok", "detail": null }, "ts": 1751457600 }
 ```
 
-`db` and `redis` are `ok` | `down` (`redis` is also `disabled` when unconfigured); `vector.status` is `ok` | `down`.
+`db.status` and `redis.status` are `ok` | `down` (`redis` is also `disabled` when unconfigured); `vector.status` is `ok` | `down`. A non-`ok` entry carries the exception class and message in `detail`.
 
 ---
 
