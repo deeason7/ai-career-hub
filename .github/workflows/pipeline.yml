@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main, develop]
+  # Redeploy the current main by hand — no empty commit needed.
+  workflow_dispatch:
 
 # Queue deploys on main; cancel stale runs on PRs.
 concurrency:
@@ -97,11 +99,18 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: pytest tests/ -v --tb=short
 
+  # AWS target — armed only while the AWS_DEPLOY_ENABLED repo variable is
+  # 'true'. Clearing it puts the AWS environment in standby: the workflow,
+  # scripts and infra docs all stay in place, and re-arming is a one-variable
+  # flip rather than a re-setup.
   deploy:
-    name: Deploy
+    name: Deploy (AWS)
     runs-on: ubuntu-latest
     needs: ci
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && vars.AWS_DEPLOY_ENABLED == 'true'
     environment: production  # OIDC sub: repo:deeason7/ai-career-hub:environment:production
 
     env:
@@ -302,17 +311,19 @@ jobs:
   # Free-tier target — deploys from the SAME main commit as the AWS job above,
   # in parallel, scoped to its own environment. Off until vars.FREE_DEPLOY_ENABLED
   # is 'true' (and the free-prod environment + HF_TOKEN exist). The Space builds
-  # backend/Dockerfile itself; the Streamlit frontend redeploys from main on its own.
+  # backend/Dockerfile itself; the Streamlit frontend redeploys from main on its
+  # own. The upload is not the deploy: the job then waits out the Space rebuild
+  # and requires a healthy /health/warm, so a broken image fails loudly here.
   deploy-free:
     name: Deploy (free-tier)
     runs-on: ubuntu-latest
     needs: ci
     if: >-
       github.ref == 'refs/heads/main'
-      && github.event_name == 'push'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       && vars.FREE_DEPLOY_ENABLED == 'true'
     environment: free-prod
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     permissions:
       contents: read
@@ -353,4 +364,63 @@ jobs:
               ],
           )
           print(f"Synced backend/ -> {os.environ['HF_SPACE']}")
+          PY
+
+      - name: Wait for the Space rebuild and verify health
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE || 'Deeason/careerhub' }}
+          API_BASE: ${{ vars.FREE_API_BASE || 'https://deeason-careerhub.hf.space' }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import time
+
+          import requests
+          from huggingface_hub import HfApi
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          space = os.environ["HF_SPACE"]
+          base = os.environ["API_BASE"]
+
+          # The mirror commit queues a rebuild. A no-op sync (nothing changed)
+          # never leaves RUNNING, so plain RUNNING is accepted after a grace
+          # period instead of insisting a build was observed.
+          fatal = {"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR", "NO_APP_FILE", "PAUSED"}
+          start = time.time()
+          deadline = start + 12 * 60
+          seen_building = False
+          stage = ""
+          while time.time() < deadline:
+              stage = str(api.get_space_runtime(space).stage)
+              if stage in fatal:
+                  sys.exit(f"Space entered {stage}")
+              if "BUILDING" in stage:
+                  seen_building = True
+              elif stage == "RUNNING" and (seen_building or time.time() - start > 180):
+                  break
+              time.sleep(15)
+          else:
+              sys.exit(f"Space still {stage} after 12 minutes")
+          print(f"Space runtime: RUNNING (rebuild observed: {seen_building})")
+
+          # One warm call proves the app answers and its datastores came back.
+          # Free-tier providers drop idle connections, so probe a few times
+          # before declaring the deploy bad (same tolerance as keepwarm.yml).
+          for attempt in range(1, 4):
+              try:
+                  body = requests.get(f"{base}/health/warm", timeout=60).json()
+              except Exception as exc:  # noqa: BLE001 — any failure just retries
+                  body = {"error": str(exc)}
+              print(f"attempt {attempt}: {body}")
+              db = body.get("db", {}).get("status")
+              vector = body.get("vector", {}).get("status")
+              redis_state = body.get("redis", {}).get("status")
+              if db == "ok" and vector == "ok" and redis_state in ("ok", "disabled"):
+                  version = requests.get(base, timeout=30).json().get("version")
+                  print(f"Deployed and healthy — version {version}")
+                  sys.exit(0)
+              time.sleep(30)
+          sys.exit("Space is serving but its dependencies stayed unhealthy")
           PY
