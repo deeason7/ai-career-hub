@@ -16,7 +16,7 @@ psycopg[binary]==3.2.1
 greenlet>=3.4.0
 
 # --- Session / Rate Limiting ---
-redis==5.0.7
+redis==8.0.1
 
 # --- AI & NLP ---
 langchain-community==0.4.2
