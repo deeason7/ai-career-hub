@@ -1,20 +1,21 @@
 # Deployment Guide — AI Career Hub
 
-Production deployment on AWS, documented below, plus a free-tier alternative (Hugging Face Spaces + Streamlit Community Cloud) for a zero-cost deploy. Platform version: **v4.3.0**.
+Production deployment on AWS, documented below, plus a free-tier alternative (Hugging Face Spaces + Streamlit Community Cloud) for a zero-cost deploy. Each target sits behind its own switch — see [Deploy Targets](#deploy-targets).
 
 ---
 
 ## Table of Contents
 
 1. [Current State](#current-state)
-2. [AWS Infrastructure](#aws-infrastructure)
-3. [Standard Deploy](#standard-deploy)
-4. [Business Hours Scheduler](#business-hours-scheduler)
-5. [Wake on Visit](#wake-on-visit)
-6. [TLS / HTTPS](#tls--https)
-7. [Developer Tooling](#developer-tooling)
-8. [Billing Controls](#billing-controls)
-9. [Free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud)](#free-tier-deployment-hugging-face-spaces--streamlit-community-cloud)
+2. [Deploy Targets](#deploy-targets)
+3. [AWS Infrastructure](#aws-infrastructure)
+4. [Standard Deploy](#standard-deploy)
+5. [Business Hours Scheduler](#business-hours-scheduler)
+6. [Wake on Visit](#wake-on-visit)
+7. [TLS / HTTPS](#tls--https)
+8. [Developer Tooling](#developer-tooling)
+9. [Billing Controls](#billing-controls)
+10. [Free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud)](#free-tier-deployment-hugging-face-spaces--streamlit-community-cloud)
 
 ---
 
@@ -31,8 +32,29 @@ Production deployment on AWS, documented below, plus a free-tier alternative (Hu
 | Auto-Sleep | **Live** | EventBridge Scheduler stops EC2 + RDS 90 min after each wake (off-hours) |
 | Boot Deploy | **Live** | systemd service: `git pull + docker compose up` runs on every EC2 boot |
 | CI | **Live** | GitHub Actions: ruff lint + format check + pytest on push to `main` / `develop` |
-| CD | **Live** | GitHub Actions: ECR build + push → EC2 SSM deploy on push to `main` |
+| CD | **Switchable** | Per-target deploys on push to `main` — see [Deploy Targets](#deploy-targets) |
 | Pre-commit | **Live** | ruff lint + format + hygiene hooks — install with `pre-commit install` |
+
+---
+
+## Deploy Targets
+
+One codebase, two production targets, each behind its own repository variable so
+either can be paused without touching the workflow:
+
+| Target | Switch (repo variable) | What a green `main` push does |
+|---|---|---|
+| AWS (EC2 + RDS + ECR) | `AWS_DEPLOY_ENABLED=true` | Build images → push to ECR → SSM deploy on EC2 → health check → auto-rollback on failure |
+| Free tier (HF Space + Neon + Upstash + Qdrant) | `FREE_DEPLOY_ENABLED=true` | Mirror `backend/` to the Space → wait for the rebuild → require a healthy `/health/warm` |
+
+- With `AWS_DEPLOY_ENABLED` unset, the AWS environment is in **standby**: every
+  script, workflow and doc stays in the repo, the deploy job simply skips, and
+  re-arming is a one-variable flip — no re-setup.
+- The Streamlit Community Cloud frontend redeploys itself from `main`; the
+  free-tier job verifies the API side end-to-end (Space rebuilt, DB and vector
+  store answering) so a broken image can't land silently.
+- Need to redeploy the current `main` without a commit? Actions → Pipeline →
+  *Run workflow* (`workflow_dispatch` re-runs CI, then the armed deploy jobs).
 
 ---
 

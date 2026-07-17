@@ -31,7 +31,16 @@ if _redis_host and not _testing:
         )
     else:
         _storage_uri = f"{_redis_scheme}://{_redis_host}:{_redis_port}/0"
-    limiter = Limiter(key_func=get_remote_address, storage_uri=_storage_uri)
+    # Fail open: if Redis dies, slowapi's default is to raise on every decorated
+    # route — login and register included — while /health (no limiter) keeps
+    # reporting ok. Fall back to per-process in-memory counting instead, and
+    # swallow anything the fallback itself can't handle.
+    limiter = Limiter(
+        key_func=get_remote_address,
+        storage_uri=_storage_uri,
+        in_memory_fallback_enabled=True,
+        swallow_errors=True,
+    )
 else:
     # Local dev (no Redis) or CI — use in-memory storage.
     limiter = Limiter(key_func=get_remote_address)
