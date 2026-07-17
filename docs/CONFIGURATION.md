@@ -73,7 +73,7 @@ and production uses Groq through `instructor`; otherwise it falls back to Ollama
 | Variable | Required | Default | Description |
 |---|:--:|---|---|
 | `GROQ_API_KEY` | — | `""` | Groq API key — **takes priority over Ollama when set** (free key at console.groq.com) |
-| `GROQ_LLM_MODEL` | — | `llama-3.1-8b-instant` | Groq model id |
+| `GROQ_LLM_MODEL` | — | `openai/gpt-oss-20b` | Groq model id |
 | `OLLAMA_BASE_URL` | — | `http://ollama:11434` | Ollama endpoint (local dev) |
 | `OLLAMA_LLM_MODEL` | — | `llama3.2:3b` | Ollama chat model |
 | `OLLAMA_EMBED_MODEL` | — | `nomic-embed-text` | Ollama embedding model |

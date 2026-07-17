@@ -214,7 +214,7 @@ The same commit also serves a **zero-cost mirror** on managed free tiers (Stream
 | `REDIS_PORT` | — | `6379` | Redis port |
 | `REDIS_PASSWORD` | — | `""` | Redis auth password |
 | `GROQ_API_KEY` | — | `""` | Groq API key — takes priority over Ollama when set |
-| `GROQ_LLM_MODEL` | — | `llama-3.1-8b-instant` | Groq model ID |
+| `GROQ_LLM_MODEL` | — | `openai/gpt-oss-20b` | Groq model ID |
 | `OLLAMA_BASE_URL` | — | `http://ollama:11434` | Ollama endpoint (local dev) |
 | `OLLAMA_LLM_MODEL` | — | `llama3.2:3b` | Ollama LLM model |
 | `OLLAMA_EMBED_MODEL` | — | `nomic-embed-text` | Ollama embedding model |
