@@ -66,6 +66,14 @@ ddgs>=9.0.0
 # CVE-2026-45829 (chromadb):
 #   Accepted risk. ChromaDB collections are per-user and server-side only.
 #   No user-controlled query paths to the underlying storage layer.
+# PYSEC-2026-3447 / CVE-2026-59890 (setuptools MANIFEST.in Unicode-normalization bypass):
+#   Build-tooling only — affects sdist creation on macOS APFS/HFS+ filesystems.
+#   setuptools is not a declared dependency here; the flagged copy is pip-audit's own
+#   resolution environment. We never build sdists, and images build on Linux.
+# PYSEC-2026-2290 / CVE-2026-5241 (transformers LightGlue trust_remote_code bypass RCE):
+#   Requires loading an attacker-controlled model repo via AutoModel.from_pretrained().
+#   We only load all-MiniLM-L6-v2 from HF Hub at startup — no user-controlled model
+#   paths. No fixed release exists (all versions through 5.2.0 are affected).
 groq>=0.9.0,<1.0.0
 instructor>=1.3.0
 
