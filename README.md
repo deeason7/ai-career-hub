@@ -214,7 +214,7 @@ The same commit also serves a **zero-cost mirror** on managed free tiers (Stream
 | `REDIS_PORT` | — | `6379` | Redis port |
 | `REDIS_PASSWORD` | — | `""` | Redis auth password |
 | `GROQ_API_KEY` | — | `""` | Groq API key — takes priority over Ollama when set |
-| `GROQ_LLM_MODEL` | — | `llama-3.1-8b-instant` | Groq model ID |
+| `GROQ_LLM_MODEL` | — | `openai/gpt-oss-20b` | Groq model ID |
 | `OLLAMA_BASE_URL` | — | `http://ollama:11434` | Ollama endpoint (local dev) |
 | `OLLAMA_LLM_MODEL` | — | `llama3.2:3b` | Ollama LLM model |
 | `OLLAMA_EMBED_MODEL` | — | `nomic-embed-text` | Ollama embedding model |
@@ -352,6 +352,13 @@ Off-Hours:
 ## Release History
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
+
+### v4.4.1 — Fail-Open Rate Limiting & Switchable Deploy Targets
+- **Rate limiting fails open** — if the limiter's Redis storage dies, it degrades to in-memory counting instead of raising on every decorated route; a dead Redis used to 500 login and register while `/health` stayed green
+- **Real client IPs behind proxies** — uvicorn trusts `X-Forwarded-For` and nginx sends `$remote_addr`, so per-IP limits and hashed audit IPs key on the visitor, not the proxy hop
+- **Per-target deploy switches** — the AWS deploy is gated by an `AWS_DEPLOY_ENABLED` repository variable (mirroring `FREE_DEPLOY_ENABLED`) and the pipeline supports manual dispatch, so either target can be paused or re-armed without editing the workflow
+- **Verified free-tier deploys** — the deploy job waits for the Space rebuild and requires a healthy `/health/warm` before reporting success
+- **Groq model refresh** — the default model is now `openai/gpt-oss-20b`, ahead of `llama-3.1-8b-instant`'s 2026-08-16 decommissioning
 
 ### v4.4.0 — Guided Product Tour & Landing Showcase
 - **Guided product tour** — a Back/Next rail that walks every page in journey order (Home → Resumes → Job Match → Cover Letter → Tracker → Quick Apply), seeds a sample job description, and restarts from the sidebar; Home offers it to first-time visitors

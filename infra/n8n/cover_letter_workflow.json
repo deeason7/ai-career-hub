@@ -28,7 +28,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert cover letter writer. Write a professional, honest cover letter based ONLY on the resume provided. Never fabricate skills, experience, or metrics.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"RESUME:\\n{{ $json.resume_text }}\\n\\nJOB DESCRIPTION:\\n{{ $json.job_description }}\\n\\nWrite a cover letter tailored to this job. Base it strictly on the resume.\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 2048\n}",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-20b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert cover letter writer. Write a professional, honest cover letter based ONLY on the resume provided. Never fabricate skills, experience, or metrics.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"RESUME:\\n{{ $json.resume_text }}\\n\\nJOB DESCRIPTION:\\n{{ $json.job_description }}\\n\\nWrite a cover letter tailored to this job. Base it strictly on the resume.\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 2048\n}",
         "options": {}
       },
       "id": "groq-generate",
@@ -51,7 +51,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a rigorous QA reviewer. Compare the cover letter against the resume and score it. Respond with JSON: {\\\"honesty_score\\\": 1-10, \\\"tone_score\\\": 1-10, \\\"flags\\\": [], \\\"reasoning\\\": \\\"...\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"RESUME:\\n{{ $node['Webhook Trigger'].json.resume_text }}\\n\\nCOVER LETTER:\\n{{ $node['Groq: Generate Letter'].json.choices[0].message.content }}\\n\\nScore this cover letter.\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 1024,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-20b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a rigorous QA reviewer. Compare the cover letter against the resume and score it. Respond with JSON: {\\\"honesty_score\\\": 1-10, \\\"tone_score\\\": 1-10, \\\"flags\\\": [], \\\"reasoning\\\": \\\"...\\\"}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"RESUME:\\n{{ $node['Webhook Trigger'].json.resume_text }}\\n\\nCOVER LETTER:\\n{{ $node['Groq: Generate Letter'].json.choices[0].message.content }}\\n\\nScore this cover letter.\"\n    }\n  ],\n  \"temperature\": 0.1,\n  \"max_tokens\": 1024,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
         "options": {}
       },
       "id": "groq-qa-review",

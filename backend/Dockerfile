@@ -22,5 +22,10 @@ EXPOSE 8000
 # Alembic migrations run as a non-blocking asyncio background task in main.py
 # (see _run_migrations_when_db_ready). This lets uvicorn start immediately
 # without waiting for RDS — critical for the Wake-on-Visit <90s boot target.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+#
+# --proxy-headers: the app only ever runs behind a proxy (nginx on EC2, the
+# HF router on Spaces), so trust X-Forwarded-For — otherwise every client
+# shares the proxy's IP and per-IP rate limits collapse into one bucket.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]
 

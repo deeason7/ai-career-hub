@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Career Hub"
-    VERSION: str = "4.4.0"
+    VERSION: str = "4.4.1"
     API_V1_STR: str = "/api/v1"
     PRODUCTION: bool = False  # Set to True via env var in production to hide /docs
 
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     # AI — Groq (takes priority over Ollama when set; get a key at console.groq.com)
     GROQ_API_KEY: str = ""
-    GROQ_LLM_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_LLM_MODEL: str = "openai/gpt-oss-20b"
 
     # Vector store for RAG embeddings — "chroma" (persistent local) or "qdrant" (managed).
     # Literal so a typo'd value refuses to boot instead of silently selecting Chroma.
