@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.4.1] - 2026-07-17
+
 ### Changed
 - Default Groq model is now `openai/gpt-oss-20b` — Groq is decommissioning `llama-3.1-8b-instant` on 2026-08-16, and this is its recommended replacement (same JSON-mode structured-output support the app relies on).
+- Deploys are per-target switches: the AWS job runs only when the `AWS_DEPLOY_ENABLED` repository variable is `true` (mirroring `FREE_DEPLOY_ENABLED`), and the pipeline accepts manual `workflow_dispatch` runs — either target can be paused or re-armed without editing the workflow.
+- The free-tier deploy verifies itself: after uploading to the Space it waits for the rebuild to reach a running state, then requires a healthy `/health/warm` (db and vector ok, redis ok or disabled) before the job goes green — an upload that never becomes a working deployment now fails the pipeline instead of passing silently.
+
+### Fixed
+- Rate limiting fails open instead of failing closed: if the limiter's Redis storage dies, slowapi now falls back to per-process in-memory counting (`in_memory_fallback_enabled` + `swallow_errors`) rather than raising on every decorated route — a dead Redis used to turn login, register, and every other rate-limited endpoint into HTTP 500s while `/health` stayed green. A regression test drives requests against a dead store and asserts they keep answering 200/429, never 500.
+- Per-IP rate limits key on the real client behind proxies: uvicorn now trusts `X-Forwarded-For` (`--proxy-headers`, safe because the app is only ever reachable through nginx or the Space router), and nginx sends `$remote_addr` — replacing the client-appendable `$proxy_add_x_forwarded_for` — so limits and hashed audit-log IPs track the visitor instead of collapsing every user into the proxy hop's single bucket.
 
 ## [4.4.0] - 2026-07-06
 
