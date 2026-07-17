@@ -353,6 +353,13 @@ Off-Hours:
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
 
+### v4.4.1 — Fail-Open Rate Limiting & Switchable Deploy Targets
+- **Rate limiting fails open** — if the limiter's Redis storage dies, it degrades to in-memory counting instead of raising on every decorated route; a dead Redis used to 500 login and register while `/health` stayed green
+- **Real client IPs behind proxies** — uvicorn trusts `X-Forwarded-For` and nginx sends `$remote_addr`, so per-IP limits and hashed audit IPs key on the visitor, not the proxy hop
+- **Per-target deploy switches** — the AWS deploy is gated by an `AWS_DEPLOY_ENABLED` repository variable (mirroring `FREE_DEPLOY_ENABLED`) and the pipeline supports manual dispatch, so either target can be paused or re-armed without editing the workflow
+- **Verified free-tier deploys** — the deploy job waits for the Space rebuild and requires a healthy `/health/warm` before reporting success
+- **Groq model refresh** — the default model is now `openai/gpt-oss-20b`, ahead of `llama-3.1-8b-instant`'s 2026-08-16 decommissioning
+
 ### v4.4.0 — Guided Product Tour & Landing Showcase
 - **Guided product tour** — a Back/Next rail that walks every page in journey order (Home → Resumes → Job Match → Cover Letter → Tracker → Quick Apply), seeds a sample job description, and restarts from the sidebar; Home offers it to first-time visitors
 - **Animated landing showcase** — the sign-in screen tells the whole product story in pure CSS (ATS gauge, judged cover letters, the agentic pipeline, the tracker), with scroll-driven reveals where the browser supports them
