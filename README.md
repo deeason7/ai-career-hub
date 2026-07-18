@@ -15,18 +15,12 @@ Upload your resume, score it against job descriptions, generate honest cover let
 
 | Service | URL |
 |---|---|
-| **Application** | https://careerhub.deeason.com.np |
-| **Health** | https://careerhub.deeason.com.np/health |
+| **Application** | https://deeason-career.streamlit.app |
+| **API health** | https://deeason-careerhub.hf.space/health/warm |
 
-> Hosted on AWS (EC2 t3.small + RDS PostgreSQL db.t3.micro, private VPC).
-> **Cost-optimised:** Always-on Mon–Fri 9 AM–6 PM ET for recruiter access. Wake-on-Visit (~90s cold start) outside business hours.
+> Runs entirely on managed free tiers (Streamlit Community Cloud + Hugging Face Spaces + Neon + Upstash + Qdrant Cloud) — a $0/month production footprint, selected purely by environment config.
 
-The same commit also serves a **zero-cost mirror** on managed free tiers (Streamlit Community Cloud + Hugging Face Spaces + Neon + Upstash + Qdrant Cloud), selected entirely by environment config — see [DEPLOYMENT.md](./DEPLOYMENT.md):
-
-| Service | URL |
-|---|---|
-| **Application (free tier)** | https://deeason-career.streamlit.app |
-| **API health (free tier)** | https://deeason-careerhub.hf.space/health/warm |
+The same commit also targets a fully scripted **AWS deployment** (EC2 + RDS in a private VPC, ECR images, SSM-driven deploys, wake-on-visit cold starts, business-hours scheduling). That environment is currently **hibernated at zero cost**: every resource is recreated by [`infra/scripts/`](./infra/scripts), and the deploy pipeline re-arms with a single repository variable — see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
 
@@ -54,6 +48,9 @@ The same commit also serves a **zero-cost mirror** on managed free tiers (Stream
 ---
 
 ## Architecture
+
+The AWS reference architecture (hibernated — the free-tier target maps the same
+FastAPI + Postgres + Redis + vector stack onto HF Spaces, Neon, Upstash, and Qdrant):
 
 ```
   User → careerhub.deeason.com.np
@@ -88,7 +85,7 @@ The same commit also serves a **zero-cost mirror** on managed free tiers (Stream
                          └────────────────────────┘
                                      │ Groq API
                                      ▼
-                             LLaMA 3.1 8B Instant
+                             openai/gpt-oss-20b
 ```
 
 **Cover letter generation** dispatches to n8n Cloud when configured — falls back to `BackgroundTasks`.
@@ -96,7 +93,7 @@ The same commit also serves a **zero-cost mirror** on managed free tiers (Stream
 **Structured output** via `instructor` + Pydantic v2 — all LLM responses validated before persisting.
 **ATS scoring** uses `sentence-transformers` `all-MiniLM-L6-v2` (80 MB, CPU, cached via `lru_cache`).
 **Secrets** pulled from AWS SSM Parameter Store at deploy time. Zero secrets in source code or git history.
-**Deployments** are fully automated — push to `main` triggers GitHub Actions to build ECR images and deploy to EC2 via SSM.
+**Deployments** are fully automated — a push to `main` runs GitHub Actions, and each target (AWS, free tier) deploys only when its repository-variable switch is armed.
 
 ---
 
@@ -327,6 +324,7 @@ Test coverage: auth, resume upload, ATS scoring, job tracker CRUD, LLM schema va
 
 | Mode | Schedule | Estimated cost | UX |
 |---|---|---|---|
+| **Hibernated** (current) | — | $0/mo | Free-tier deployment serves live traffic |
 | **Always-On** | Mon–Fri 9 AM–6 PM ET | ~$7.50/mo | Instant load |
 | **Wake-on-Visit** | All other times | ~$0.50/mo extra | ~90s cold start |
 | **Always-On 24/7** (baseline) | — | ~$27/mo | — |

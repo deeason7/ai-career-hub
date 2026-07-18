@@ -31,8 +31,8 @@ at `/docs` (Swagger UI) when running locally. The raw schema is served at
 All application endpoints are mounted under a versioned prefix:
 
 ```
-https://careerhub.deeason.com.np/api/v1
-http://localhost:8000/api/v1        # local Docker
+https://deeason-careerhub.hf.space/api/v1   # live (free-tier deployment)
+http://localhost:8000/api/v1                # local Docker
 ```
 
 Health and service-metadata endpoints (`GET /`, `GET /health`, and
