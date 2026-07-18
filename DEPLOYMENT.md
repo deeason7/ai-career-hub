@@ -1,6 +1,6 @@
 # Deployment Guide — AI Career Hub
 
-Production deployment on AWS, documented below, plus a free-tier alternative (Hugging Face Spaces + Streamlit Community Cloud) for a zero-cost deploy. Each target sits behind its own switch — see [Deploy Targets](#deploy-targets).
+Two production targets from one codebase: a zero-cost free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud) that serves live traffic, and the fully scripted AWS environment documented below, currently hibernated. Each target sits behind its own switch — see [Deploy Targets](#deploy-targets).
 
 ---
 
@@ -23,14 +23,15 @@ Production deployment on AWS, documented below, plus a free-tier alternative (Hu
 
 | Component | Status | Notes |
 |---|---|---|
-| EC2 stack | **On-demand** | Sleeps when idle. Boots automatically on visit (Wake-on-Visit, ~90s). Auto-stops after 90 min of inactivity |
-| RDS PostgreSQL | **On-demand** | Starts and stops alongside EC2 via Lambda wake controller |
-| Business Hours | **Live** | EC2 + RDS auto-start at 9 AM ET Mon–Fri; auto-stop at 6 PM ET |
-| Domain | **Live** | `careerhub.deeason.com.np` |
-| TLS | **Live** | HTTPS via Let's Encrypt (certbot DNS-01), nginx SSL termination in Docker |
-| Wake on Visit | **Live** | Route 53 failover → CloudFront → S3 splash page → Lambda boots EC2 + RDS |
-| Auto-Sleep | **Live** | EventBridge Scheduler stops EC2 + RDS 90 min after each wake (off-hours) |
-| Boot Deploy | **Live** | systemd service: `git pull + docker compose up` runs on every EC2 boot |
+| Free-tier stack | **Live** | HF Space (API) + Streamlit Cloud (frontend) + Neon + Upstash + Qdrant — deployed and health-verified by CI on every `main` push |
+| EC2 stack | **Hibernated** | Deprovisioned to $0; recreated by `infra/scripts/` when re-arming |
+| RDS PostgreSQL | **Hibernated** | Deleted to a final snapshot; restore when re-arming |
+| Business Hours | **Hibernated** | EventBridge schedules removed; `setup-business-hours.sh` recreates them |
+| Domain | **Parked** | `careerhub.deeason.com.np` records removed while hibernated; the hosted zone remains |
+| TLS | **Scripted** | Let's Encrypt (certbot DNS-01) reissues on a recreated instance; nginx terminates SSL in Docker |
+| Wake on Visit | **Hibernated** | `setup-wake-on-visit.sh` provisions the failover → splash → Lambda flow; `--teardown` removes it |
+| Auto-Sleep | **Hibernated** | Recreated by `schedule-sleep.sh` when re-arming |
+| Boot Deploy | **Scripted** | systemd service: `git pull + docker compose up` runs on every EC2 boot |
 | CI | **Live** | GitHub Actions: ruff lint + format check + pytest on push to `main` / `develop` |
 | CD | **Switchable** | Per-target deploys on push to `main` — see [Deploy Targets](#deploy-targets) |
 | Pre-commit | **Live** | ruff lint + format + hygiene hooks — install with `pre-commit install` |
@@ -47,9 +48,11 @@ either can be paused without touching the workflow:
 | AWS (EC2 + RDS + ECR) | `AWS_DEPLOY_ENABLED=true` | Build images → push to ECR → SSM deploy on EC2 → health check → auto-rollback on failure |
 | Free tier (HF Space + Neon + Upstash + Qdrant) | `FREE_DEPLOY_ENABLED=true` | Mirror `backend/` to the Space → wait for the rebuild → require a healthy `/health/warm` |
 
-- With `AWS_DEPLOY_ENABLED` unset, the AWS environment is in **standby**: every
-  script, workflow and doc stays in the repo, the deploy job simply skips, and
-  re-arming is a one-variable flip — no re-setup.
+- With `AWS_DEPLOY_ENABLED` unset the AWS deploy job simply skips. The AWS
+  environment itself is currently **hibernated**: compute, database, and wake
+  infrastructure are deprovisioned to $0/mo, with the database preserved as a
+  final RDS snapshot. Re-arming = re-run the provisioning scripts in
+  `infra/scripts/`, restore the snapshot, then set the variable to `true`.
 - The Streamlit Community Cloud frontend redeploys itself from `main`; the
   free-tier job verifies the API side end-to-end (Space rebuilt, DB and vector
   store answering) so a broken image can't land silently.
