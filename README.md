@@ -351,6 +351,12 @@ Off-Hours:
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
 
+### v4.4.2 — Reliable Document Cleanup
+- **Deletes cascade properly** — resumes and cover letters now remove their child rows instead of trying to orphan them; because both child foreign keys are `NOT NULL`, the ORM's default detach-the-children behaviour made every such delete fail
+- **The nightly TTL cleanup works again** — it had failed on every run since the first documents reached their 15-day expiry, and a rolled-back delete meant the same rows re-failed the next night
+- **Resume deletion fixed** — `DELETE /resumes/{resume_id}` returned HTTP 500 for any resume with a cover letter attached
+- **Diagnosable failures** — the lifecycle endpoint names the failing exception class and logs the traceback, and the keep-warm workflow keeps the response body in its run log
+
 ### v4.4.1 — Fail-Open Rate Limiting & Switchable Deploy Targets
 - **Rate limiting fails open** — if the limiter's Redis storage dies, it degrades to in-memory counting instead of raising on every decorated route; a dead Redis used to 500 login and register while `/health` stayed green
 - **Real client IPs behind proxies** — uvicorn trusts `X-Forwarded-For` and nginx sends `$remote_addr`, so per-IP limits and hashed audit IPs key on the visitor, not the proxy hop
