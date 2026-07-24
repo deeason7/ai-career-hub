@@ -32,7 +32,13 @@ class Resume(ResumeBase, table=True):
 
     # Relationships
     user: Optional["User"] = Relationship(back_populates="resumes")
-    cover_letters: list["CoverLetter"] = Relationship(back_populates="resume")
+    # A cover letter cannot outlive its resume — resume_id is NOT NULL, and the
+    # default "unlink the children" behaviour would try to null it. This FK has
+    # no ON DELETE rule, so the ORM has to delete the letters itself.
+    cover_letters: list["CoverLetter"] = Relationship(
+        back_populates="resume",
+        sa_relationship_kwargs={"cascade": "all, delete"},
+    )
 
 
 class ResumeCreate(SQLModel):

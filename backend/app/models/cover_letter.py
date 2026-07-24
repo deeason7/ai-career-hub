@@ -41,7 +41,13 @@ class CoverLetter(CoverLetterBase, table=True):
     # Relationships
     user: Optional["User"] = Relationship(back_populates="cover_letters")
     resume: Optional["Resume"] = Relationship(back_populates="cover_letters")
-    revisions: list["CoverLetterRevision"] = Relationship(back_populates="cover_letter")
+    # cover_letter_id is NOT NULL, so the default unlink-on-delete would fail.
+    # The FK already declares ON DELETE CASCADE — passive_deletes hands the work
+    # to Postgres instead of loading every revision to delete it row by row.
+    revisions: list["CoverLetterRevision"] = Relationship(
+        back_populates="cover_letter",
+        sa_relationship_kwargs={"cascade": "all, delete", "passive_deletes": True},
+    )
 
     def set_qa_flags(self, flags: list[str]) -> None:
         """Serialize QA flags list to JSON for DB storage."""
