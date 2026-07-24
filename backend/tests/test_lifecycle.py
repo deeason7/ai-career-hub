@@ -315,3 +315,81 @@ async def test_reaper_marks_only_old_processing_rows(client, auth_headers):
     with Session(sync_engine) as session:
         assert session.get(CoverLetter, old_id).status == "failure"
         assert session.get(CoverLetter, fresh_id).status == "processing"
+
+
+# ── Cascade behaviour (real DB) ──────────────────────────────────────────────
+# The mocked cases above never exercise a foreign key. Deleting a parent whose
+# children carry a NOT NULL FK is precisely where the ORM's default "unlink the
+# children" behaviour blows up, so these two run against Postgres.
+
+
+@pytest.mark.asyncio
+async def test_cleanup_removes_expired_letter_with_its_revisions(active_resume):
+    """An expired letter takes its revision rows with it."""
+    from sqlmodel import Session
+
+    from app.core.db import sync_engine
+    from app.models.cover_letter import CoverLetter
+    from app.models.cover_letter_revision import CoverLetterRevision
+    from app.models.resume import Resume
+
+    resume_id = uuid.UUID(active_resume)
+    with Session(sync_engine) as session:
+        letter = CoverLetter(
+            user_id=session.get(Resume, resume_id).user_id,
+            resume_id=resume_id,
+            job_description="expired letter",
+            generated_text="v0",
+            status="completed",
+            expires_at=datetime.now(UTC) - timedelta(days=1),
+        )
+        session.add(letter)
+        session.commit()
+        session.refresh(letter)
+        revision = CoverLetterRevision(
+            cover_letter_id=letter.id,
+            version_number=1,
+            generated_text="v1",
+            user_command="make it shorter",
+        )
+        session.add(revision)
+        session.commit()
+        letter_id, revision_id = letter.id, revision.id
+
+    run_lifecycle_cleanup(sync_engine)
+
+    with Session(sync_engine) as session:
+        assert session.get(CoverLetter, letter_id) is None
+        assert session.get(CoverLetterRevision, revision_id) is None
+
+
+@pytest.mark.asyncio
+async def test_cleanup_removes_expired_resume_with_attached_letters(active_resume):
+    """An expired resume takes its cover letters with it, expired or not."""
+    from sqlmodel import Session
+
+    from app.core.db import sync_engine
+    from app.models.cover_letter import CoverLetter
+    from app.models.resume import Resume
+
+    resume_id = uuid.UUID(active_resume)
+    with Session(sync_engine) as session:
+        resume = session.get(Resume, resume_id)
+        resume.is_permanent = False
+        resume.expires_at = datetime.now(UTC) - timedelta(days=1)
+        letter = CoverLetter(
+            user_id=resume.user_id,
+            resume_id=resume_id,
+            job_description="still well inside its own TTL",
+            expires_at=datetime.now(UTC) + timedelta(days=LIFECYCLE_DAYS),
+        )
+        session.add(resume)
+        session.add(letter)
+        session.commit()
+        letter_id = letter.id
+
+    run_lifecycle_cleanup(sync_engine)
+
+    with Session(sync_engine) as session:
+        assert session.get(Resume, resume_id) is None
+        assert session.get(CoverLetter, letter_id) is None
