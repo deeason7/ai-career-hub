@@ -66,9 +66,15 @@ jobs:
     environment: free-prod
     steps:
       - name: Purge expired documents (15-day TTL)
+        # Keep the response body — the endpoint names the failure class on a 500,
+        # and discarding it once cost a full offline repro to work out why the
+        # purge was wedged.
         run: |
-          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 \
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w "%{http_code}" --max-time 60 \
             -X POST -H "X-Admin-Secret: ${{ secrets.ADMIN_SECRET }}" \
             "$API_BASE/api/v1/admin/lifecycle/run")
           echo "cleanup HTTP $code"
+          cat "$body"
+          echo
           [ "$code" = "200" ]

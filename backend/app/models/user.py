@@ -36,9 +36,17 @@ class User(UserBase, table=True):
         ),
     )
 
-    resumes: list["Resume"] = Relationship(back_populates="user")
-    cover_letters: list["CoverLetter"] = Relationship(back_populates="user")
-    job_applications: list["JobApplication"] = Relationship(back_populates="user")
+    # Every child carries a NOT NULL user_id, so deleting an account has to take
+    # the rows with it rather than trying to orphan them.
+    resumes: list["Resume"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
+    )
+    cover_letters: list["CoverLetter"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
+    )
+    job_applications: list["JobApplication"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
+    )
 
 
 class UserCreate(UserBase):
