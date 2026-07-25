@@ -24,7 +24,18 @@ def _verify_admin_secret(x_admin_secret: Annotated[str | None, Header()] = None)
 @router.post("/lifecycle/run", dependencies=[Depends(_verify_admin_secret)])
 def trigger_lifecycle_cleanup() -> dict:
     """Run the document lifecycle cleanup. Requires X-Admin-Secret header."""
-    result = run_lifecycle_cleanup(sync_engine)
-    reaped = reap_stuck_cover_letters(sync_engine)
+    try:
+        result = run_lifecycle_cleanup(sync_engine)
+        reaped = reap_stuck_cover_letters(sync_engine)
+    except Exception as exc:
+        # The nightly cron is the only caller, and a bare 500 tells it nothing —
+        # name the failure class so the run log says whether the database was
+        # unreachable or a row refused to delete. Message stays out of the
+        # response; the full traceback goes to the logs.
+        logger.exception("Lifecycle cleanup failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lifecycle cleanup failed: {type(exc).__name__}",
+        ) from exc
     logger.info("Admin-triggered lifecycle cleanup: %s (reaped %d stuck)", result, reaped)
     return {"status": "ok", **result, "reaped_stuck_cover_letters": reaped}
