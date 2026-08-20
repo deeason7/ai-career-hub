@@ -1,0 +1,17 @@
+Senior Python Backend Engineer
+
+We are hiring a backend engineer to own services in our payments platform. You will design
+API surfaces, model the data, and carry the changes through to production.
+
+What you will do:
+- Build and maintain REST APIs in Python, primarily FastAPI
+- Design PostgreSQL schemas and write the migrations that get them there safely
+- Operate Redis for caching and rate limiting on high-traffic endpoints
+- Package services with Docker and deploy them through our CI/CD pipeline on AWS
+- Participate in the on-call rotation for the services you own
+
+What we are looking for:
+- 4+ years of professional Python
+- Strong SQL and relational data modeling
+- Experience with pytest and a habit of testing the parts that handle money
+- Comfort with containerized deployment; Kubernetes exposure is a plus

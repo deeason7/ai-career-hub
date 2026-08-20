@@ -1,0 +1,32 @@
+SUMMARY
+Analytics engineer turning messy operational data into models the business actually trusts.
+Six years across retail and logistics, most of it in SQL.
+
+SKILLS
+SQL, dbt, Snowflake, Airflow, Python, pandas, Tableau, Looker, data modeling, Git
+
+EXPERIENCE
+Analytics Engineer - Foundry Logistics (2021 - Present)
+- Owned the dbt project: 180 models, tests on every primary key, documented lineage
+- Rebuilt the delivery-performance mart; reconciled a 4% revenue discrepancy that had been
+  argued about for two quarters
+- Moved scheduled SQL out of cron and into Airflow with alerting on freshness
+
+Data Analyst - Foundry Logistics (2018 - 2021)
+- Built the executive Tableau dashboards for on-time delivery and cost per shipment
+- Wrote the warehouse throughput analysis that justified a second sorting line
+- Trained the operations team to read the models themselves, which ended most ad-hoc requests
+- Introduced a metrics layer so two teams stopped maintaining conflicting revenue definitions
+
+Operations Analyst - Ridgeway Retail (2017 - 2018)
+- Ran the weekly inventory reconciliation in Excel and SQL across 40 stores
+- Automated the report that had taken a full day each Monday
+
+EDUCATION
+B.Sc. Statistics - State University, 2018
+
+PROJECTS
+Slowly - a small library for testing slowly changing dimension logic in dbt
+
+CERTIFICATIONS
+dbt Analytics Engineering Certification, 2022

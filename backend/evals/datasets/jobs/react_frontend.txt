@@ -1,0 +1,16 @@
+Senior Frontend Engineer, React
+
+We are looking for a frontend engineer to lead the next phase of our storefront. Performance
+and accessibility are product requirements here, not cleanup tasks.
+
+What you will do:
+- Build product UI in React and TypeScript on Next.js
+- Own and extend our design system package, including visual regression coverage
+- Hold the performance budget: bundle size, largest contentful paint, interaction latency
+- Drive accessibility to WCAG 2.1 AA and keep it there
+- Write end-to-end coverage with Playwright and unit tests with Jest
+
+What we are looking for:
+- 4+ years building production React applications with TypeScript
+- Strong CSS fundamentals; experience with Tailwind is welcome
+- Demonstrated care for accessibility and measured performance work

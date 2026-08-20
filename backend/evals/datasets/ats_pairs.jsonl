@@ -1,0 +1,20 @@
+{"resume": "backend_python", "job": "python_backend", "relation": "strong", "note": "same role, same stack"}
+{"resume": "backend_python", "job": "ml_platform", "relation": "related", "note": "shares Python, Docker, AWS, SQL; different discipline"}
+{"resume": "backend_python", "job": "analytics_engineer", "relation": "related", "note": "shares SQL, Python, Airflow-adjacent scheduling"}
+{"resume": "backend_python", "job": "react_frontend", "relation": "weak", "note": "different half of the stack"}
+{"resume": "backend_python", "job": "warehouse_associate", "relation": "weak", "note": "out-of-domain control"}
+{"resume": "ml_engineer", "job": "ml_platform", "relation": "strong", "note": "same role, same stack"}
+{"resume": "ml_engineer", "job": "python_backend", "relation": "related", "note": "shares Python, Docker, AWS, SQL; different discipline"}
+{"resume": "ml_engineer", "job": "analytics_engineer", "relation": "related", "note": "shares SQL, Airflow, Python data tooling"}
+{"resume": "ml_engineer", "job": "react_frontend", "relation": "weak", "note": "different half of the stack"}
+{"resume": "ml_engineer", "job": "warehouse_associate", "relation": "weak", "note": "out-of-domain control"}
+{"resume": "frontend_react", "job": "react_frontend", "relation": "strong", "note": "same role, same stack"}
+{"resume": "frontend_react", "job": "python_backend", "relation": "weak", "note": "different half of the stack"}
+{"resume": "frontend_react", "job": "ml_platform", "relation": "weak", "note": "no overlap beyond generic engineering"}
+{"resume": "frontend_react", "job": "analytics_engineer", "relation": "weak", "note": "no overlap beyond generic engineering"}
+{"resume": "frontend_react", "job": "warehouse_associate", "relation": "weak", "note": "out-of-domain control"}
+{"resume": "data_analyst", "job": "analytics_engineer", "relation": "strong", "note": "same role, same stack"}
+{"resume": "data_analyst", "job": "ml_platform", "relation": "related", "note": "shares SQL, Python, Airflow, pandas"}
+{"resume": "data_analyst", "job": "python_backend", "relation": "related", "note": "shares SQL and Python; different discipline"}
+{"resume": "data_analyst", "job": "react_frontend", "relation": "weak", "note": "different half of the stack"}
+{"resume": "data_analyst", "job": "warehouse_associate", "relation": "weak", "note": "out-of-domain control"}
