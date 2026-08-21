@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [4.4.2] - 2026-07-24
+## [4.4.2] - 2026-08-21
 
 ### Fixed
 - Deleting a resume or a cover letter no longer fails on its own child rows. Both `cover_letters.resume_id` and `cover_letter_revisions.cover_letter_id` are `NOT NULL`, but the relationships carried no delete cascade, so the ORM's default behaviour — detach the children by nulling their foreign key — raised a not-null violation. The relationships now declare the cascade explicitly, deferring to the database's `ON DELETE CASCADE` where one is already defined. This left the nightly lifecycle cleanup failing every run once the first documents reached their 15-day TTL, and returned HTTP 500 from `DELETE /resumes/{resume_id}` whenever the resume had a cover letter attached.
