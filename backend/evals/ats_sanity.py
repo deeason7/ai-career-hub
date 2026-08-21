@@ -25,12 +25,10 @@ MONOTONICITY_TOLERANCE = 0.5
 # reads word order by design, so this is calibrated from the 3.1 points measured
 # on the first live run rather than assumed to be zero.
 ORDER_INVARIANCE_TOLERANCE = 5.0
-# Points a score may move when recruiting boilerplate is appended. This bar sits
-# where the product's promise is, not where the measurement landed: the scorer
-# strips that text before keyword matching, so full invariance is the intent. The
-# 3.5 points measured come from the semantic channel, which never sees the
-# stripped copy — a defect to close, not a threshold to widen. Advisory until it is.
-BOILERPLATE_INVARIANCE_TOLERANCE = 2.0
+# Points a score may move when recruiting boilerplate is appended. Both channels
+# now score the stripped posting, so the promise is exact invariance and the bar
+# says so rather than leaving slack the scorer does not need.
+BOILERPLATE_INVARIANCE_TOLERANCE = 0.0
 # Rounding slack when re-deriving the composite from its weighted parts.
 COMPOSITE_TOLERANCE = 0.15
 # Fixed so a rerun measures the model rather than a different shuffle.
@@ -308,7 +306,7 @@ def run(pairs: Sequence[Pair] | None = None, score_fn: ScoreFn | None = None) ->
             "boilerplate_invariance",
             "an EEO and benefits block is appended to the JD",
             tolerance=BOILERPLATE_INVARIANCE_TOLERANCE,
-            gating=False,
+            gating=True,
         ),
         _check_semantic_channel(pairs, base),
         _check_bounds(pairs, base),

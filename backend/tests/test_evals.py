@@ -104,7 +104,13 @@ def _related_scenario(related_score: float):
 
 
 def _scorer(
-    *, resume_penalty=0.0, jd_penalty=0.0, invert=False, semantic_weight=0.50, broken=False
+    *,
+    resume_penalty=0.0,
+    order_penalty=0.0,
+    boilerplate_penalty=0.0,
+    invert=False,
+    semantic_weight=0.50,
+    broken=False,
 ):
     """A stub scorer with dials for each failure mode a check is meant to catch."""
 
@@ -115,8 +121,10 @@ def _scorer(
             target = 110.0 - target  # turns strong matches into weak ones and back
         if resume_text != RESUME_TMPL.format(rid=rid):
             target -= resume_penalty
-        if job_text != JOB_TMPL.format(jid=jid):
-            target -= jd_penalty
+        if ats_sanity.BOILERPLATE_BLOCK in job_text:
+            target -= boilerplate_penalty
+        elif job_text != JOB_TMPL.format(jid=jid):
+            target -= order_penalty
         result = _result(target, semantic_weight=semantic_weight)
         if broken:
             result = ATSResult(**{**result.__dict__, "score": result.score + 25.0})
@@ -323,7 +331,7 @@ def test_related_margin_fails_when_a_wrong_role_scores_almost_as_well():
 
 
 def test_order_invariance_tolerates_drift_inside_the_calibrated_bar():
-    card = ats_sanity.run(_pairs(), _scorer(jd_penalty=3.0))
+    card = ats_sanity.run(_pairs(), _scorer(order_penalty=3.0))
     order = _by_name(card)["jd_order_invariance"]
     assert order.value == pytest.approx(3.0)
     assert order.passed
@@ -331,15 +339,20 @@ def test_order_invariance_tolerates_drift_inside_the_calibrated_bar():
 
 
 def test_order_invariance_fails_once_drift_clears_the_bar():
-    card = ats_sanity.run(_pairs(), _scorer(jd_penalty=10.0))
+    card = ats_sanity.run(_pairs(), _scorer(order_penalty=10.0))
     order = _by_name(card)["jd_order_invariance"]
-    boilerplate = _by_name(card)["boilerplate_invariance"]
     assert order.value == pytest.approx(10.0)
     assert order.gating
     assert not order.passed
     assert not card.passed
-    # Boilerplate drift is real, but it traces to a known gap in the scorer rather
-    # than to model noise, so it is reported without failing the run until that gap
-    # closes. Widening the bar to swallow it would hide the defect it found.
-    assert boilerplate.value == pytest.approx(10.0)
-    assert not boilerplate.gating
+
+
+def test_boilerplate_invariance_fails_on_any_movement():
+    # The scorer strips this text from both channels, so the bar is exact: even a
+    # single point of drift means a posting's legal boilerplate reached a score.
+    card = ats_sanity.run(_pairs(), _scorer(boilerplate_penalty=1.0))
+    check = _by_name(card)["boilerplate_invariance"]
+    assert check.gating
+    assert check.value == pytest.approx(1.0)
+    assert not check.passed
+    assert not card.passed
