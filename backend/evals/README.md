@@ -39,21 +39,50 @@ Fixtures are written for this repository. Nothing here is a real person's resume
 
 ## The ATS sanity suite
 
-| check | asks | gating |
-|---|---|:--:|
-| `strong_vs_weak_separation` | does a strong match outrank the same resume's weak matches? | yes |
-| `strong_vs_related_margin` | by how much does it beat a same-field, wrong-role posting? | no |
-| `skill_monotonicity` | can adding a skill the JD asks for ever *lower* the score? | yes |
-| `jd_order_invariance` | how far does the score move when the JD's lines are reordered? | no |
-| `boilerplate_invariance` | does appending an EEO and benefits block move the score? | no |
-| `semantic_channel_live` | did every pair score with the embedding model actually loaded? | yes |
-| `score_bounds` | are sub-scores in range and does the composite match its weights? | yes |
+| check | asks | bar | gating |
+|---|---|---|:--:|
+| `strong_vs_weak_separation` | does a strong match outrank the same resume's weak matches? | >= 5 pts | yes |
+| `strong_vs_related_margin` | by how much does it beat a same-field, wrong-role posting? | >= 15 pts | yes |
+| `skill_monotonicity` | can adding a skill the JD asks for ever *lower* the score? | <= 0.5 pts | yes |
+| `jd_order_invariance` | how far does the score move when the JD's lines are reordered? | <= 5 pts | yes |
+| `boilerplate_invariance` | does appending an EEO and benefits block move the score? | <= 2 pts | no |
+| `semantic_channel_live` | did every pair score with the embedding model actually loaded? | 0 pairs | yes |
+| `score_bounds` | are sub-scores in range and does the composite match its weights? | 0 | yes |
 
 **Gating vs advisory.** A gating check fails the run. An advisory check is measured
-and printed but never fails it. The invariance checks start advisory on purpose: the
-semantic channel is order-sensitive by design, so the honest threshold is one
-calibrated from observed drift on a real run, not one guessed in advance. Promote them
-once there is a baseline.
+and printed but never fails it — for a property worth watching that the system is not
+yet expected to hold.
+
+## Measured baseline
+
+First run against `all-MiniLM-L6-v2` over the twenty pairs, reproduced identically on a
+second run:
+
+| check | measured | bar | |
+|---|---|---|:--:|
+| `strong_vs_weak_separation` | 34.2 points | >= 5 | pass |
+| `strong_vs_related_margin` | 29.6 points | >= 15 | pass |
+| `skill_monotonicity` | 0 points | <= 0.5 | pass |
+| `jd_order_invariance` | 3.1 points | <= 5 | pass |
+| `boilerplate_invariance` | 3.5 points | <= 2 | advisory |
+| `semantic_channel_live` | 0 pairs | 0 | pass |
+| `score_bounds` | 0 violations | 0 | pass |
+
+Both invariance checks overshot the two points they were first guessed at, which is why
+they shipped advisory instead of gating.
+
+`jd_order_invariance` was calibrated from that measurement and promoted. The semantic
+channel reads word order, so some movement is the model working as intended; five points
+absorbs drift without letting a real regression through.
+
+`boilerplate_invariance` was deliberately **not** calibrated. Its bar stays at two points
+— where the product's promise is — and the check stays advisory while it misses it.
+`_strip_boilerplate` drops EEO and benefits text before keyword matching and does its job
+perfectly: measured across all twenty pairs, the keyword channel moves 0.00 points. But
+`_score_semantic` receives the raw job description, so the entire 3.5 points comes from
+the channel carrying half the composite. That is a defect to close, not a threshold to
+widen — raising the bar to five would have turned the scorecard green by forgetting what
+it found.
 
 **Why `semantic_channel_live` matters more than it looks.** When the embedding model
 cannot be loaded, `calculate_ats_score` catches the failure, zeroes the semantic score

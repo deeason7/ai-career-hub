@@ -77,6 +77,32 @@ def _pairs() -> list[Pair]:
     ]
 
 
+def _related_scenario(related_score: float):
+    """One resume scored against a strong, a related and a weak posting.
+
+    The default corpus above has no `related` pairs, so the margin check falls into
+    its not-applicable branch there and cannot be driven to fail.
+    """
+    targets = {("a", "1"): 70.0, ("a", "3"): related_score, ("a", "2"): 40.0}
+    relations = {"1": "strong", "3": "related", "2": "weak"}
+    pairs = [
+        Pair(
+            resume_id=rid,
+            job_id=jid,
+            relation=relations[jid],
+            note="",
+            resume_text=RESUME_TMPL.format(rid=rid),
+            job_text=JOB_TMPL.format(jid=jid),
+        )
+        for rid, jid in targets
+    ]
+
+    def score_fn(resume_text: str, job_text: str) -> ATSResult:
+        return _result(targets[_ids(resume_text, job_text)])
+
+    return pairs, score_fn
+
+
 def _scorer(
     *, resume_penalty=0.0, jd_penalty=0.0, invert=False, semantic_weight=0.50, broken=False
 ):
@@ -279,13 +305,41 @@ def test_bounds_check_catches_a_composite_that_stopped_matching_its_parts():
     assert "composite" in check.samples[0]
 
 
-def test_jd_perturbations_are_measured_but_stay_advisory():
+def test_related_margin_passes_when_the_wrong_role_stays_well_behind():
+    pairs, score_fn = _related_scenario(50.0)
+    check = _by_name(ats_sanity.run(pairs, score_fn))["strong_vs_related_margin"]
+    assert check.gating
+    assert check.value == pytest.approx(20.0)
+    assert check.passed
+
+
+def test_related_margin_fails_when_a_wrong_role_scores_almost_as_well():
+    pairs, score_fn = _related_scenario(62.0)
+    card = ats_sanity.run(pairs, score_fn)
+    check = _by_name(card)["strong_vs_related_margin"]
+    assert check.value == pytest.approx(8.0)
+    assert not check.passed
+    assert not card.passed
+
+
+def test_order_invariance_tolerates_drift_inside_the_calibrated_bar():
+    card = ats_sanity.run(_pairs(), _scorer(jd_penalty=3.0))
+    order = _by_name(card)["jd_order_invariance"]
+    assert order.value == pytest.approx(3.0)
+    assert order.passed
+    assert card.passed
+
+
+def test_order_invariance_fails_once_drift_clears_the_bar():
     card = ats_sanity.run(_pairs(), _scorer(jd_penalty=10.0))
     order = _by_name(card)["jd_order_invariance"]
     boilerplate = _by_name(card)["boilerplate_invariance"]
     assert order.value == pytest.approx(10.0)
+    assert order.gating
+    assert not order.passed
+    assert not card.passed
+    # Boilerplate drift is real, but it traces to a known gap in the scorer rather
+    # than to model noise, so it is reported without failing the run until that gap
+    # closes. Widening the bar to swallow it would hide the defect it found.
     assert boilerplate.value == pytest.approx(10.0)
-    assert not order.gating and not boilerplate.gating
-    # Advisory drift is reported without failing the run — that is the point of
-    # the flag, and it lets the first live run supply a calibrated threshold.
-    assert card.passed
+    assert not boilerplate.gating

@@ -15,10 +15,22 @@ SUITE = "ats-sanity"
 # Points a strong match must clear its own resume's best weak match by. A scorer
 # that cannot do this is not ranking, it is guessing.
 SEPARATION_MARGIN = 5.0
+# The same bar for a same-field, wrong-role posting — the harder comparison. Set
+# near half the 29.6 points first measured, so ordinary model drift does not flap
+# the gate while a real collapse in discrimination still trips it.
+RELATED_MARGIN = 15.0
 # Points a score may fall when a skill the JD asks for is ADDED to the resume.
 MONOTONICITY_TOLERANCE = 0.5
-# Points a score may move under an edit that changes presentation, not content.
-INVARIANCE_TOLERANCE = 2.0
+# Points a score may move when the JD's lines are reordered. The semantic channel
+# reads word order by design, so this is calibrated from the 3.1 points measured
+# on the first live run rather than assumed to be zero.
+ORDER_INVARIANCE_TOLERANCE = 5.0
+# Points a score may move when recruiting boilerplate is appended. This bar sits
+# where the product's promise is, not where the measurement landed: the scorer
+# strips that text before keyword matching, so full invariance is the intent. The
+# 3.5 points measured come from the semantic channel, which never sees the
+# stripped copy — a defect to close, not a threshold to widen. Advisory until it is.
+BOILERPLATE_INVARIANCE_TOLERANCE = 2.0
 # Rounding slack when re-deriving the composite from its weighted parts.
 COMPOSITE_TOLERANCE = 0.15
 # Fixed so a rerun measures the model rather than a different shuffle.
@@ -81,6 +93,7 @@ def _margin_check(
     better: str,
     worse: str,
     name: str,
+    threshold: float,
     gating: bool,
 ) -> CheckResult:
     """Smallest gap, across resumes, between the worst `better` and best `worse` match."""
@@ -110,7 +123,7 @@ def _margin_check(
     return CheckResult(
         name=name,
         value=worst_value,
-        threshold=SEPARATION_MARGIN,
+        threshold=threshold,
         direction="min",
         unit="points",
         detail=(
@@ -163,6 +176,8 @@ def _perturbation_check(
     perturb: Callable[[Pair], str],
     name: str,
     description: str,
+    tolerance: float,
+    gating: bool,
 ) -> CheckResult:
     """Largest score movement under a JD edit that preserves meaning."""
     worst = 0.0
@@ -171,22 +186,19 @@ def _perturbation_check(
         before = base[pair.label].score
         after = score_fn(pair.resume_text, perturb(pair)).score
         delta = round(abs(before - after), 2)
-        if delta > INVARIANCE_TOLERANCE:
+        if delta > tolerance:
             samples.append(f"{pair.label}: {before:g} -> {after:g} ({delta:g} points)")
         worst = max(worst, delta)
 
     return CheckResult(
         name=name,
         value=worst,
-        threshold=INVARIANCE_TOLERANCE,
+        threshold=tolerance,
         direction="max",
         unit="points",
         detail=f"largest movement when {description}: {worst:g} points",
         samples=samples,
-        # Advisory until the first full run supplies a measured baseline: the
-        # semantic channel is order-sensitive by design, so the honest threshold
-        # is one calibrated from observed drift, not one guessed up front.
-        gating=False,
+        gating=gating,
     )
 
 
@@ -259,8 +271,24 @@ def run(pairs: Sequence[Pair] | None = None, score_fn: ScoreFn | None = None) ->
     base = {p.label: score_fn(p.resume_text, p.job_text) for p in pairs}
 
     results = [
-        _margin_check(pairs, base, "strong", "weak", "strong_vs_weak_separation", gating=True),
-        _margin_check(pairs, base, "strong", "related", "strong_vs_related_margin", gating=False),
+        _margin_check(
+            pairs,
+            base,
+            "strong",
+            "weak",
+            "strong_vs_weak_separation",
+            threshold=SEPARATION_MARGIN,
+            gating=True,
+        ),
+        _margin_check(
+            pairs,
+            base,
+            "strong",
+            "related",
+            "strong_vs_related_margin",
+            threshold=RELATED_MARGIN,
+            gating=True,
+        ),
         _check_monotonicity(pairs, base, score_fn),
         _perturbation_check(
             pairs,
@@ -269,6 +297,8 @@ def run(pairs: Sequence[Pair] | None = None, score_fn: ScoreFn | None = None) ->
             lambda p: _shuffle_lines(p.job_text, SHUFFLE_SEED),
             "jd_order_invariance",
             "the JD's lines are reordered",
+            tolerance=ORDER_INVARIANCE_TOLERANCE,
+            gating=True,
         ),
         _perturbation_check(
             pairs,
@@ -277,6 +307,8 @@ def run(pairs: Sequence[Pair] | None = None, score_fn: ScoreFn | None = None) ->
             lambda p: f"{p.job_text}\n{BOILERPLATE_BLOCK}",
             "boilerplate_invariance",
             "an EEO and benefits block is appended to the JD",
+            tolerance=BOILERPLATE_INVARIANCE_TOLERANCE,
+            gating=False,
         ),
         _check_semantic_channel(pairs, base),
         _check_bounds(pairs, base),
