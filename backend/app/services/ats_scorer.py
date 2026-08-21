@@ -560,8 +560,13 @@ def _score_structure(resume_text: str) -> tuple[float, list[str]]:
 
 
 def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
+    # Keyword matching already drops EEO and benefits text. The semantic channel
+    # needs the same view of the posting or half the composite still drifts with
+    # the length of a company's legal boilerplate.
+    jd_text = _strip_boilerplate(job_description)
+
     try:
-        semantic_score, section_scores = _score_semantic(resume_text, job_description)
+        semantic_score, section_scores = _score_semantic(resume_text, jd_text)
     except Exception as exc:
         # Graceful degradation: fall back to keyword-only if model fails
         logger.warning("Semantic scoring failed, falling back to keyword-only: %s", exc)
