@@ -1,0 +1,37 @@
+name: Live Smoke
+
+# One click proves the deployed LLM path end to end: health, register, login,
+# resume upload, ATS score, cover-letter generation and the QA verdict, against
+# the live free tier by default. Dispatch-only on purpose — every run spends
+# real LLM calls and writes rows (which the 15-day lifecycle purge removes).
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "API base to probe"
+        required: false
+        default: "https://deeason-careerhub.hf.space"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: End-to-end probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install the HTTP client
+        run: pip install requests
+
+      - name: Run the probe
+        env:
+          SMOKE_BASE_URL: ${{ inputs.base_url }}
+        run: python .github/scripts/live_smoke.py --base-url "$SMOKE_BASE_URL"
