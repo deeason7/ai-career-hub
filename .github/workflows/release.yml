@@ -1,0 +1,122 @@
+name: Release
+
+# A release is a five-file hygiene commit (config.py, docs/API.md, CHANGELOG.md,
+# README.md, INFRASTRUCTURE.md) followed by a develop→main PR — and a tag that
+# must only exist once that PR has merged. Done by hand this invites the two
+# classic mistakes: a missed version carrier and a tag pushed at the wrong
+# commit. This workflow owns both halves: dispatch it with a version + title to
+# get the release branch and PR, and the tag + GitHub release cut themselves on
+# the next main push whose version has no tag yet (any other push is skipped).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (X.Y.Z)"
+        required: true
+      title:
+        description: "Release title, e.g. Reliable Document Cleanup"
+        required: true
+      highlights:
+        description: "README bullets, one per line (defaults to the CHANGELOG entries)"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  cut:
+    name: Cut release branch + PR
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop # release branches always cut from develop
+
+      - name: Apply the version bump
+        # Inputs ride in as env vars so quotes in a title can't splice the shell.
+        env:
+          VERSION: ${{ inputs.version }}
+          TITLE: ${{ inputs.title }}
+          HIGHLIGHTS: ${{ inputs.highlights }}
+        run: |
+          python .github/scripts/cut_release.py \
+            --version "$VERSION" --title "$TITLE" --highlights "$HIGHLIGHTS"
+
+      - name: Commit and push the release branch
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          branch="chore/release-$VERSION"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add backend/app/core/config.py docs/API.md CHANGELOG.md README.md INFRASTRUCTURE.md
+          git commit -m "chore(release): $VERSION"
+          git push -u origin "$branch"
+
+      - name: Open the PR into develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh pr create --base develop --head "chore/release-$VERSION" \
+            --title "chore(release): $VERSION" \
+            --body "Release hygiene for $VERSION — version bump across the five carriers plus the finalized CHANGELOG section. Merge this, then open develop→main to ship; the tag and GitHub release follow on their own."
+
+      - name: Kick CI on the branch
+        # PRs opened with the workflow token don't trigger the pipeline by
+        # themselves; a dispatch on the same head SHA produces the required checks.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh workflow run Pipeline --ref "chore/release-$VERSION"
+
+  tag:
+    name: Tag + GitHub release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: release-tag
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tag main's version if it isn't tagged yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/.*VERSION: str = "\([^"]*\)".*/\1/p' backend/app/core/config.py)
+          if [ -z "$version" ]; then
+            echo "::error::could not read VERSION from config.py"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "v$version is already tagged — docs/ops merge, nothing to do"
+            exit 0
+          fi
+          title=$(sed -n "s/^### v$version — //p" README.md | head -1)
+          [ -n "$title" ] || title="Release $version"
+          # Release notes = that version's CHANGELOG section, verbatim.
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { hit = 1; next }
+            hit && /^## \[/ { exit }
+            hit { print }
+          ' CHANGELOG.md > notes.md
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git tag -a "v$version" -m "v$version — $title"
+          git push origin "v$version"
+          gh release create "v$version" --title "v$version — $title" \
+            --notes-file notes.md --verify-tag
