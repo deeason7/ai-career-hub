@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.4.3] - 2026-08-22
+
 ### Added
 - An offline evaluation harness (`backend/evals/`) measures the ATS scorer against a labeled corpus of resume/job pairs — ranking separation, monotonicity when a required skill is added, invariance to presentation changes, and a check that the semantic channel is active. `make evals` prints a scorecard; the `Evals` workflow runs the same suite on dispatch.
 
