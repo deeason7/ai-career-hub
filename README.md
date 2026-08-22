@@ -352,9 +352,9 @@ Off-Hours:
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
 
 ### v4.4.3 — Semantic Scoring Restored
-- An offline evaluation harness (`backend/evals/`) measures the ATS scorer against a labeled corpus of resume/job pairs — ranking separation, monotonicity when a required skill is added, invariance to presentation changes, and a check that the semantic channel is active. `make evals` prints a scorecard; the `Evals` workflow runs the same suite on dispatch.
-- The semantic component of the ATS score now loads reliably in the hosted deployment. The image pins the sentence-transformers cache to a path it owns rather than depending on `HOME`, and ships the model weights, so scoring no longer waits on a runtime download.
-- Recruiting boilerplate no longer affects a score. EEO statements and benefits lists were stripped before keyword matching but not before semantic scoring; both channels now score the same cleaned posting.
+- **Semantic scoring loads reliably** — the image pins the sentence-transformers cache to a path it owns rather than depending on `HOME`, and ships the model weights, so the ATS score's semantic half is always available and no request waits on a runtime download
+- **Boilerplate no longer moves a score** — EEO statements and benefits lists were stripped before keyword matching but not before semantic scoring; both channels now score the same cleaned posting
+- **An offline eval harness** (`backend/evals/`) — measures the scorer against a labeled corpus of resume/job pairs: ranking separation, monotonicity when a required skill is added, invariance to presentation changes, and a check that the semantic channel is active; `make evals` prints a scorecard
 
 ### v4.4.2 — Reliable Document Cleanup
 - **Deletes cascade properly** — resumes and cover letters now remove their child rows instead of trying to orphan them; because both child foreign keys are `NOT NULL`, the ORM's default detach-the-children behaviour made every such delete fail
