@@ -11,6 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# The Space sets HOME=/home/user, which this image's non-root user cannot write.
+# sentence-transformers then resolves its cache under that path, the download
+# raises PermissionError, and calculate_ats_score quietly drops to keyword-only
+# scoring. Pin the cache somewhere we own, and fetch the weights at build time so
+# a cold request never waits on a download either.
+ENV HF_HOME=/app/.cache/huggingface
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
 COPY . .
 
 # Run as non-root for security hardening
