@@ -1,0 +1,32 @@
+SUMMARY
+Frontend engineer building accessible, fast React applications. Five years of shipping
+product UI, with a habit of measuring bundle size and interaction latency before and after.
+
+SKILLS
+TypeScript, React, Next.js, JavaScript, CSS, Tailwind, Jest, Playwright, Webpack, Figma, HTML
+
+EXPERIENCE
+Senior Frontend Engineer - Harbor Retail (2022 - Present)
+- Led the migration from a legacy jQuery storefront to Next.js; largest contentful paint
+  went from 4.1s to 1.3s on mid-tier mobile devices
+- Built the design system package used by four product teams, with visual regression tests
+- Drove the accessibility audit to WCAG 2.1 AA across checkout
+
+Frontend Engineer - Harbor Retail (2019 - 2022)
+- Built the product detail and cart experiences in React with TypeScript
+- Added Playwright end-to-end coverage for the purchase funnel
+- Set the performance budget in CI so regressions fail the build rather than reach production
+- Ran the component library office hours that got three teams off their private forks
+
+Junior Developer - Lantern Studio (2018 - 2019)
+- Built marketing sites in vanilla JavaScript and CSS for a dozen small clients
+- Learned to test on real low-end devices after shipping something that only worked on my laptop
+
+EDUCATION
+B.A. Design and Computer Science - State University, 2019
+
+PROJECTS
+Contrast - a browser extension that flags insufficient color contrast while you browse
+
+CERTIFICATIONS
+Web Accessibility Specialist (IAAP), 2023
