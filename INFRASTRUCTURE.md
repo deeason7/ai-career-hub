@@ -1,6 +1,6 @@
 # AI Career Hub — Infrastructure Reference
 
-> Last updated: 2026-07-24 | Platform version: v4.4.2 | Region: `us-east-1`
+> Last updated: 2026-08-22 | Platform version: v4.4.3 | Region: `us-east-1`
 >
 > **Status:** this AWS environment is currently **hibernated** — deprovisioned to
 > $0/month while the free-tier deployment serves live traffic (see
