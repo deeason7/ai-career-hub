@@ -143,9 +143,9 @@ services:
     command: >
       sh -c "
         echo '=== Ruff lint ===' &&
-        ruff check app/ tests/ &&
+        ruff check app/ tests/ evals/ &&
         echo '=== Ruff format ===' &&
-        ruff format --check app/ tests/ &&
+        ruff format --check app/ tests/ evals/ &&
         echo '=== Pytest ===' &&
         pytest tests/ -v --tb=short
       "

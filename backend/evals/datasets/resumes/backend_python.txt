@@ -1,0 +1,33 @@
+SUMMARY
+Backend engineer with 5 years building and operating Python web services. Comfortable
+owning a service end to end: schema design, API surface, deploy pipeline, and the pager.
+
+SKILLS
+Python, FastAPI, Django, PostgreSQL, Redis, Docker, Kubernetes, AWS, CI/CD, pytest, SQLAlchemy
+
+EXPERIENCE
+Senior Backend Engineer - Meridian Software (2022 - Present)
+- Rebuilt the billing service on FastAPI and PostgreSQL, cutting p95 latency from 840ms to 190ms
+- Introduced Alembic migrations and a staging replay harness; schema changes stopped causing incidents
+- Moved deploys to GitHub Actions with automated rollback on failed health checks
+- Owned the Redis caching layer and rate limiting for a public API serving 4M requests/day
+
+Backend Engineer - Northwind Labs (2020 - 2022)
+- Built internal REST APIs in Django, backed by PostgreSQL and Celery workers
+- Containerized six legacy services with Docker and moved them onto AWS ECS
+- Wrote the runbook for the on-call rotation and cut median incident acknowledgement to 4 minutes
+- Mentored two junior engineers through their first production migrations
+
+Software Engineer - Cascade Systems (2019 - 2020)
+- Maintained a Flask reporting service and its nightly PostgreSQL aggregation jobs
+- Replaced hand-rolled SQL string building with SQLAlchemy Core after a near-miss injection bug
+- Added pytest coverage to a service that had none, starting with the money-handling paths
+
+EDUCATION
+B.Sc. Computer Science - State University, 2020
+
+PROJECTS
+Ledger - a double-entry accounting API in FastAPI with property-based tests over the invariants
+
+CERTIFICATIONS
+AWS Certified Solutions Architect - Associate, 2022

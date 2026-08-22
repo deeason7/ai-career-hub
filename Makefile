@@ -1,4 +1,4 @@
-.PHONY: up down test lint build logs shell
+.PHONY: up down test lint build logs shell evals
 
 # Start all services (db, redis, ollama, api, frontend, nginx)
 up:
@@ -18,7 +18,7 @@ test:
 
 # Lint only (no tests) — backend via the test image, frontend via its own image
 lint:
-	docker compose run --rm --no-deps test sh -c "ruff check app/ tests/ && ruff format --check app/ tests/"
+	docker compose run --rm --no-deps test sh -c "ruff check app/ tests/ evals/ && ruff format --check app/ tests/ evals/"
 	docker compose run --rm --no-deps frontend sh -c "pip install -q ruff==0.15.13 && ruff check . && ruff format --check ."
 
 # Tail API logs
@@ -28,3 +28,8 @@ logs:
 # Shell into the running API container
 shell:
 	docker compose exec api bash
+
+# Run an eval suite against the labeled corpus. Loads the sentence-transformers
+# model, so the first run downloads ~80MB.
+evals:
+	docker compose run --rm --no-deps test python -m evals.runner

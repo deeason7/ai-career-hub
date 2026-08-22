@@ -185,6 +185,24 @@ def test_strip_never_empties_a_pure_boilerplate_jd():
     assert _strip_boilerplate(pure_eeo) == pure_eeo
 
 
+def test_boilerplate_does_not_move_the_score():
+    # Real postings carry EEO statements and benefits lists of wildly different
+    # lengths. Two candidates with the same resume and the same actual job must
+    # not score differently because one employer's legal team writes more.
+    boilerplate = (
+        "We are an equal opportunity employer. All qualified applicants will receive "
+        "consideration for employment without regard to race, color, religion, sex, "
+        "national origin, disability, or veteran status. We offer a competitive salary, "
+        "comprehensive benefits, 401(k) matching, paid time off and parental leave."
+    )
+    plain = calculate_ats_score(SAMPLE_RESUME, JD_MATCHING)
+    padded = calculate_ats_score(SAMPLE_RESUME, f"{JD_MATCHING}\n{boilerplate}")
+
+    assert padded.keyword_score == plain.keyword_score
+    assert padded.semantic_score == plain.semantic_score
+    assert padded.score == plain.score
+
+
 def test_short_tech_shorthands_are_keywords():
     assert _is_keyword("ai") is True
     assert _is_keyword("ml") is True

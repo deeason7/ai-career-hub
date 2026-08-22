@@ -1,0 +1,17 @@
+Machine Learning Engineer, NLP Platform
+
+Join the team that puts language models into our product surface. This role is as much about
+measurement as modeling: we do not ship a model without an evaluation set behind it.
+
+What you will do:
+- Fine-tune and evaluate transformer models for classification and extraction tasks
+- Build and maintain labeled evaluation sets, and report agreement between annotators
+- Own the retraining pipeline in Airflow, including drift monitoring on inputs
+- Optimize inference for CPU serving, including quantization
+- Work in Python with PyTorch and Hugging Face Transformers
+
+What we are looking for:
+- 3+ years applying NLP or machine learning in production
+- Fluency with PyTorch, scikit-learn, and the Hugging Face ecosystem
+- MLOps instincts: reproducible training, versioned data, monitored deployments
+- SQL and comfort with Docker and AWS

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.4.3] - 2026-08-22
+
+### Added
+- An offline evaluation harness (`backend/evals/`) measures the ATS scorer against a labeled corpus of resume/job pairs — ranking separation, monotonicity when a required skill is added, invariance to presentation changes, and a check that the semantic channel is active. `make evals` prints a scorecard; the `Evals` workflow runs the same suite on dispatch.
+
+### Fixed
+- The semantic component of the ATS score now loads reliably in the hosted deployment. The image pins the sentence-transformers cache to a path it owns rather than depending on `HOME`, and ships the model weights, so scoring no longer waits on a runtime download.
+- Recruiting boilerplate no longer affects a score. EEO statements and benefits lists were stripped before keyword matching but not before semantic scoring; both channels now score the same cleaned posting.
+
 ## [4.4.2] - 2026-08-21
 
 ### Fixed

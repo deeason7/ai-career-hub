@@ -1,0 +1,17 @@
+Analytics Engineer
+
+Our data team is looking for an analytics engineer to own the transformation layer between
+raw operational data and the models the business makes decisions on.
+
+What you will do:
+- Own a dbt project: models, tests, documentation, and lineage
+- Write the SQL that turns logistics and retail events into trustworthy marts
+- Schedule and monitor transformations in Airflow, with alerting on data freshness
+- Build and maintain dashboards in Tableau or Looker for operations leadership
+- Define metrics once, in one place, and get teams to agree on them
+
+What we are looking for:
+- 4+ years of advanced SQL and dimensional data modeling
+- Production dbt experience, including testing strategy
+- Python and pandas for the work SQL should not do
+- Snowflake or a comparable cloud warehouse

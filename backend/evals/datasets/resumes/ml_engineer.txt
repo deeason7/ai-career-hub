@@ -1,0 +1,33 @@
+SUMMARY
+Machine learning engineer focused on NLP systems in production. I care more about the
+evaluation harness than the model architecture, which is usually the thing that was missing.
+
+SKILLS
+Python, PyTorch, Hugging Face Transformers, scikit-learn, NLP, MLOps, Docker, AWS, SQL, Airflow
+
+EXPERIENCE
+Machine Learning Engineer - Cobalt Analytics (2021 - Present)
+- Shipped a document classification model to production; built the labeling guidelines and the
+  held-out evaluation set before touching the model, which caught a leaky feature early
+- Fine-tuned transformer encoders for entity extraction; improved F1 from 0.71 to 0.86
+- Built the retraining pipeline in Airflow with drift monitoring on input distributions
+- Served models on CPU with ONNX quantization, cutting inference cost by 60%
+
+Data Scientist - Cobalt Analytics (2019 - 2021)
+- Prototyped forecasting models in scikit-learn and handed two of them to engineering
+- Wrote the model cards and failure-mode documentation that legal required before launch
+- Ran weekly error review sessions with annotators, which surfaced two label-definition bugs
+
+Research Assistant - State University NLP Lab (2018 - 2019)
+- Built the data pipeline for a coreference resolution study across three annotated corpora
+- Published one workshop paper on annotation agreement in low-resource settings
+
+EDUCATION
+M.Sc. Computer Science, Machine Learning track - State University, 2019
+B.Sc. Mathematics - State University, 2017
+
+PROJECTS
+Small-eval - a tiny harness for measuring LLM judge agreement against human labels
+
+CERTIFICATIONS
+Deep Learning Specialization, 2019
