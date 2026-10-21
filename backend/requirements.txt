@@ -26,7 +26,7 @@ langchain-text-splitters==1.1.2
 langchain-groq==1.1.3
 faiss-cpu==1.14.3
 tiktoken==0.7.0
-pymupdf==1.24.7
+pymupdf==1.28.0
 python-docx==1.1.2
 # CPU-only torch: the default PyPI build pulls ~3.5 GB of CUDA + Triton wheels
 # that this inference-only, CPU-bound app never uses. Pin the CPU wheel instead.
