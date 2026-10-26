@@ -49,13 +49,13 @@ Please include:
 - Password must not match the account email address
 
 ### Transport
-- HTTPS enforced. HTTP → HTTPS redirect at the Nginx layer.
+- Hosted traffic uses HTTPS through the provider edge; the AWS target uses Nginx TLS termination and HTTP → HTTPS redirects.
 - HSTS enabled.
 
 ### Secrets Management
-- All production secrets stored in AWS SSM Parameter Store
+- Active deployment secrets are held in Hugging Face Spaces, Streamlit Community Cloud and GitHub Environments; the AWS target uses SSM Parameter Store
 - No secrets committed to the repository
-- CI/CD authenticates via OIDC (no long-lived AWS keys)
+- The hibernated AWS deployment job authenticates via OIDC; the free-tier sync uses a scoped Hugging Face token
 
 ### Security Headers
 - `X-Content-Type-Options: nosniff`
@@ -113,9 +113,9 @@ Please include:
 
 - Streamlit requires `unsafe-inline` in the Content Security Policy. This is a known
   constraint of the Streamlit framework and cannot be removed without replacing the frontend.
-- Two `pip-audit` vulnerability ignores are currently in effect (CVE-2026-41481,
-  CVE-2026-1839). Both are transitive dependencies where the vulnerable code path
-  is not used in this codebase. The rationale and mitigation notes are documented
-  inline in `backend/requirements.txt`. Fixes require a major ecosystem upgrade
-  currently blocked by a pinned dependency constraint.
+- The dependency audit has accepted-risk exceptions. The active list is in
+  [the CI workflow](.github/workflows/pipeline.yml), with per-advisory rationale
+  in [backend/requirements.txt](backend/requirements.txt). A passing audit with
+  exceptions is not a claim that the dependency tree has no known vulnerabilities;
+  re-evaluate the exceptions when upgrading dependencies or changing model-loading behavior.
 - This is a single-developer portfolio project. There is no security team or bug bounty program.

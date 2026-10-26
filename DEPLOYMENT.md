@@ -1,6 +1,6 @@
 # Deployment Guide — AI Career Hub
 
-Two production targets from one codebase: a zero-cost free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud) that serves live traffic, and the fully scripted AWS environment documented below, currently hibernated. Each target sits behind its own switch — see [Deploy Targets](#deploy-targets).
+Two production targets from one codebase: a managed free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud) that serves live traffic, and the fully scripted AWS environment documented below, currently hibernated. Each target sits behind its own switch — see [Deploy Targets](#deploy-targets).
 
 ---
 
@@ -16,6 +16,7 @@ Two production targets from one codebase: a zero-cost free-tier deployment (Hugg
 8. [Developer Tooling](#developer-tooling)
 9. [Billing Controls](#billing-controls)
 10. [Free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud)](#free-tier-deployment-hugging-face-spaces--streamlit-community-cloud)
+11. [Verify or recover the public demo](#verify-or-recover-the-public-demo)
 
 ---
 
@@ -23,8 +24,8 @@ Two production targets from one codebase: a zero-cost free-tier deployment (Hugg
 
 | Component | Status | Notes |
 |---|---|---|
-| Free-tier stack | **Live** | HF Space (API) + Streamlit Cloud (frontend) + Neon + Upstash + Qdrant — deployed and health-verified by CI on every `main` push |
-| EC2 stack | **Hibernated** | Deprovisioned to $0; recreated by `infra/scripts/` when re-arming |
+| Free-tier stack | **Active deployment target** | HF Space (API) + Streamlit Cloud (frontend) + Neon + Upstash + Qdrant; verify the frontend and API separately before a demo |
+| EC2 stack | **Hibernated** | Compute deprovisioned; recreated by `infra/scripts/` when re-arming |
 | RDS PostgreSQL | **Hibernated** | Deleted to a final snapshot; restore when re-arming |
 | Business Hours | **Hibernated** | EventBridge schedules removed; `setup-business-hours.sh` recreates them |
 | Domain | **Parked** | `careerhub.deeason.com.np` records removed while hibernated; the hosted zone remains |
@@ -32,7 +33,7 @@ Two production targets from one codebase: a zero-cost free-tier deployment (Hugg
 | Wake on Visit | **Hibernated** | `setup-wake-on-visit.sh` provisions the failover → splash → Lambda flow; `--teardown` removes it |
 | Auto-Sleep | **Hibernated** | Recreated by `schedule-sleep.sh` when re-arming |
 | Boot Deploy | **Scripted** | systemd service: `git pull + docker compose up` runs on every EC2 boot |
-| CI | **Live** | GitHub Actions: ruff lint + format check + pytest on push to `main` / `develop` |
+| CI | **Live** | GitHub Actions: lint + tests + audit on PRs to `main`/`develop`, pushes to `main`, and manual dispatch |
 | CD | **Switchable** | Per-target deploys on push to `main` — see [Deploy Targets](#deploy-targets) |
 | Pre-commit | **Live** | ruff lint + format + hygiene hooks — install with `pre-commit install` |
 
@@ -50,12 +51,13 @@ either can be paused without touching the workflow:
 
 - With `AWS_DEPLOY_ENABLED` unset the AWS deploy job simply skips. The AWS
   environment itself is currently **hibernated**: compute, database, and wake
-  infrastructure are deprovisioned to $0/mo, with the database preserved as a
-  final RDS snapshot. Re-arming = re-run the provisioning scripts in
+  infrastructure are deprovisioned, with the database preserved as a final RDS
+  snapshot. Retained snapshots and DNS zones may still incur charges; verify
+  billing before treating this as zero spend. Re-arming = re-run the provisioning scripts in
   `infra/scripts/`, restore the snapshot, then set the variable to `true`.
 - The Streamlit Community Cloud frontend redeploys itself from `main`; the
-  free-tier job verifies the API side end-to-end (Space rebuilt, DB and vector
-  store answering) so a broken image can't land silently.
+  free-tier job waits for the Space rebuild, then checks API dependencies and
+  the Streamlit runtime. A passing host landing page is not application readiness.
 - Need to redeploy the current `main` without a commit? Actions → Pipeline →
   *Run workflow* (`workflow_dispatch` re-runs CI, then the armed deploy jobs).
 
@@ -469,3 +471,41 @@ An external scheduler should ping `GET /health/warm` roughly every 6 hours to ke
 
 - **`.github/workflows/keepwarm.yml` (default)** — GitHub Actions crons: a 6-hourly warm and the daily cleanup, with `ADMIN_SECRET` read from the `free-prod` environment; a failed run emails the repo owner. No extra accounts. Caveats: schedules only fire from the default branch, run with some jitter, and GitHub pauses them after ~60 days without repo activity (it emails a warning first).
 - **`infra/keep-warm/` (alternative)** — an equivalent Cloudflare Worker (exact cron timing + optional Discord alerting) for when Actions scheduling isn't wanted — see its `README.md`.
+
+
+## Verify or recover the public demo
+
+Use the Streamlit URL in [README.md](README.md). The old AWS custom domain is parked
+and is not a recovery target unless the AWS environment is deliberately re-armed.
+
+Run the read-only readiness check from the repository root:
+
+```bash
+python3 .github/scripts/readiness.py \
+  --api-base https://deeason-careerhub.hf.space \
+  --frontend-url https://deeason-career.streamlit.app \
+  --attempts 3
+```
+
+The check requires the database, vector store and embedding model to be ready,
+allows Redis to be healthy or explicitly disabled, and verifies the Streamlit
+application runtime. `/health/warm` deliberately returns HTTP 200 even when a
+component is down; inspect its fields. The frontend's outer hosting page can also
+return HTTP 200 while the application sleeps. Neither response alone is a successful
+user-facing check.
+
+If the frontend sleeps, open it in a browser and use the host's wake control. Check
+Streamlit's application logs/settings if the runtime does not become ready. If the
+API is down, inspect the Hugging Face Space runtime and logs. A data service that
+has been suspended may require its provider console to resume it. Preserve the
+configured data stores and credentials during recovery.
+
+The model-readiness requirement is newer than v4.4.3: that release's warm response
+has no semantic-model field, so it cannot satisfy the new gate. Deploy the matching
+backend change before treating a missing field as a regression. A healthy vector
+store cannot compensate for an unavailable embedding model.
+
+After readiness passes, run **Live Smoke** from GitHub Actions and complete the
+browser journey: login, upload a synthetic resume, score a posting, generate/refine
+a letter, export its PDF and verify its tracker entry. Record the version and
+results. A workflow fix or a wake request by itself does not establish recovery.

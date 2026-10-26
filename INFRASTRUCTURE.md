@@ -1,11 +1,12 @@
 # AI Career Hub — Infrastructure Reference
 
-> Last updated: 2026-08-22 | Platform version: v4.4.3 | Region: `us-east-1`
+> Last updated: 2026-10-26 | Platform version: v4.4.3 | Region: `us-east-1`
 >
 > **Status:** this AWS environment is currently **hibernated** — deprovisioned to
-> $0/month while the free-tier deployment serves live traffic (see
-> `DEPLOYMENT.md`). Everything below documents what `infra/scripts/` provisions,
-> and remains the blueprint for re-arming.
+> remove active compute while the free-tier deployment serves the demo (see
+> `DEPLOYMENT.md`). Retained DNS zones and database snapshots may incur charges;
+> current billing has not been verified. Everything below documents what
+> `infra/scripts/` provisions and remains the blueprint for re-arming.
 
 ---
 

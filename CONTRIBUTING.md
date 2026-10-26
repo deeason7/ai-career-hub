@@ -72,10 +72,12 @@ docker compose up --build
 
 ### Run tests
 ```bash
-docker compose run --rm backend pytest backend/tests/ -v
+make test
+# Equivalent: docker compose run --rm test
 ```
 
-Tests run against a real PostgreSQL container (defined in `docker-compose.yml`).
+Tests run against a real PostgreSQL container using the separate `careerhub_test` database
+(defined in `docker-compose.yml`). Do not run the suite against the development or production database.
 
 > `TESTING=true` is set automatically in CI — it disables rate limiting so
 > slowapi doesn't interfere with test assertions. Do **not** set it in

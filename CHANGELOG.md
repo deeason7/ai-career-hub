@@ -7,13 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Deployment and keep-warm probes check the actual Streamlit runtime and semantic encoder, catching sleeping hosting pages and degraded ATS scoring that previously passed health checks.
+- Production images export the embedding model to an explicit local directory and verify offline inference as the serving user during the build.
+- A valid zero semantic similarity retains the normal scoring weights. Job Match and Quick Apply display the weights actually used and explain when scoring falls back to keywords and structure.
+- Temporary profile and token-refresh failures preserve the sign-in session and offer a retry instead of clearing credentials or crashing startup.
+- Job descriptions are sanitized before cover-letter QA review, matching the generation path.
+
+### Changed
+- Frontend tests now run in CI and gate both deployment targets alongside backend tests.
+- The evaluation workflow fails on calibrated scoring regressions by default; measurement-only runs remain opt-in.
+- Hosting, privacy, deployment and project-status documentation reflects the active managed-provider stack and separates measured outcomes from unverified claims.
+
 ## [4.4.3] - 2026-08-22
 
 ### Added
 - An offline evaluation harness (`backend/evals/`) measures the ATS scorer against a labeled corpus of resume/job pairs — ranking separation, monotonicity when a required skill is added, invariance to presentation changes, and a check that the semantic channel is active. `make evals` prints a scorecard; the `Evals` workflow runs the same suite on dispatch.
 
 ### Fixed
-- The semantic component of the ATS score now loads reliably in the hosted deployment. The image pins the sentence-transformers cache to a path it owns rather than depending on `HOME`, and ships the model weights, so scoring no longer waits on a runtime download.
+- The image pins the sentence-transformers cache to a writable path and includes the model weights. Local image checks passed, but the post-release hosted smoke still reported keyword-only fallback; production semantic-model loading remained unresolved.
 - Recruiting boilerplate no longer affects a score. EEO statements and benefits lists were stripped before keyword matching but not before semantic scoring; both channels now score the same cleaned posting.
 
 ## [4.4.2] - 2026-08-21

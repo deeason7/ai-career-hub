@@ -18,9 +18,9 @@ Upload your resume, score it against job descriptions, generate honest cover let
 | **Application** | https://deeason-career.streamlit.app |
 | **API health** | https://deeason-careerhub.hf.space/health/warm |
 
-> Runs entirely on managed free tiers (Streamlit Community Cloud + Hugging Face Spaces + Neon + Upstash + Qdrant Cloud) — a $0/month production footprint, selected purely by environment config.
+> The demo uses managed free tiers (Streamlit Community Cloud + Hugging Face Spaces + Neon + Upstash + Qdrant Cloud), selected through environment configuration. Availability depends on provider sleep policies and service quotas; see [project status and measured results](docs/PROJECT_STATUS.md).
 
-The same commit also targets a fully scripted **AWS deployment** (EC2 + RDS in a private VPC, ECR images, SSM-driven deploys, wake-on-visit cold starts, business-hours scheduling). That environment is currently **hibernated at zero cost**: every resource is recreated by [`infra/scripts/`](./infra/scripts), and the deploy pipeline re-arms with a single repository variable — see [DEPLOYMENT.md](./DEPLOYMENT.md).
+The same commit also targets a fully scripted **AWS deployment** (EC2 + RDS in a private VPC, ECR images, SSM-driven deploys, wake-on-visit cold starts, business-hours scheduling). That environment is currently **hibernated**: provisioning scripts are retained in [`infra/scripts/`](./infra/scripts). Re-arming requires restoring resources and credentials before enabling the deploy switch. Retained DNS and database backups can incur charges; no current billing total is verified. See [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
 
@@ -49,50 +49,29 @@ The same commit also targets a fully scripted **AWS deployment** (EC2 + RDS in a
 
 ## Architecture
 
-The AWS reference architecture (hibernated — the free-tier target maps the same
-FastAPI + Postgres + Redis + vector stack onto HF Spaces, Neon, Upstash, and Qdrant):
+The active deployment separates the frontend, API and managed data services:
 
+```mermaid
+flowchart LR
+    visitor[Visitor] --> frontend[Streamlit Community Cloud]
+    frontend --> api[FastAPI on Hugging Face Spaces]
+    api --> postgres[(Neon PostgreSQL)]
+    api --> redis[(Upstash Redis)]
+    api --> vectors[(Qdrant Cloud)]
+    api --> llm[Groq · gpt-oss-20b]
+    api --> embedding[Shared MiniLM embedding model]
+    github[GitHub Actions] --> api
 ```
-  User → careerhub.deeason.com.np
-           │
-           │  Route 53 health check
-           ├─ EC2 healthy ─────────────────────────────────────┐
-           │                                                    │
-           └─ EC2 sleeping → CloudFront → S3 wake page         │
-                  │  (Lambda boots EC2 + RDS in ~90s)          │
-                  └────────────────────────────────────────────┘
-                                                               │
-                                   GitHub Actions (CI + CD)    │
-                                   Lint + test + build + push  │
-                                   main → ECR → SSM deploy     │
-                                         │                     ▼
-                             ┌───────────────────────┐
-                             │   AWS EC2 (t3.small)  │
-                             │  ┌─────────────────┐  │
-                             │  │  nginx (HTTPS)  │  │
-                             │  └────────┬────────┘  │
-                             │    ┌──────┴──────┐    │
-                             │  ┌─▼──────┐  ┌──▼──┐ │
-                             │  │FastAPI │  │  ST │ │
-                             │  │ :8000  │  │:8501│ │
-                             │  └────┬───┘  └─────┘ │
-                             │    Redis :6379        │
-                             └───────┼───────────────┘
-                                     │
-                         ┌───────────▼────────────┐
-                         │  AWS RDS PostgreSQL 16 │
-                         │  (private VPC subnet)  │
-                         └────────────────────────┘
-                                     │ Groq API
-                                     ▼
-                             openai/gpt-oss-20b
-```
+
+Local Docker Compose uses PostgreSQL, Redis, ChromaDB and optional Ollama. The
+hibernated AWS topology remains documented in [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for request flows and design decisions.
 
 **Cover letter generation** dispatches to n8n Cloud when configured — falls back to `BackgroundTasks`.
 **QA review** runs a second LLM pass scoring honesty and tone — auto-regenerates if below threshold.
 **Structured output** via `instructor` + Pydantic v2 — all LLM responses validated before persisting.
 **ATS scoring** uses `sentence-transformers` `all-MiniLM-L6-v2` (80 MB, CPU, cached via `lru_cache`).
-**Secrets** pulled from AWS SSM Parameter Store at deploy time. Zero secrets in source code or git history.
+**Secrets** are configured in Hugging Face Spaces, Streamlit Cloud and GitHub Environments for the active deployment. The AWS target uses SSM Parameter Store. Local environment files are ignored by Git.
 **Deployments** are fully automated — a push to `main` runs GitHub Actions, and each target (AWS, free tier) deploys only when its repository-variable switch is armed.
 
 ---
@@ -118,9 +97,9 @@ FastAPI + Postgres + Redis + vector stack onto HF Spaces, Neon, Upstash, and Qdr
 | **Webhook Auth** | n8n callback endpoint authenticated via shared secret header |
 | **IAM Least Privilege** | Custom scoped policies — no wildcards, no unused permissions |
 | **EC2 IMDS** | IMDSv2 required — instance metadata not accessible via SSRF |
-| **Secrets Management** | AWS SSM Parameter Store — SecureString for all sensitive values |
-| **Audit Logs** | CloudWatch 30-day retention on all container logs |
-| **Cost Controls** | Daily budget alerting + Lambda auto-stop at spend threshold |
+| **Secrets Management** | Provider secret stores + GitHub Environments; SSM SecureString on the AWS target |
+| **Audit Logs** | PostgreSQL audit records with hashed client IPs; provider logs and optional Sentry |
+| **Cost Controls** | Managed free-tier quotas; AWS reference includes budget alerts and automatic stop |
 | **Dependency Scanning** | `pip-audit` in CI + Dependabot for weekly pip + monthly GitHub Actions updates |
 
 ---
@@ -130,22 +109,22 @@ FastAPI + Postgres + Redis + vector stack onto HF Spaces, Neon, Upstash, and Qdr
 | Layer | Technology |
 |---|---|
 | **Backend API** | FastAPI · SQLModel · Alembic · Python 3.11 |
-| **Database** | AWS RDS PostgreSQL 16 (private VPC) |
-| **Cache / Rate Limiting** | Redis 7 (Docker, local to EC2) |
-| **AI / LLM** | Groq API (LLaMA 3.1 8B Instant) — cloud; Ollama (local dev) |
+| **Database** | Neon PostgreSQL (hosted); PostgreSQL 16 in local Docker; RDS in the AWS reference |
+| **Cache / Rate Limiting** | Upstash Redis (hosted); Redis 7 in local Docker |
+| **AI / LLM** | Groq API (`openai/gpt-oss-20b`); Ollama (local dev) |
 | **Structured Output** | `instructor` + Pydantic v2 |
 | **AI QA** | AI-as-a-Judge reviewer — honesty/tone scoring with auto-regeneration |
 | **Semantic NLP** | `sentence-transformers` — `all-MiniLM-L6-v2` |
-| **RAG Pipeline** | ChromaDB (persistent, per-user collections) · FAISS fallback · LangChain · `all-MiniLM-L6-v2` embeddings |
+| **RAG Pipeline** | Qdrant Cloud (hosted) · ChromaDB (local) · LangChain · shared `all-MiniLM-L6-v2` embeddings |
 | **Orchestration** | n8n Cloud (optional webhook-based) — fallback to `BackgroundTasks` |
 | **PDF Generation** | `reportlab` — server-side, no headless browser |
 | **Web Scraping** | `httpx.AsyncClient` + `beautifulsoup4` |
 | **Frontend** | Streamlit |
-| **Infrastructure** | AWS EC2 · RDS · ECR · Nginx · Docker Compose |
-| **Serverless** | AWS Lambda · API Gateway · S3 · CloudFront · Route 53 failover |
-| **Scheduling** | EventBridge Scheduler — business-hours start/stop + 90-min idle auto-stop |
-| **Observability** | Sentry · AWS CloudWatch (awslogs driver on all containers) |
-| **CI/CD** | GitHub Actions — lint + test + build + ECR push + SSM deploy |
+| **Infrastructure** | Hugging Face Spaces · Streamlit Community Cloud · Docker Compose; scripted AWS reference |
+| **AWS reference** | EC2 · RDS · ECR · Lambda · API Gateway · S3 · CloudFront · Route 53 (hibernated) |
+| **Scheduling** | GitHub Actions keep-warm and daily cleanup; optional Cloudflare Worker |
+| **Observability** | Health probes · GitHub Actions run logs · optional Sentry; CloudWatch on AWS |
+| **CI/CD** | GitHub Actions — lint, tests, dependency audit, Space sync and health verification |
 | **Code Quality** | ruff (E/F/W/I/B/UP rules) · pre-commit hooks |
 
 ---
@@ -192,7 +171,7 @@ FastAPI + Postgres + Redis + vector stack onto HF Spaces, Neon, Upstash, and Qdr
 | POST | `/api/v1/admin/lifecycle/run` | Secret header | — | Trigger document cleanup |
 | PUT | `/api/v1/webhooks/n8n/cover-letters/{id}/callback` | Webhook secret | — | n8n result callback |
 | GET | `/health` | — | — | Liveness check |
-| GET | `/health/warm` | — | — | Deep warm-up probe (DB + Redis + vector); always `200` with per-dependency status |
+| GET | `/health/warm` | — | — | Deep warm-up probe (DB + Redis + vector + semantic model); inspect per-dependency status even on HTTP `200` |
 
 ---
 
@@ -263,7 +242,7 @@ docker compose up --build
 | API (Swagger) | http://localhost:8000/docs |
 | Health | http://localhost:8000/health |
 
-> **First ATS run:** `sentence-transformers` downloads `all-MiniLM-L6-v2` (~80 MB) on the first request. Subsequent calls use the in-memory singleton — no repeated downloads.
+> **Embedding model:** the production image includes `all-MiniLM-L6-v2`. Local development may download it on first use; subsequent requests share the in-memory model. Verify semantic scoring separately from vector-store connectivity.
 
 ### 5. Developer tooling
 
@@ -275,11 +254,11 @@ pip install -r backend/requirements.dev.txt
 pre-commit install
 
 # Lint and format
-ruff check backend/
-ruff format backend/
+ruff check backend/ frontend/
+ruff format --check backend/ frontend/
 
 # Run tests
-cd backend && pytest tests/ -v --tb=short
+make test
 ```
 
 ---
@@ -307,11 +286,9 @@ git push origin feat/my-feature
 ## Testing
 
 ```bash
-# Inside the API container
-docker exec -it ai-career-hub-api-1 pytest tests/ -v --tb=short
-
-# With a local Python env
-cd backend && pytest tests/ -v --tb=short
+make test     # isolated careerhub_test database; no live LLM calls
+make lint     # backend and frontend checks
+make evals    # real embedding model against the labeled offline corpus
 ```
 
 Test coverage: auth, resume upload, ATS scoring, job tracker CRUD, LLM schema validation, instructor client, QA service review logic, n8n webhook callback.
@@ -320,30 +297,18 @@ Test coverage: auth, resume upload, ATS scoring, job tracker CRUD, LLM schema va
 
 ---
 
-## Cost-Optimised Deployment
+## Deployment costs and availability
 
-| Mode | Schedule | Estimated cost | UX |
-|---|---|---|---|
-| **Hibernated** (current) | — | $0/mo | Free-tier deployment serves live traffic |
-| **Always-On** | Mon–Fri 9 AM–6 PM ET | ~$7.50/mo | Instant load |
-| **Wake-on-Visit** | All other times | ~$0.50/mo extra | ~90s cold start |
-| **Always-On 24/7** (baseline) | — | ~$27/mo | — |
+The demo targets free service plans; this is an infrastructure choice, not a measured
+billing or uptime guarantee. The backend, frontend and data services have separate
+sleep policies. GitHub Actions runs periodic health probes and daily document cleanup;
+its schedule must remain enabled. A Cloudflare Worker alternative is included under
+[`infra/keep-warm/`](infra/keep-warm/).
 
-```
-careerhub.deeason.com.np
-         │
-         ├─ [EC2 up]   → Route 53 PRIMARY  → app (instant)
-         └─ [EC2 down] → Route 53 FAILOVER → CloudFront → S3 wake page
-                              └──→ Lambda starts EC2 + RDS (~90s)
-                                         └──→ auto-redirect to live app
-
-Business Hours (EventBridge, America/New_York):
-  cron(0 9  ? * MON-FRI *)  →  start EC2 + RDS
-  cron(0 18 ? * MON-FRI *)  →  stop  EC2 + RDS
-
-Off-Hours:
-  Visitor hits wake page → Lambda /wake → EC2+RDS start → 90-min idle timer
-```
+AWS compute is hibernated. Retained Route 53 zones and database snapshots may still
+cost money, so use the billing console before quoting savings. The re-armable AWS
+architecture and its business-hours/wake-on-visit controls are documented in
+[DEPLOYMENT.md](DEPLOYMENT.md) and [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 
 ---
 
@@ -351,8 +316,8 @@ Off-Hours:
 
 > The complete, versioned history is maintained in **[CHANGELOG.md](./CHANGELOG.md)**.
 
-### v4.4.3 — Semantic Scoring Restored
-- **Semantic scoring loads reliably** — the image pins the sentence-transformers cache to a path it owns rather than depending on `HOME`, and ships the model weights, so the ATS score's semantic half is always available and no request waits on a runtime download
+### v4.4.3 — Model Packaging and Scoring Evals
+- **Embedding model packaged in the image** — the image pins the sentence-transformers cache to a writable path and includes the weights. The post-release live smoke still reported keyword-only fallback; successful model loading in production remained an open issue
 - **Boilerplate no longer moves a score** — EEO statements and benefits lists were stripped before keyword matching but not before semantic scoring; both channels now score the same cleaned posting
 - **An offline eval harness** (`backend/evals/`) — measures the scorer against a labeled corpus of resume/job pairs: ranking separation, monotonicity when a required skill is added, invariance to presentation changes, and a check that the semantic channel is active; `make evals` prints a scorecard
 
@@ -502,7 +467,12 @@ AI-generated content is not professional career advice. Always review outputs be
 
 | Platform | Role | Privacy Policy |
 |---|---|---|
-| AWS EC2 / RDS | Compute and database | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
+| Hugging Face | Backend hosting | [huggingface.co/privacy](https://huggingface.co/privacy) |
+| Streamlit Community Cloud | Frontend hosting | [streamlit.io/privacy-policy](https://streamlit.io/privacy-policy) |
+| Neon | Account and application database | [neon.com/privacy-policy](https://neon.com/privacy-policy) |
+| Upstash | Task state and token revocation | [upstash.com/trust/privacy.pdf](https://upstash.com/trust/privacy.pdf) |
+| Qdrant Cloud | Document embeddings and retrieval | [qdrant.tech/legal/privacy-policy](https://qdrant.tech/legal/privacy-policy/) |
+| AWS (hibernated reference) | Optional hosting and retained backups | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
 | Groq | AI inference | [groq.com/privacy-policy](https://groq.com/privacy-policy/) |
 
 **What is stored:** Account email (hashed password), full name, extracted resume text, cover letters, ATS scores, application records.

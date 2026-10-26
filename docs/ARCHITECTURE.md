@@ -14,31 +14,27 @@ load-bearing choices, see the [Architecture Decision Records](./adr/).
 
 ```mermaid
 flowchart TB
-    user([User / Recruiter])
-    user -->|HTTPS| dns{{Route 53 health check}}
-    dns -->|EC2 healthy| nginx
-    dns -.->|EC2 asleep| wake[CloudFront → S3 wake page<br/>Lambda boots EC2 + RDS ~90s]
-    wake -.->|redirect once warm| nginx
-
-    subgraph ec2[AWS EC2 t3.small]
-        nginx[nginx · HTTPS termination]
-        nginx --> fe[Streamlit frontend :8501]
-        nginx --> api[FastAPI :8000]
-        fe --> api
-        api --> redis[(Redis 7<br/>rate limits · token revocation · task state)]
-    end
-
-    api --> rds[(RDS PostgreSQL 16<br/>private VPC subnet)]
-    api --> chroma[(Vector store<br/>ChromaDB default · Qdrant Cloud option)]
-    api -->|USE_GROQ| groq[Groq · LLaMA 3.1 8B Instant]
-    api -.->|local dev| ollama[Ollama · llama3.2:3b]
+    user([User / Recruiter]) --> frontend[Streamlit Community Cloud]
+    frontend --> api[FastAPI · Hugging Face Spaces]
+    api --> database[(Neon PostgreSQL)]
+    api --> redis[(Upstash Redis<br/>rate limits · revocation · task state)]
+    api --> vectors[(Qdrant Cloud<br/>per-user document retrieval)]
+    api --> embeddings[Shared MiniLM model<br/>ATS scoring + embeddings]
+    api --> groq[Groq · openai/gpt-oss-20b]
     api -.->|optional| n8n[n8n Cloud]
+    scheduler[GitHub Actions<br/>health probes + cleanup] --> api
 ```
 
-The application is a single EC2 instance running the stack under Docker Compose behind nginx, with
-PostgreSQL on RDS in a private subnet. To control cost, the instance runs during business hours and
-otherwise sleeps; a Route 53 health check fails over to a CloudFront/S3 wake page that boots the instance
-on visit (~90s cold start). Infrastructure detail lives in [INFRASTRUCTURE.md](../INFRASTRUCTURE.md).
+The active deployment uses managed free tiers. PostgreSQL retains application records,
+Redis holds short-lived task and authentication state, and Qdrant retains document
+embeddings outside the backend's ephemeral filesystem. The vector store and the
+embedding model are separate dependencies: a healthy Qdrant connection does not prove
+that semantic scoring works.
+
+Local Docker Compose runs the same application with PostgreSQL, Redis, ChromaDB and
+optional Ollama (`llama3.2:3b`). The AWS target is hibernated; its EC2/RDS, nginx,
+wake-on-visit and scheduling design remains in [INFRASTRUCTURE.md](../INFRASTRUCTURE.md).
+See [project status](PROJECT_STATUS.md) for verification limits and the current work.
 
 ---
 
