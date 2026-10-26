@@ -6,6 +6,7 @@ import time
 import uuid
 
 import requests
+from readiness import ats_problems, dependency_problems
 
 DEFAULT_BASE = "https://deeason-careerhub.hf.space"
 
@@ -71,10 +72,11 @@ def wait_for_health(base: str) -> None:
         try:
             resp = requests.get(f"{base}/health/warm", timeout=60)
             body = resp.json()
-            if resp.status_code == 200 and body.get("api") == "ok":
-                print(f"health: {body}")
+            problems = dependency_problems(body)
+            if resp.status_code == 200 and not problems:
+                print("health: all required dependencies ready")
                 return
-            print(f"attempt {attempt}: unhealthy — {str(body)[:200]}")
+            print(f"attempt {attempt}: unhealthy — {problems}")
         except (requests.RequestException, ValueError) as exc:
             print(f"attempt {attempt}: {type(exc).__name__}")
     fail("health gate", "stack stayed unhealthy across 3 attempts")
@@ -137,16 +139,13 @@ def main() -> None:
     )
     ats = expect(resp, "ats score", (200,))
     score = ats.get("score")
-    if not isinstance(score, (int, float)) or not 0 <= score <= 100:
-        fail("ats score", f"implausible score — {str(ats)[:200]}")
+    problems = ats_problems(ats)
+    if problems:
+        fail("ats score", "; ".join(problems))
     print(
         f"ats score {score} (semantic {ats.get('semantic_score')}, "
         f"keyword {ats.get('keyword_score')}, structure {ats.get('structure_score')})"
     )
-    if not ats.get("semantic_score"):
-        # The scorer renormalizes when the embedding model is unavailable, so a
-        # zero here means degraded scoring that the total quietly hides.
-        print("warning: semantic component is 0 — embedding model likely failed to load")
 
     resp = requests.post(
         f"{api}/cover-letters/generate",

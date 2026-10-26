@@ -24,38 +24,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Warm API + datastores
-        # One cheap call touches Postgres, Redis and the vector store at once.
-        # The first hit doubles as the wake-up call: these providers drop idle
-        # connections between pings, so a dependency can read "down" for one
-        # sample and be fine seconds later (redis did on 2026-07-05). Probe up
-        # to three times and only alert if the stack stays unhealthy.
-        run: |
-          for attempt in 1 2 3; do
-            if [ "$attempt" -gt 1 ]; then sleep 30; fi
-            bad=""
-            body=$(curl -sS --max-time 60 "$API_BASE/health/warm") \
-              || { bad=" api-unreachable"; echo "attempt $attempt: curl failed"; continue; }
-            echo "attempt $attempt: $body"
-            # Dep checks accept both the {status,detail} object and the legacy
-            # string shape, so the cron can't false-alarm mid Space rebuild.
-            for dep in db redis; do
-              echo "$body" | grep -Eq "\"$dep\":(\"(ok|disabled)\"|\{\"status\":\"(ok|disabled)\")" || bad="$bad $dep"
-            done
-            echo "$body" | grep -Eq '"vector":\{[^}]*"status":"ok"' || bad="$bad vector"
-            if [ -z "$bad" ]; then exit 0; fi
-          done
-          echo "::error::still unhealthy after 3 attempts:$bad"
-          exit 1
+      - uses: actions/checkout@v7
 
-      - name: Ping the frontend
-        # Any response means the edge took the hit; Streamlit sends cookie-less
-        # clients a redirect loop, so don't follow (-L) — the 3xx itself is fine.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Check API dependencies and frontend runtime
+        # A sleeping Streamlit app still serves HTTP 200. Check the viewer's
+        # runtime state, and require the semantic encoder as well as datastores.
         run: |
-          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 \
-            --retry 3 --retry-all-errors --retry-delay 10 "$FRONTEND_URL")
-          echo "frontend HTTP $code"
-          [ "$code" -lt 500 ]
+          python .github/scripts/readiness.py \
+            --api-base "$API_BASE" --frontend-url "$FRONTEND_URL"
 
   cleanup:
     name: Lifecycle cleanup

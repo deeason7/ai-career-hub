@@ -1,9 +1,8 @@
 name: Evals
 
 # Measures the scoring path against the labeled corpus in backend/evals and
-# publishes a scorecard. Dispatch-only while the thresholds are still being
-# calibrated: the invariance checks report drift rather than gate on it, so a
-# run is a measurement, not yet a verdict.
+# publishes a scorecard. All seven checks are calibrated gates. A measurement-only
+# run remains available by explicitly disabling fail_on_regression.
 
 on:
   workflow_dispatch:
@@ -18,7 +17,7 @@ on:
       fail_on_regression:
         description: "Exit non-zero when a gating check fails"
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
