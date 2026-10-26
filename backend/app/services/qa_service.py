@@ -2,6 +2,7 @@
 
 import logging
 
+from app.core.utils import _sanitize_jd_for_prompt
 from app.services.llm_client import call_structured
 from app.services.llm_schemas import QAVerdict
 
@@ -62,7 +63,7 @@ def review_cover_letter(
     user_prompt = _REVIEWER_USER_TEMPLATE.format(
         resume_text=resume_text[:4000],
         cover_letter=cover_letter,
-        job_description=job_description[:2000],
+        job_description=_sanitize_jd_for_prompt(job_description)[:2000],
     )
 
     verdict = call_structured(
