@@ -17,22 +17,18 @@ def _refresh_token() -> bool:
     rt = st.session_state.get("refresh_token")
     if not rt:
         return False
-    try:
-        resp = requests.post(
-            f"{API_URL}/auth/refresh",
-            cookies={"refresh_token": rt},
-            timeout=30,
-        )
-    except requests.exceptions.RequestException:
+    resp = requests.post(
+        f"{API_URL}/auth/refresh",
+        cookies={"refresh_token": rt},
+        timeout=30,
+    )
+    if resp.status_code in (401, 403):
         return False
-    if resp.status_code != 200:
-        return False
-    try:
-        new_token = resp.json().get("access_token")
-    except ValueError:
-        return False
+    resp.raise_for_status()
+    data = safe_json(resp)
+    new_token = data.get("access_token") if isinstance(data, dict) else None
     if not new_token:
-        return False
+        raise requests.RequestException("Token refresh is unavailable.", response=resp)
     st.session_state.token = new_token
     return True
 
@@ -48,6 +44,18 @@ def api(method: str, path: str, **kwargs) -> requests.Response:
         headers["Authorization"] = f"Bearer {st.session_state.token}"
         resp = getattr(requests, method)(f"{API_URL}{path}", headers=headers, **kwargs)
     return resp
+
+
+def current_user() -> dict | None:
+    """Return the signed-in profile; only an auth rejection invalidates the session."""
+    resp = api("get", "/auth/me", timeout=10)
+    if resp.status_code in (401, 403):
+        return None
+    resp.raise_for_status()
+    data = safe_json(resp)
+    if not isinstance(data, dict) or not data.get("email"):
+        raise requests.RequestException("Profile response is unavailable.", response=resp)
+    return data
 
 
 def safe_json(resp: requests.Response, fallback=None):

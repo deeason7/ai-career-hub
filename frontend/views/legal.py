@@ -72,15 +72,14 @@ def page_legal() -> None:
         - Data loss or security incidents in self-hosted deployments
         - Downtime, service suspension, or data reset on the free-tier demo
 
-        The live demo is hosted on AWS EC2 (free-tier EC2 t3.small) and may be paused
-        outside business hours. During off-hours, the platform boots automatically on
-        first visit (~90 seconds).
+        The live demo uses free hosted services that can sleep during inactivity.
+        Startup time varies by provider; a paused service may require the owner to resume it.
         """)
 
     with tab_ai:
         st.subheader("🤖 AI Content Notice")
         st.markdown("""
-        This platform uses **LLaMA 3.1 8B** via **Groq API** to generate content.
+        This platform uses a hosted language model via **Groq API** to generate content.
 
         - AI outputs may be **inaccurate, incomplete, or hallucinated** despite RAG safeguards.
         - Cover letters, interview questions, and skill recommendations are **AI drafts**
@@ -98,11 +97,11 @@ def page_legal() -> None:
         st.markdown("""
         **Hosted Services**
 
-        | Platform | Role | Privacy Policy |
-        |----------|------|----------------|
-        | AWS EC2 | API & frontend hosting | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
-        | AWS RDS PostgreSQL | Database | [aws.amazon.com/privacy](https://aws.amazon.com/privacy/) |
-        | Groq | AI inference | [groq.com/privacy-policy](https://groq.com/privacy-policy/) |
+        The public demo uses Streamlit Community Cloud for the website, Hugging Face
+        Spaces for the API, Neon PostgreSQL for stored records, Upstash Redis for
+        temporary task and session state, and Qdrant Cloud for document retrieval.
+        Resume and job-description text is sent to Groq for AI inference.
+        Self-hosted installations may use different providers.
 
         **What is stored:**
         - Account email, hashed password (bcrypt), full name

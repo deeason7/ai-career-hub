@@ -16,7 +16,7 @@ from ui import (
     pipeline_progress,
     poll_outcome,
     poll_task,
-    score_hero,
+    render_ats_score,
 )
 
 # The submit normally returns 202 in milliseconds; the generous timeout only
@@ -321,14 +321,7 @@ def _render_results(result: dict) -> None:
     ats = full.get("ats_result")
     if ats:
         st.subheader("📊 ATS Score")
-        score_hero(
-            ats.get("score", 0),
-            [
-                {"label": "🧠 Semantic", "value": ats.get("semantic_score", 0)},
-                {"label": "🔑 Keywords", "value": ats.get("keyword_score", 0)},
-            ],
-            center_label="ATS match",
-        )
+        render_ats_score(ats)
 
         if ats.get("matched_keywords"):
             st.markdown("**Matched:**")

@@ -4,7 +4,7 @@ import requests
 import streamlit as st
 
 import showcase
-from api_client import API_URL, api, detail, safe_json
+from api_client import API_URL, detail, safe_json
 from components import show_error, show_success
 from session import cookie_set
 
@@ -45,8 +45,9 @@ def page_auth(cookie_manager) -> None:
                         # (never a browser cookie) so api() can refresh on 401.
                         st.session_state["refresh_token"] = resp.cookies.get("refresh_token")
                         cookie_set(cookie_manager, "auth_token", st.session_state.token)
-                        me = safe_json(api("get", "/auth/me"), {})
-                        st.session_state.user = me
+                        # The shared restore path loads /me and lets the user retry
+                        # a temporary outage without submitting their password again.
+                        st.session_state.user = None
                         show_success("Logged in!")
                         st.rerun()
                     elif resp.status_code == 503:

@@ -39,6 +39,7 @@ __all__ = [
     "pipeline_progress",
     "poll_outcome",
     "poll_task",
+    "render_ats_score",
     "render_qa_scores",
     "score_gauge",
     "score_hero",
@@ -265,12 +266,14 @@ def _score_hero_html(score: float, parts: list[dict], center_label: str) -> str:
     ring_color = _TONE_BG[score_tone(pct)]
     rows = []
     for p in parts:
-        v = _clamp_pct(p.get("value", 0))
+        value = p.get("value", 0)
+        v = _clamp_pct(value) if value is not None else 0
+        display = f"{v}%" if value is not None else "Unavailable"
         note = f" · {p['note']}" if p.get("note") else ""
         rows.append(
             f'<div class="ch-tr"><span>{p["label"]}</span>'
             f'<div class="ch-track"><i style="--w:{v}%; --c:{_TONE_BG[score_tone(v)]}"></i></div>'
-            f"<b>{v}%{note}</b></div>"
+            f"<b>{display}{note}</b></div>"
         )
     return (
         '<div class="ch-hero-score">'
@@ -284,6 +287,41 @@ def _score_hero_html(score: float, parts: list[dict], center_label: str) -> str:
 def score_hero(score: float, parts: list[dict], center_label: str = "score") -> None:
     """The flagship scorecard: animated ring + a track per component score."""
     st.html(_score_hero_html(score, parts, center_label))
+
+
+def render_ats_score(ats: dict) -> None:
+    """Show the scoring weights used for this result and any missing channel."""
+    breakdown = ats.get("breakdown") or {}
+    semantic_unavailable = breakdown.get("semantic_weight") == 0
+    parts = []
+    for key, label in (
+        ("semantic", "🧠 Semantic"),
+        ("keyword", "🔑 Keywords"),
+        ("structure", "📐 Structure"),
+    ):
+        weight = breakdown.get(f"{key}_weight")
+        value = ats.get(f"{key}_score", 0)
+        if key == "semantic" and semantic_unavailable:
+            value = None
+        parts.append(
+            {
+                "label": label,
+                "value": value,
+                "note": f"{weight:.0%} weight" if weight is not None else "weight unavailable",
+            }
+        )
+    score_hero(ats.get("score", 0), parts, center_label="ATS match")
+    if semantic_unavailable:
+        st.warning(
+            "Semantic matching is temporarily unavailable. This score uses keywords and "
+            "resume structure only. Run the analysis again later for the full match score; "
+            "these results are not directly comparable."
+        )
+    elif "semantic_weight" not in breakdown:
+        st.caption(
+            "Scoring weights are unavailable for this saved result. "
+            "Run the analysis again to see its breakdown."
+        )
 
 
 def _pipeline_html(nodes: list[dict]) -> str:

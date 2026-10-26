@@ -17,7 +17,7 @@ from ui import (
     page_header,
     poll_outcome,
     poll_task,
-    score_hero,
+    render_ats_score,
     score_tone,
     show_error,
 )
@@ -169,30 +169,20 @@ def _render_analysis(data: dict) -> None:
     tab_ats, tab_gap, tab_interview = st.tabs(["🎯 ATS Score", "🔍 Skill Gap", "🎙️ Interview Prep"])
 
     with tab_ats:
-        score = ats.get("score", 0)
         sem_score = ats.get("semantic_score", 0)
-        kw_score = ats.get("keyword_score", 0)
-        struct_score = ats.get("structure_score", 0)
-        score_hero(
-            score,
-            [
-                {"label": "🧠 Semantic", "value": sem_score, "note": "50% weight"},
-                {"label": "🔑 Keywords", "value": kw_score, "note": "30%"},
-                {"label": "📐 Structure", "value": struct_score, "note": "20%"},
-            ],
-            center_label="ATS match",
-        )
+        semantic_available = (ats.get("breakdown") or {}).get("semantic_weight", 0) > 0
+        render_ats_score(ats)
         st.caption(
             "Semantic = sentence-transformer similarity (catches synonyms) · "
             "Keywords = exact + bigram overlap · Structure = section presence & length."
         )
-        if sem_score >= 70:
+        if semantic_available and sem_score >= 70:
             st.success("🧠 High semantic alignment — your resume language closely matches the JD.")
-        elif sem_score >= 45:
+        elif semantic_available and sem_score >= 45:
             st.warning(
                 "🧠 Moderate semantic alignment — consider mirroring more of the JD's phrasing."
             )
-        elif sem_score > 0:
+        elif semantic_available:
             st.error(
                 "🧠 Low semantic alignment — your resume may not address what this role requires."
             )

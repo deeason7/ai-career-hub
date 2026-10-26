@@ -11,7 +11,7 @@ from streamlit_cookies_controller import CookieController
 
 import tour
 import ui
-from api_client import API_URL, api, safe_json
+from api_client import API_URL, current_user
 from auth import page_auth
 from session import cookie_get, cookie_remove
 from views.agent import page_agent
@@ -92,7 +92,7 @@ def show_disclaimer_modal():
     The author accepts no liability for outcomes arising from your use of this tool.
 
     🔒 **Your Data**
-    Resume text is stored in a hosted database (AWS RDS PostgreSQL). AI requests are sent
+    Resume text is stored in a hosted PostgreSQL database. AI requests are sent
     to Groq's API. Do **not** upload documents with passport numbers, government
     IDs, or financial details.
 
@@ -143,17 +143,26 @@ def _logout():
 # Bounded, so a genuinely signed-out visitor still sees login within ~1.5s.
 _RESTORE_TRIES = 5
 
-if not st.session_state.token:
-    _cookie_token = cookie_get(cookie_manager, "auth_token")
+if not st.session_state.token or not st.session_state.user:
+    _cookie_token = st.session_state.token or cookie_get(cookie_manager, "auth_token")
     if _cookie_token:
         st.session_state["_restore_tries"] = _RESTORE_TRIES  # settled
         st.session_state.token = _cookie_token
-        _me = safe_json(api("get", "/auth/me"), {})
-        if _me and _me.get("email"):
+        try:
+            _me = current_user()
+        except requests.RequestException as exc:
+            ui.error_state(exc.response if exc.response is not None else "network")
+            st.caption("Your sign-in is saved. Retry when the service is available.")
+            if st.button("Retry loading your account", type="primary"):
+                st.rerun()
+            st.stop()
+        if _me:
             st.session_state.user = _me
         else:
             cookie_remove(cookie_manager, "auth_token")
             st.session_state.token = None
+            st.session_state.user = None
+            st.session_state.refresh_token = None
     else:
         _tries = st.session_state.get("_restore_tries", 0)
         if _tries < _RESTORE_TRIES:
