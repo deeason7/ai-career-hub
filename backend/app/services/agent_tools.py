@@ -191,6 +191,7 @@ def tool_score_ats(state: dict) -> dict:
             "matched_keywords": result.matched_keywords[:15],
             "missing_keywords": result.missing_keywords[:10],
             "recommendations": result.recommendations,
+            "breakdown": result.breakdown,
         }
         logger.info(
             "score_ats: %.1f (semantic=%.1f, kw=%.1f) in %dms",

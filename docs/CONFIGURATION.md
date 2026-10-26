@@ -9,8 +9,10 @@ placeholders lives in [`backend/.env.example`](../backend/.env.example).
 > keys are ignored (`extra="ignore"`). The `env_file` path is relative, so the process must start from
 > the repository root — or inside the container, where the working directory is `/app`.
 >
-> **Production.** Every secret is stored in AWS SSM Parameter Store (SecureString) and pulled at deploy
-> time; nothing sensitive lives in source or git history. See [DEPLOYMENT.md](../DEPLOYMENT.md).
+> **Hosted deployment.** Backend secrets are set in Hugging Face Spaces; frontend settings
+> are set in Streamlit Community Cloud; CI credentials live in GitHub Environments. The
+> hibernated AWS target uses SSM Parameter Store (SecureString). Do not commit environment
+> files or credentials. See [DEPLOYMENT.md](../DEPLOYMENT.md).
 
 Legend: a ✅ in **Required** means the app will not boot without it. Everything else falls back to the
 listed default.
@@ -19,7 +21,7 @@ listed default.
 
 | Variable | Required | Default | Description |
 |---|:--:|---|---|
-| `POSTGRES_SERVER` | ✅ | — | Database host — `db` under Docker Compose, the RDS endpoint in production |
+| `POSTGRES_SERVER` | ✅ | — | Database host — `db` under Docker Compose, the Neon endpoint on the hosted demo (RDS on AWS) |
 | `POSTGRES_USER` | ✅ | — | Database user |
 | `POSTGRES_PASSWORD` | ✅ | — | Database password |
 | `POSTGRES_DB` | ✅ | — | Database name |
@@ -77,6 +79,16 @@ and production uses Groq through `instructor`; otherwise it falls back to Ollama
 | `OLLAMA_BASE_URL` | — | `http://ollama:11434` | Ollama endpoint (local dev) |
 | `OLLAMA_LLM_MODEL` | — | `llama3.2:3b` | Ollama chat model |
 | `OLLAMA_EMBED_MODEL` | — | `nomic-embed-text` | Ollama embedding model |
+
+## Embedding model
+
+| Variable | Required | Default | Description |
+|---|:--:|---|---|
+| `ATS_MODEL_PATH` | — | `""` | Optional local model directory shared by ATS scoring and document embeddings. The production Docker image sets `/app/models/all-MiniLM-L6-v2` and loads its packaged weights offline; blank uses the configured code default from the Hugging Face Hub for local development. |
+
+A configured local directory must contain a complete sentence-transformers model.
+Check the semantic-model result from `/health/warm`; vector-store connectivity alone
+does not establish model readiness.
 
 ## RAG / Vector Store
 

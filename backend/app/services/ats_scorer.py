@@ -1,6 +1,8 @@
 """Hybrid ATS scorer: 50% semantic similarity, 30% keyword match, 20% structure heuristics."""
 
 import logging
+import math
+import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -10,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # --- Model Configuration ---
 # all-MiniLM-L6-v2: 80MB, 384-dim, excellent speed/quality tradeoff for CPU
-# Downloaded once and cached at ~/.cache/huggingface/
+# Production loads a bundled directory; local development uses the Hub cache.
 MODEL_NAME = "all-MiniLM-L6-v2"
 
 
@@ -18,8 +20,28 @@ MODEL_NAME = "all-MiniLM-L6-v2"
 def _get_model() -> Any:
     from sentence_transformers import SentenceTransformer  # lazy import
 
+    model_path = os.environ.get("ATS_MODEL_PATH", "").strip()
+    if model_path:
+        logger.info("Loading bundled sentence-transformers model: %s", model_path)
+        return SentenceTransformer(model_path, local_files_only=True)
     logger.info("Loading sentence-transformers model: %s", MODEL_NAME)
     return SentenceTransformer(MODEL_NAME)
+
+
+def semantic_healthcheck() -> dict[str, str | None]:
+    """Exercise inference so a cached but unusable model cannot pass readiness."""
+    try:
+        embedding = _get_model().encode(["Career Hub readiness probe"], show_progress_bar=False)[0]
+        if (
+            len(embedding) != 384
+            or not all(math.isfinite(float(value)) for value in embedding)
+            or not any(float(value) != 0 for value in embedding)
+        ):
+            raise ValueError("Invalid embedding from semantic model")
+    except Exception as exc:
+        logger.exception("Semantic model readiness failed")
+        return {"status": "down", "model": MODEL_NAME, "detail": type(exc).__name__}
+    return {"status": "ok", "model": MODEL_NAME, "detail": None}
 
 
 # --- Constants ---
@@ -565,6 +587,7 @@ def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
     # the length of a company's legal boilerplate.
     jd_text = _strip_boilerplate(job_description)
 
+    semantic_available = True
     try:
         semantic_score, section_scores = _score_semantic(resume_text, jd_text)
     except Exception as exc:
@@ -572,12 +595,13 @@ def calculate_ats_score(resume_text: str, job_description: str) -> ATSResult:
         logger.warning("Semantic scoring failed, falling back to keyword-only: %s", exc)
         semantic_score = 0.0
         section_scores = {}
+        semantic_available = False
 
     kw_score, matched, missing = _score_keywords(resume_text, job_description)
     struct_score, struct_recs = _score_structure(resume_text)
 
     # Composite — if semantic scoring failed, shift weight to keyword
-    if semantic_score == 0.0:
+    if not semantic_available:
         final = round(kw_score * 0.80 + struct_score * 0.20, 1)
         kw_weight, sem_weight = 0.80, 0.0
     else:

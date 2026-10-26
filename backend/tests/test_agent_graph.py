@@ -82,6 +82,7 @@ class TestToolScoreAts:
         mock_result.matched_keywords = ["python", "fastapi"]
         mock_result.missing_keywords = ["kubernetes"]
         mock_result.recommendations = ["Add Docker experience"]
+        mock_result.breakdown = {"semantic_weight": 0.5, "keyword_weight": 0.3}
 
         with patch(
             "app.services.ats_scorer.calculate_ats_score",
@@ -95,6 +96,7 @@ class TestToolScoreAts:
             )
 
         assert result["ats_result"]["score"] == 75.5
+        assert result["ats_result"]["breakdown"] == mock_result.breakdown
         assert result["steps_completed"][0]["status"] == "success"
 
     def test_skipped_when_missing_input(self):

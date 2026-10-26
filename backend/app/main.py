@@ -238,7 +238,7 @@ async def health():
 @app.get("/health/warm", tags=["Health"])
 @rate_limit("30/minute")
 async def health_warm(request: Request):
-    """Touch the DB, cache and vector store with one cheap call each.
+    """Probe storage and semantic inference without blocking the event loop.
 
     A scheduled cron hits this on a short interval so the managed free-tier
     backends (which suspend after a few minutes idle) never see a cold start
@@ -274,14 +274,19 @@ async def health_warm(request: Request):
     try:
         from app.services.embedding_service import vector_healthcheck
 
-        vector_state = vector_healthcheck()
+        vector_state = await asyncio.to_thread(vector_healthcheck)
     except Exception as exc:
         vector_state = {"backend": "unknown", "status": "down", "detail": str(exc)}
+
+    from app.services.ats_scorer import semantic_healthcheck
+
+    semantic_state = await asyncio.to_thread(semantic_healthcheck)
 
     return {
         "api": "ok",
         "db": db_state,
         "redis": redis_state,
         "vector": vector_state,
+        "semantic": semantic_state,
         "ts": int(time.time()),
     }

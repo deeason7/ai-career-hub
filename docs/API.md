@@ -173,13 +173,15 @@ Service metadata. **No auth.**
 Liveness probe. **No auth.** Returns `{ "status": "ok" }`.
 
 #### `GET /health/warm`
-Deep warm-up probe. **No auth.** · Rate limit: 30/min. Touches Postgres (`SELECT 1`), Redis (`PING`), and the configured vector store with one cheap call each, then **always** returns `200` with per-dependency status — so a single degraded backend never makes the probe itself look down. An external scheduler hits it on a short interval to keep managed free-tier backends resident.
+Deep warm-up probe. **No auth.** · Rate limit: 30/min. Touches Postgres (`SELECT 1`), Redis (`PING`), the configured vector store, and the shared sentence-transformers encoder. The semantic check performs inference and validates its 384-dimensional output. Blocking vector/model work runs outside the request event loop. Returns `200` with per-dependency status; monitors must inspect the body, since HTTP success alone does not establish readiness.
 
 ```json
-{ "api": "ok", "db": { "status": "ok", "detail": null }, "redis": { "status": "ok", "detail": null }, "vector": { "backend": "qdrant", "status": "ok", "detail": null }, "ts": 1751457600 }
+{ "api": "ok", "db": { "status": "ok", "detail": null }, "redis": { "status": "ok", "detail": null }, "vector": { "backend": "qdrant", "status": "ok", "detail": null }, "semantic": { "status": "ok", "model": "all-MiniLM-L6-v2", "detail": null }, "ts": 1751457600 }
 ```
 
-`db.status` and `redis.status` are `ok` | `down` (`redis` is also `disabled` when unconfigured); `vector.status` is `ok` | `down`. A non-`ok` entry carries the exception class and message in `detail`.
+`db.status`, `vector.status`, and `semantic.status` are `ok` | `down`; Redis also permits `disabled` when unconfigured. Semantic failures expose only the exception class in `detail`; diagnostics remain in server logs. Existing datastore probes include exception details. The `semantic` field is new after v4.4.3; its absence in an older deployment means semantic readiness has not been verified.
+
+ATS results retain their actual weights in `breakdown`, including Quick Apply results. A model failure uses semantic/keyword/structure weights of `0/0.8/0.2`; successful inference, including a legitimate zero similarity, uses `0.5/0.3/0.2`. Reduced scores are not directly comparable to full scores.
 
 ---
 
