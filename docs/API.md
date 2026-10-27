@@ -1,6 +1,7 @@
 # API Reference
 
-Complete reference for the AI Career Hub HTTP API.
+HTTP API reference, reviewed against the source on 2026-10-26. Unreleased behavior
+is identified below; the hosted API still reports v4.4.3.
 
 For an interactive, always-current version, browse the auto-generated OpenAPI docs
 at `/docs` (Swagger UI) when running locally. The raw schema is served at
@@ -51,8 +52,8 @@ The API uses **JWT bearer tokens** for stateless request authentication, plus an
 
 | Token | Transport | Lifetime | Purpose |
 |---|---|---|---|
-| Access token | `Authorization: Bearer <jwt>` header | Short (minutes) | Authorises each API call |
-| Refresh token | `refresh_token` HttpOnly cookie | Long (days) | Mints new access tokens |
+| Access token | `Authorization: Bearer <jwt>` header | 60 minutes by default | Authorises each API call |
+| Refresh token | `refresh_token` HttpOnly cookie | 7 days | Mints new access tokens |
 
 **Flow:**
 
@@ -60,14 +61,19 @@ The API uses **JWT bearer tokens** for stateless request authentication, plus an
    and sets the refresh cookie.
 2. Send the access token as `Authorization: Bearer <token>` on every protected
    request.
-3. When the access token expires, call `POST /auth/refresh` (the browser sends the
-   cookie automatically) to obtain a fresh access token.
-4. `POST /auth/logout` revokes the current token (its JTI is added to a Redis
-   denylist) and clears the refresh cookie.
+3. When the access token expires, call `POST /auth/refresh` with the refresh cookie.
+   Save both the new access token and the rotated refresh cookie for subsequent requests.
+4. `POST /auth/logout` attempts to revoke the supplied access and refresh tokens
+   through the Redis denylist, then clears the refresh cookie.
 
-Every authenticated request is checked against the revocation denylist and the
-user's `is_active` flag, so a logged-out or deactivated token is rejected even
-before it expires.
+Protected requests check the token, user and revocation denylist. Revocation
+deliberately fails open when Redis is unavailable; revoked tokens can remain usable
+until expiry during that outage. Rotation is not atomic under concurrent requests.
+
+The Streamlit client calls the API server-to-server. It retains the refresh cookie
+in server-side session state and stores the access token separately in a JavaScript-
+readable browser cookie. A fresh Streamlit session can restore only an unexpired
+access token. See [Security](../SECURITY.md) for these session-storage limits.
 
 Two machine-to-machine endpoints use a **shared secret header** instead of JWT:
 
@@ -136,25 +142,38 @@ a limit returns `429`. Limits are disabled in the test suite (`TESTING=true`).
 
 ## Asynchronous jobs
 
-LLM-heavy operations return **`202 Accepted`** immediately with a `task_id`, then
-run in the background. Poll the matching `task/{task_id}` endpoint until `status`
-is `completed` or `failed`.
+There are three distinct asynchronous contracts. Background execution runs in the
+API process; stored status does not make work durable across a process restart.
 
+| Operation | Accepted response | State and polling |
+|---|---|---|
+| `POST /analysis/job-match` | `202`, `task_id`, `status: PENDING` | Redis, one-hour TTL; `GET /analysis/task/{task_id}` |
+| `POST /agent/analyze` | `202`, `task_id`, `status: PENDING` | Redis, one-hour TTL; `GET /agent/task/{task_id}` |
+| `POST /cover-letters/generate` | `202`, saved letter with `task_id` and `status: processing` | PostgreSQL letter row; `GET /cover-letters/task/{task_id}` |
+| `POST /cover-letters/{id}/refine` | `202`, revision row; **no task ID** | `GET /cover-letters/{id}/revisions`; inspect the returned revision's QA fields |
+
+Task polling uses uppercase `PENDING`, `STARTED`, `SUCCESS`, `FAILURE`:
+
+```json
+{
+  "task_id": "example-id",
+  "status": "STARTED",
+  "steps": {"ats": "done", "skill_gap": "running", "interview": "pending"},
+  "result": null,
+  "error": null
+}
 ```
-POST /api/v1/agent/analyze            → 202 { "task_id": "...", "status": "pending" }
-GET  /api/v1/agent/task/{task_id}     → 200 { "status": "running", "steps": [...] }
-GET  /api/v1/agent/task/{task_id}     → 200 { "status": "completed", "result": {...} }
-```
 
-Task state is held in Redis with a 1-hour TTL. Polling endpoints return `404`
-once a task has expired or never existed. The async operations are:
+Analysis and agent routes fall back to an inline `200` result when Redis cannot
+create task state. Their polling routes return `503` for a store outage and `404`
+for unknown, expired or foreign tasks. Cover-letter polling reads SQL, maps the
+letter's lowercase status to the uppercase task contract, and has no Redis TTL.
 
-| Kick-off | Poll |
-|---|---|
-| `POST /cover-letters/generate` | `GET /cover-letters/task/{task_id}` |
-| `POST /cover-letters/{id}/refine` | `GET /cover-letters/task/{task_id}` |
-| `POST /analysis/job-match` | `GET /analysis/task/{task_id}` |
-| `POST /agent/analyze` | `GET /agent/task/{task_id}` |
+Refinement creates a placeholder revision containing the previous text. QA values
+are populated when the background work completes. There is currently no explicit
+revision failure state; old text alone is **not** evidence of completion. Clients
+must stop polling after a bounded wait and report an unresolved refinement. See
+[the refactoring plan](REFACTORING_PLAN.md) for the lifecycle fix.
 
 ---
 
@@ -179,7 +198,7 @@ Deep warm-up probe. **No auth.** · Rate limit: 30/min. Touches Postgres (`SELEC
 { "api": "ok", "db": { "status": "ok", "detail": null }, "redis": { "status": "ok", "detail": null }, "vector": { "backend": "qdrant", "status": "ok", "detail": null }, "semantic": { "status": "ok", "model": "all-MiniLM-L6-v2", "detail": null }, "ts": 1751457600 }
 ```
 
-`db.status`, `vector.status`, and `semantic.status` are `ok` | `down`; Redis also permits `disabled` when unconfigured. Semantic failures expose only the exception class in `detail`; diagnostics remain in server logs. Existing datastore probes include exception details. The `semantic` field is new after v4.4.3; its absence in an older deployment means semantic readiness has not been verified.
+`db.status`, `vector.status`, and `semantic.status` are `ok` | `down`; Redis also permits `disabled` when unconfigured. Unreleased hardening exposes only exception class names in dependency `detail` fields; detailed diagnostics remain in server logs. The `semantic` field is new after v4.4.3; its absence in an older deployment means semantic readiness has not been verified.
 
 ATS results retain their actual weights in `breakdown`, including Quick Apply results. A model failure uses semantic/keyword/structure weights of `0/0.8/0.2`; successful inference, including a legitimate zero similarity, uses `0.5/0.3/0.2`. Reduced scores are not directly comparable to full scores.
 
@@ -231,8 +250,8 @@ Upload and parse a resume (PDF / DOCX / TXT). **Auth required.**
 **Body** (`multipart/form-data`): `name` (string, ≤ 100 chars), `file` (the document).
 
 On upload the file is text-extracted, LLM-parsed into structured JSON, and embedded
-into the user's vector collection. A 15-day TTL applies unless the resume is marked
-permanent.
+into the user's vector collection. The first resume is permanent; later resumes receive a 15-day expiry. There is no public pin/unpin endpoint. Scheduled SQL cleanup does not yet erase all derived vectors; see
+[retention limits](../SECURITY.md#data-handling).
 
 **Returns** `201` · `ResumeRead`.
 
@@ -246,7 +265,8 @@ Get one resume including its raw text. **Auth required.** → `200` · `ResumeRe
 Mark a resume as the active one (used by default in generation). **Auth required.** → `200` · `ResumeRead`.
 
 #### `DELETE /resumes/{resume_id}`
-Delete a resume and its embeddings. **Auth required.** → `204`.
+Delete a resume and cascade its SQL letter records; request best-effort deletion of
+that resume’s vectors. Related letter/job-description vectors are not cleaned up. **Auth required.** → `204`.
 
 #### `GET /resumes/{resume_id}/analysis`
 Return the stored structured analysis of a resume. **Auth required.** → `200`.
@@ -266,11 +286,12 @@ If `resume_id` is omitted, the active resume is used. The pipeline generates the
 letter, runs an AI-as-a-Judge QA pass (honesty/tone), auto-regenerates if honesty
 scores low, and auto-creates a "wishlist" tracker entry.
 
-**Returns** `202` · `CoverLetterRead` with `task_id` and `status: "pending"`.
+**Returns** `202` · `CoverLetterRead` with `task_id` and `status: "processing"`.
 
 #### `GET /cover-letters/task/{task_id}`
-Poll generation **or** refine status. **Auth required.** → `200` with `status` of
-`pending` | `completed` | `failed`.
+Poll **generation** status. **Auth required.** → `200` with `status` of
+`PENDING` | `STARTED` | `SUCCESS` | `FAILURE`; `result` contains generated text on success.
+This endpoint does not track refinement.
 
 #### `GET /cover-letters/`
 List the caller's cover letters. **Auth required.** → `200` · `list[CoverLetterRead]`.
@@ -291,7 +312,7 @@ Queue a refinement, optionally branching from a specific prior version. **Auth r
 `base_version` (optional, ≥ 1) selects the revision to branch from; omit it to refine
 the latest. An unknown `base_version` returns `404` ("Base revision not found.").
 
-**Returns** `202` · `CoverLetterRevisionRead` (poll via `/cover-letters/task/{task_id}`).
+**Returns** `202` · `CoverLetterRevisionRead` (poll the revisions list; there is no refinement task ID).
 
 #### `GET /cover-letters/{cover_letter_id}/revisions`
 List the revision history (lineage). **Auth required.** → `200` · `list[CoverLetterRevisionRead]`.
@@ -303,8 +324,9 @@ Promote a revision to be the cover letter's active text. **Auth required.** → 
 
 ### AI tools (`/ai`)
 
-All four accept a job description (and optional `resume_id`); the active resume is
-used when `resume_id` is omitted. **Auth required.**
+All four require authentication. The three analysis routes accept a job description
+and optional `resume_id`; they use the active resume when it is omitted. URL import
+accepts only a URL and does not require a resume.
 
 The shared body for `ats-score`, `skill-gap`, and `interview-questions` is:
 ```json
@@ -319,7 +341,8 @@ breakdown. · Rate limit: 20/min → `200`.
 Skill-gap analysis with recommendations. · Rate limit: 20/min → `200` · `502` if the LLM call fails.
 
 #### `POST /ai/interview-questions`
-Generate 5–15 tailored interview questions. · Rate limit: 20/min → `200` · `502` if the LLM call fails.
+Request ten tailored interview questions; the structured path validates 5–15 and
+returns at most ten. The legacy fallback may return fewer parsed questions. · Rate limit: 20/min → `200` · `502` if the LLM call fails.
 
 #### `POST /ai/fetch-job`
 Scrape a job posting from a URL (LinkedIn / Greenhouse / Lever / Workday). · Rate limit: 10/min
@@ -343,10 +366,14 @@ Combined ATS score + skill gap + interview questions in one async job. **Auth re
 { "resume_id": "uuid", "job_description": "…(≤10000 chars)…" }
 ```
 
-**Returns** `202` with a `task_id` · `503` if the LLM is busy · `502` on failure.
+**Returns** `202` with a `task_id`, or an inline `200` if the task store is unavailable.
+In the async path, LLM errors appear as polling `FAILURE`; the inline path uses
+`503` for model rate limits and `502` for other model failures.
 
 #### `GET /analysis/task/{task_id}`
-Poll the combined analysis. **Auth required.** → `200` with `status` and partial/full results.
+Poll the combined analysis. **Auth required.** → `200` with `status`, per-step
+progress, and `result` only on `SUCCESS`; `404` for missing/foreign tasks and `503`
+for task-store failure.
 
 ---
 
@@ -364,6 +391,13 @@ scrape → extract metadata → research company → ATS score → skill gap →
 
 **Returns** `202` with a `task_id`. The final result reports an overall `status` of
 `completed` | `partial` | `failed`, plus per-step timing and any captured errors.
+That result status is distinct from the task wrapper’s `SUCCESS`: a completed
+worker can return a partial or failed product workflow. Redis failure at submission
+falls back to an inline `200`.
+
+Quick Apply returns its draft in the task result. It does **not** create a saved
+cover letter, run the saved-letter QA/revision workflow, export a PDF or create a
+tracker entry. Use the saved-letter routes for those capabilities.
 
 #### `GET /agent/task/{task_id}`
 Poll the agent run. **Auth required.** → `200` with `status` and accumulated `steps` ·
@@ -433,8 +467,9 @@ Rebuild the caller's embeddings. **Auth required.** → `202`.
 ### Admin (`/admin`)
 
 #### `POST /admin/lifecycle/run`
-Trigger the document lifecycle cleanup (15-day TTL purge of expired resumes and
-cover letters). **Not a user endpoint** — authenticated by the `X-Admin-Secret`
+Trigger SQL cleanup of expired resumes and cover letters and reap stuck generation
+records. Derived vectors are not purged by this job. The Keep Warm workflow calls
+this endpoint daily at 03:00 UTC when its admin secret is configured. **Not a user endpoint** — authenticated by the `X-Admin-Secret`
 header, not JWT. → `200` · `403` if the secret is missing or wrong.
 
 ---

@@ -3,6 +3,13 @@
 - **Status:** Accepted
 - **Date:** 2026-06-11
 
+**Implementation clarification — 2026-10-26:** the Redis hash store and inline `200`
+fallback below apply to job-match analysis and Quick Apply. Cover-letter generation
+always accepts with `202`; its task ID and status are stored in PostgreSQL and polled
+from that record, with optional n8n dispatch. Background work runs in the API process
+unless n8n handles it, so task progress storage does not make execution durable across
+an API restart. Current job-match steps run sequentially to limit provider rate pressure.
+
 ## Context
 
 Cover-letter generation, combined job-match analysis, and the agent each make several LLM calls. Holding a
@@ -18,7 +25,8 @@ unavailable, the caller runs the work inline and returns a normal `200` — degr
 
 ## Consequences
 
-- The UI never blocks, shows live per-step progress, and survives navigation.
+- Async clients can poll progress while remaining navigable; inline fallback holds
+  the request until completion and remains subject to request timeouts.
 - No read-modify-write races on shared task state.
 - The live-progress path needs Redis; without it the feature still works but loses streaming. Polling adds
   some request overhead.

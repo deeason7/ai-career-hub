@@ -1,6 +1,7 @@
 # Evals
 
-Offline measurement of the scoring and generation paths. These are **not** unit tests.
+Offline measurement of the ATS scoring path. Generation-quality and human-judge
+calibration suites are planned, not implemented. These are **not** unit tests.
 A unit test asks whether the code does what it was written to do; an eval asks whether
 the *system* — model included — still behaves the way the product promises. The two
 fail for different reasons and are run at different times, so they live apart:
@@ -15,7 +16,9 @@ python -m evals.runner --suite ats-sanity --json scorecard.json   # from backend
 
 The runner prints a markdown scorecard and exits non-zero when a **gating** check
 fails. `--no-fail` reports without the non-zero exit. The `Evals` GitHub workflow runs
-the same command on dispatch and publishes the scorecard to the run summary.
+the same command on dispatch, fails on gating regressions by default, and publishes
+the scorecard to the run summary. Turn off `fail_on_regression` explicitly for a
+measurement-only run.
 
 ## The corpus
 
@@ -24,13 +27,14 @@ the same command on dispatch and publishes the scorecard to the run summary.
 
 | relation | meaning |
 |---|---|
-| `strong` | the resume is a real candidate for the job |
+| `strong` | the synthetic resume closely matches the posting's requirements |
 | `related` | same broad field, wrong role — the genuinely hard case |
 | `weak` | different discipline, or out of domain entirely |
 
 The resumes are written to be structurally comparable — every one has a summary,
-skills, experience, education, projects and certifications section, and all clear the
-scorer's 200-word floor. That is deliberate: structure is held constant so that a
+skills, experience, education, projects and certifications section, and all exceed
+200 words. Length currently affects recommendations, not the numeric structure score.
+Structure is held constant so that a
 difference in score is attributable to content rather than to formatting. One job
 (`warehouse_associate`) is an out-of-domain control that every resume should score
 poorly against.
@@ -55,8 +59,9 @@ yet expected to hold.
 
 ## Measured baseline
 
-`all-MiniLM-L6-v2` over the twenty pairs. Every figure below reproduced identically
-across runs:
+Recorded **2026-08-21** using `all-MiniLM-L6-v2` over the twenty pairs. The figures
+reproduced identically across the recorded runs; they are a historical offline
+baseline, not today's deployment health or a real-world hiring prediction.
 
 | check | measured | bar | |
 |---|---|---|:--:|
@@ -99,3 +104,15 @@ Write a module exposing `SUITE: str` and `run(...) -> Scorecard`, then register 
 default, the way `ats_sanity.run` accepts `score_fn` — that keeps the checks testable
 without loading a model, and `tests/test_evals.py` uses it to prove each check fails on
 the regression it is meant to catch.
+
+## Measurement limits
+
+- Four synthetic resumes are a small controlled corpus, not a representative sample
+  of job seekers. The thresholds were calibrated on this same corpus.
+- Identical resume structure isolates content relevance but leaves the structure
+  component untested. Add controlled missing-section examples before reporting
+  structure quality.
+- Passing these checks does not establish compatibility with an employer's ATS,
+  factual accuracy of generated letters, hiring success, or time saved.
+- Preserve the scorecard, date, corpus revision and model/runtime configuration when
+  comparing a new run. Product outcomes need a separate task-completion study.

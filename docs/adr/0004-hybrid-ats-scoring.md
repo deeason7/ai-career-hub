@@ -3,6 +3,13 @@
 - **Status:** Accepted
 - **Date:** 2026-05-16
 
+**Implementation clarification — 2026-10-26:** both semantic and keyword channels
+now receive boilerplate-filtered posting text. Structure scores section presence;
+length only produces recommendations. Failed semantic inference uses `0/80/20`
+weights and is disclosed in the scorecard. A successful zero-similarity result retains
+the normal weights. The score is application-preparation feedback, not an employer's
+ATS result or a calibrated probability of getting an interview.
+
 ## Context
 
 A resume-to-job match score has to be both fair and credible. Keyword-only ATS systems miss synonyms and

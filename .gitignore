@@ -14,7 +14,6 @@ __pycache__/
 venv/
 .venv/
 env/
-.env
 *.egg-info/
 dist/
 build/
@@ -25,8 +24,9 @@ build/
 
 # Environment
 .env
-.env.prod
-.env.local
+.env.*
+!.env.example
+**/.streamlit/secrets.toml
 
 # Docker
 *.log
@@ -49,12 +49,5 @@ htmlcov/
 .coverage
 coverage.xml
 
-# Node (frontend)
+# Node tooling
 node_modules/
-.next/
-out/
-
-# Stray empty ghost directories (real code lives in backend/)
-/alembic.ini
-/migrations/
-/app/

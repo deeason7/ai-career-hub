@@ -72,8 +72,10 @@ docker compose up --build
 
 ### Run tests
 ```bash
-make test
-# Equivalent: docker compose run --rm test
+make test                 # isolated PostgreSQL-backed backend suite
+make test-frontend        # frontend tests in its image
+make test-probes          # stdlib monitoring/documentation/release checks
+make docs-check           # local links, anchors and current release versions
 ```
 
 Tests run against a real PostgreSQL container using the separate `careerhub_test` database
@@ -106,7 +108,9 @@ Before opening a PR to `develop`:
 - [ ] All commits follow conventional commit format
 - [ ] `ruff check backend/ frontend/` passes with zero errors
 - [ ] `ruff format --check backend/ frontend/` passes
-- [ ] New endpoints have corresponding tests in `backend/tests/`
+- [ ] Appropriate backend/frontend regression tests pass
+- [ ] `make test-probes` and `make docs-check` pass
+- [ ] Product/API/configuration docs reflect changed behavior; historical changelog remains dated
 - [ ] No secrets, credentials, or internal identifiers committed
 - [ ] No padding comments. Only write comments that explain non-obvious logic.
 - [ ] Test passwords must satisfy the registration policy: min 12 characters, 1 digit, 1 uppercase or symbol

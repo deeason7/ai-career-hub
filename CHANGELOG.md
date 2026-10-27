@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Preserve the rotated refresh cookie in the frontend so repeated silent renewal does not reuse a revoked token.
+- Public dependency health failures expose exception classes instead of connection details; local Compose ports bind to localhost and AWS Compose requires a nonempty Redis password, loaded consistently by deploy, rollback and boot commands.
 - Deployment and keep-warm probes check the actual Streamlit runtime and semantic encoder, catching sleeping hosting pages and degraded ATS scoring that previously passed health checks.
 - Production images export the embedding model to an explicit local directory and verify offline inference as the serving user during the build.
 - A valid zero semantic similarity retains the normal scoring weights. Job Match and Quick Apply display the weights actually used and explain when scoring falls back to keywords and structure.
@@ -15,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Job descriptions are sanitized before cover-letter QA review, matching the generation path.
 
 ### Changed
+- Product-first documentation now separates fit review, saved applications and tracking, with a housekeeping checkpoint and an evidence-driven refactoring plan. API polling and retention documentation match the current implementation.
+- Remove unused frontend PDF/DOCX parsers and redundant source scaffolding; align hooks and tooling pins.
+- CI checks local documentation links, heading anchors and five release markers. Release preparation validates all edits before writing and keeps only the latest summary in README.
 - Frontend tests now run in CI and gate both deployment targets alongside backend tests.
 - The evaluation workflow fails on calibrated scoring regressions by default; measurement-only runs remain opt-in.
 - Hosting, privacy, deployment and project-status documentation reflects the active managed-provider stack and separates measured outcomes from unverified claims.

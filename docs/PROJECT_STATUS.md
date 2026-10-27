@@ -1,97 +1,91 @@
 # Project status and evidence
 
-Reviewed 2026-10-26. Last released version: **v4.4.3** (2026-08-22).
+[Documentation](README.md) / Status
 
-AI Career Hub helps job seekers turn an existing resume and job posting into a
-reviewable application package: match feedback, a grounded cover-letter draft,
-skill recommendations, interview questions and an application record. Its business
-value is reducing repeated preparation work while making generated claims easier
-to review. Time saved and hiring outcomes have not yet been measured.
+**Last live verification: 2026-10-26 · Deployed API: v4.4.3 · New changes: unreleased**
 
-## Current delivery stage
+The core job-application workspace, Streamlit redesign, and first ATS evaluation
+suite have shipped. The current work establishes a clean documentation/security
+checkpoint before further product refactoring. The
+[product brief](PRODUCT.md) explains the user value; the
+[refactoring plan](REFACTORING_PLAN.md) sets the next priorities.
 
-The core product, Streamlit redesign, managed-provider deployment and ATS evaluation
-harness have shipped. This is a maintenance and reliability stage, followed by
-completion of the evaluation work; the old frontend phases are complete.
+## Deployed behavior verified on 2026-10-26
 
-| Area | Recorded state | Remaining proof |
+| Area | Evidence | What this establishes |
 |---|---|---|
-| Hosted API | v4.4.3; API and managed-data probes responded; registration, login and resume parsing succeeded on 2026-10-26 | Complete the browser user journey |
-| Frontend | Restored from sleep on 2026-10-26: viewer wake returned 204, runtime reports `RUNNING`, runtime health returns `200 ok`, and the application iframe shell returns 200 | Complete the browser journey; runtime availability is verified, rendered interactions are not |
-| Monitoring | Keep Warm remains active; its old frontend check accepted the sleeping host page | New readiness checks must detect sleep/error pages and unavailable semantic scoring |
-| Semantic ATS | Live synthetic probe on 2026-10-26: composite 72.8, semantic 78.8, weights 0.5/0.3/0.2; the August fallback was not reproduced | Build and verify the proposed explicit model bundle; deploy the new readiness field |
-| LLM generation | Live 2026-10-26 sample: 1,672-character letter, QA honesty/tone 10/10; refinement produced 899 characters, QA 10/8; PDF export and automatic tracker update passed | Browser interaction and human judge calibration; these model verdicts are not independently validated accuracy |
-| AWS | Hibernated reference deployment; custom domain is parked | Billing reconciliation and resource restoration before any re-arm |
+| Frontend availability | Streamlit was asleep; viewer wake returned 204, then runtime state was `RUNNING`, its health route returned `200 ok`, and the app shell returned 200 | The serving runtime recovered; browser interactions were not exercised |
+| Account and résumé | Synthetic registration, login, upload, and structured parsing succeeded | The live account-to-résumé API path worked for one test account |
+| Match feedback | Composite 72.8; semantic 78.8; weights 0.5/0.3/0.2 | All three scoring channels participated in this sample; August's semantic fallback was not reproduced |
+| Saved application material | A 1,672-character letter was generated, then refined to 899 characters; export produced a valid PDF | Generation, refinement, and export completed through the saved-letter API path |
+| Application tracking | Saved generation created a tracker entry; updating its status to `applied` succeeded | The saved-letter-to-tracker handoff worked for this sample |
 
-The outage was a sleeping Streamlit runtime hidden by an overly permissive monitor;
-GitHub schedule inactivity was not the cause. Deployment recovery changes under
-review are not evidence of a new production release. See [deployment instructions](../DEPLOYMENT.md) and
-[architecture](ARCHITECTURE.md) for the active topology.
+The generated letter received model QA scores of 10/10 and its revision 10/8.
+Those are the model's judgments, not independently established factual accuracy.
+Synthetic documents and tracker records were deleted afterward; an empty smoke-test
+account remains because the product has no account-deletion API.
 
-## Verification on 2026-10-26
+The frontend outage was hidden by a monitor that accepted the provider's HTTP 200
+sleep page. Keep Warm was still active, so GitHub schedule inactivity was not the
+cause of this incident. Recovery instructions are in [DEPLOYMENT.md](../DEPLOYMENT.md).
 
-The deployed v4.4.3 API passed a synthetic journey: registration, login, resume
-upload/parsing, full ATS scoring, asynchronous generation, refinement, PDF export,
-automatic tracking and status update. Test documents and the tracker entry were
-deleted afterward; the empty synthetic account remains. This verifies the API
-journey separately from the untested browser interactions and unreleased source.
+## Released behavior and proposed improvements
 
-- **63 backend checks passed** for pure scoring/eval/runtime/sanitization behavior.
-- **21 frontend checks passed** with Streamlit mocked for display and session behavior.
-- **13 readiness-monitor checks passed**.
-- Full PostgreSQL/Docker integration tests, a fresh real-model eval run, and an
-  interactive browser journey were not run. Docker Desktop could not start in this
-  environment. Mocked tests do not establish hosted behavior.
-- The live API still serves v4.4.3, whose health response lacks the new semantic-model
-  probe. The packaged-model improvement, stronger monitor and frontend changes are local and
-  require the release process before they can be verified in production.
+The production API remains v4.4.3. Recovery changes prepared in the repository add
+actual frontend-runtime checks, semantic-inference readiness, an explicit offline
+model bundle, visible degraded scores, retryable session recovery, QA input
+sanitization, and frontend CI. These changes require a release before they can be
+verified as production behavior.
 
-## Measured engineering results
+The current v4.4.3 `/health/warm` response has no semantic-model field. The new
+readiness check intentionally rejects that missing signal until its matching
+backend is deployed; a healthy vector store alone does not prove model inference.
+
+AWS is a hibernated reference deployment and its custom domain is parked. Current
+AWS billing has not been reconciled; retained DNS and snapshots may still cost money.
+
+## Verification record
+
+The recovery review recorded the following checks before this housekeeping pass:
+
+| Check | Result | Limit |
+|---|---|---|
+| Backend runtime/eval/sanitization checks | 63 passed | Targeted host tests, not the full PostgreSQL suite |
+| Frontend display/session checks | 21 passed | Streamlit was mocked; no browser behavior established |
+| Readiness-monitor checks | 13 passed | Regression coverage for sleep pages, dependency failures, and missing signals |
+| Lint, formatting, workflow syntax | Passed | Static checks do not establish deployment readiness |
+| Full Docker/database suite and model build | Not run | Docker Desktop could not start in the review environment |
+| Fresh model-backed offline evaluation | Not run | Historical benchmark below remains the latest recorded full scorecard |
+| Interactive browser journey | Not run | Browser startup failed in the review environment |
+
+The [cleanup checkpoint](CHECKPOINT.md) records subsequent housekeeping checks and
+remaining release gates. A locally passing test or a running provider container is
+not evidence that an unreleased change is already serving users.
+
+## Measured quality and operating results
 
 | Result | Measurement | Method and limit |
 |---|---|---|
-| Removed irrelevant ATS score variation | Maximum movement from employer boilerplate fell **3.5 → 0 points** across **20 labeled pairs**, 2026-08-21 | Strip boilerplate before both semantic and keyword scoring; synthetic offline corpus, not hiring outcomes |
-| Added repeatable scoring quality gates | **7 gating checks**; minimum strong/weak separation **34.2 points**, strong/related **29.6 points**, 2026-08-21 | Real MiniLM model; four synthetic resumes × five job descriptions; small in-repository corpus, not an independent test set |
-| Reduced a backend image's footprint | **3.38 GB → 662 MB (about 80%)**, recorded 2026-06-05 | CPU-only PyTorch removed unused CUDA packages; historical build, not the current image size or a measured startup-time gain |
-| Established regression coverage | Last recorded complete backend run: **340 passed, 8 expected failures**, 2026-08-21 | Docker and real PostgreSQL; this historical count does not establish that today's edited tree passes |
+| More consistent résumé-fit feedback | Employer-boilerplate movement fell **3.5 → 0 points across 20 labeled pairs**, 2026-08-21 | Filtering before both semantic and keyword scoring; synthetic offline corpus, not an employer acceptance result |
+| Repeatable scoring evaluation | **7 gating checks**; strong/weak separation **34.2 points**, strong/related **29.6 points**, 2026-08-21 | Real MiniLM model; four synthetic résumés × five postings; not an independent test set |
+| Smaller inference container | **3.38 GB → 662 MB (about 80%)**, 2026-06-05 | Historical CPU-only PyTorch build; current image size, startup improvement, and billing savings were not measured |
+| Earlier complete backend regression run | **340 passed, 8 expected failures**, 2026-08-21 | Docker and PostgreSQL at that revision; not validation of today's source |
 
-The scoring corpus, thresholds and reproduction command are documented in
-[the evaluation guide](../backend/evals/README.md). Run `make evals` to produce a
-new scorecard; keep its model, corpus, date and runtime with any reported result.
+The [evaluation guide](../backend/evals/README.md) documents the corpus, thresholds,
+and reproduction command. Preserve model, corpus, version, date, and sample size
+with any reported measurement.
 
-## Resume bullets supported by the record
+## What the evidence does not yet cover
 
-- Eliminated up to **3.5 points of irrelevant ATS score variation across 20 labeled
-  resume/job pairs** by applying employer-boilerplate filtering consistently to
-  semantic and keyword scoring.
-- Reduced a backend container's size by **about 80% (3.38 GB to 662 MB)** by replacing
-  unused CUDA dependencies with CPU-only PyTorch for the inference workload.
-- Built a reproducible ATS evaluation suite with **7 quality gates over 20 labeled
-  pairs** by testing ranking separation, skill monotonicity, presentation invariance
-  and semantic-model availability.
+- Preparation time saved, reduced review effort, user adoption, conversion, or hiring outcomes.
+- Human calibration of the cover-letter judge and claim-level groundedness.
+- The structure-scoring channel across varied résumé layouts; the current corpus
+  deliberately holds structure constant.
+- A saved application flow starting in Quick Apply. Its draft currently remains
+  separate from saved-letter QA, revisions, export, and automatic tracking.
+- Reliable persisted failure states for refinements; background failure can leave
+  an old-text placeholder with no QA result.
 
-These describe engineering accomplishments. Do not convert them into claims about
-users served, hours saved, acceptance rates, revenue, uptime, or cloud savings
-without collecting the corresponding evidence.
-
-## Ready-to-show criteria
-
-- The public URL renders the application and completes login, resume upload,
-  job match, cover-letter generation/refinement, PDF export and tracker updates.
-- A failed dependency produces an actionable message rather than a misleading
-  success or an endless loading state.
-- The deployed image passes a model-backed semantic probe and the live smoke;
-  CI and the offline evaluation suite pass on the release commit.
-- Health monitoring detects application failures separately from provider landing
-  pages; document cleanup remains operational.
-- Release version, change log and user-facing documentation agree, and the
-  demonstration uses synthetic data that can be safely shared.
-
-## Next evaluation work
-
-Add structure-varying resumes to exercise the scorer's structure component, then
-calibrate the cover-letter judge against approximately 30 independently human-labeled
-letters. Report agreement and Cohen's kappa only after collecting those labels.
-Groundedness evaluation and retrieval-quality experiments follow that baseline.
-For product impact, measure completion time and task success for a fixed application
-workflow against a manual baseline, with a stated sample size and median/p95 latency.
+The next product work should close these workflow and measurement gaps. The
+[product measurement plan](PRODUCT.md#measuring-user-value) defines how to collect
+business evidence without treating model scores or feature counts as user impact.

@@ -1,138 +1,106 @@
 # Configuration
 
-Every runtime setting is defined in `backend/app/core/config.py` as a Pydantic `Settings` model and
-loaded from environment variables (locally via `backend/.env`). A starter template with safe
-placeholders lives in [`backend/.env.example`](../backend/.env.example).
+Use [`backend/.env.example`](../backend/.env.example) as the local template. Never commit a populated environment file or `.streamlit/secrets.toml`. Active deployment settings live in Hugging Face Spaces, Streamlit Community Cloud and GitHub Environments; the retained AWS target uses SSM Parameter Store. See [Deployment](../DEPLOYMENT.md).
 
-> **Loading order.** Settings are read from the process environment, then `backend/.env`. Empty
-> values are ignored (`env_ignore_empty=True`) so a blank line never overrides a default, and unknown
-> keys are ignored (`extra="ignore"`). The `env_file` path is relative, so the process must start from
-> the repository root — or inside the container, where the working directory is `/app`.
->
-> **Hosted deployment.** Backend secrets are set in Hugging Face Spaces; frontend settings
-> are set in Streamlit Community Cloud; CI credentials live in GitHub Environments. The
-> hibernated AWS target uses SSM Parameter Store (SecureString). Do not commit environment
-> files or credentials. See [DEPLOYMENT.md](../DEPLOYMENT.md).
+## Loading settings correctly
 
-Legend: a ✅ in **Required** means the app will not boot without it. Everything else falls back to the
-listed default.
+Most backend settings come from [`Settings`](../backend/app/core/config.py). Process environment values take precedence over its relative `backend/.env` file. Empty values are ignored by this Pydantic loader, and unknown keys are ignored. Start a direct local backend process from the repository root if relying on that file. In containers, Compose `env_file` or the host injects the process environment; `/app/backend/.env` is not a required image file.
+
+Redis clients, rate limiting, `TESTING` and `ATS_MODEL_PATH` also read `os.environ` directly. The Pydantic file loader does **not** export those values into the process environment. For direct host execution, export the relevant variables; using Compose's `env_file` performs that injection. Do not assume a setting works merely because it appears in the `Settings` model.
+
+In the tables, **required** means the settings model rejects a missing value. Conditional service credentials are needed when that service is selected, even where startup does not validate them. An empty string is shown as `""`.
 
 ## Database
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `POSTGRES_SERVER` | ✅ | — | Database host — `db` under Docker Compose, the Neon endpoint on the hosted demo (RDS on AWS) |
-| `POSTGRES_USER` | ✅ | — | Database user |
-| `POSTGRES_PASSWORD` | ✅ | — | Database password |
-| `POSTGRES_DB` | ✅ | — | Database name |
-| `POSTGRES_PORT` | — | `5432` | Database port |
-| `DB_SSLMODE` | — | `""` | Appended as `sslmode=` on both URIs when set — use `require` for TLS-only hosts like Neon; leave blank for RDS / local Docker |
+| Variable | Default | Purpose |
+|---|---|---|
+| `POSTGRES_SERVER` | Required | `db` in Compose; provider hostname on a hosted deployment |
+| `POSTGRES_USER` | Required | Database user |
+| `POSTGRES_PASSWORD` | Required | Database password; never reuse the published local development default |
+| `POSTGRES_DB` | Required | Database name; tests must use a separate disposable database |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `DB_SSLMODE` | `""` | PostgreSQL TLS mode, appended when set; use the mode required by your provider |
 
-Two SQLAlchemy URIs are derived from these values: a **sync** URI (`postgresql+psycopg://…`) used by
-Alembic and synchronous background tasks, and an **async** URI (`postgresql+psycopg_async://…`) used by
-request handlers. Both append `connect_timeout=10`.
+Sync (`postgresql+psycopg`) and async (`postgresql+psycopg_async`) SQLAlchemy URIs are derived from these settings, with `connect_timeout=10`. They serve migrations/background work and request handlers respectively. The current URI construction interpolates credentials directly; URL-reserved characters require care and should be covered when revising connection handling.
 
-## Redis
+## Redis and rate limiting
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `REDIS_HOST` | — | `redis` | Redis host |
-| `REDIS_PORT` | — | `6379` | Redis port |
-| `REDIS_PASSWORD` | — | `""` | Redis auth password (blank = no auth) |
-| `REDIS_SSL` | — | `false` | `true` switches all Redis clients to `rediss://` (TLS-only providers like Upstash) |
-| `REDIS_DB_TASKS` | — | `2` | Logical DB for the async task store — set `0` on single-database providers |
-| `REDIS_DB_DENYLIST` | — | `1` | Logical DB for the JWT deny-list — set `0` on single-database providers |
+| Variable | Runtime default | Purpose |
+|---|---|---|
+| `REDIS_HOST` | Unset for direct readers | When absent, token revocation/task clients are disabled and the limiter uses memory. The Settings model separately defaults to `redis`; Compose explicitly injects `redis`. |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_PASSWORD` | `""` | Authentication password; production Compose requires a nonempty value |
+| `REDIS_SSL` | `false` | `true`, `1` or `yes` enables `rediss://` for the direct Redis clients |
+| `REDIS_DB_TASKS` | `2` | Task-state logical database; use `0` for a single-database provider |
+| `REDIS_DB_DENYLIST` | `1` | JWT revocation logical database; use `0` for a single-database provider |
 
-Redis backs the slowapi rate limiter, the JWT revocation deny-list, and the async task store that drives
-job-match and agent progress.
+The limiter uses Redis database `0`. Configure all Redis variables in the **process environment**. During an outage, rate limiting falls back to per-process memory and revocation fails open; see [Security](../SECURITY.md). A healthy API process does not prove these services are available.
 
-## Vector store
+## Authentication and runtime
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `VECTOR_BACKEND` | — | `chroma` | `chroma` or `qdrant` only — any other value refuses to boot |
-| `QDRANT_URL` | — | `""` | Qdrant cluster URL, including the port — needed when `VECTOR_BACKEND=qdrant` |
-| `QDRANT_API_KEY` | — | `""` | Qdrant API key |
-| `QDRANT_COLLECTION` | — | `careerhub` | Collection name — one shared collection, isolated per user by a mandatory payload filter |
+| Variable | Default | Purpose |
+|---|---|---|
+| `SECRET_KEY` | Required | JWT signing key, validated to at least 32 characters; generate a unique random deployment value |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Access-token lifetime; refresh lifetime is seven days in code |
+| `ADMIN_SECRET` | `""` | Admin endpoint secret; at least 32 characters if set, otherwise routes reject access |
+| `PRODUCTION` | `false` | Hides Swagger/ReDoc, enables API HSTS and sets Secure on backend refresh cookies |
+| `TESTING` | `false` | Direct environment flag: literal `true` disables route rate limits; use only for tests |
+| `BASE_URL` | `http://localhost:8000` | Public API base for workflow callbacks; do not append `/api/v1` |
+| `ALLOWED_ORIGINS` | `http://localhost:8501` | Comma-separated browser-origin allow-list, including scheme and port where applicable |
+| `SENTRY_DSN` | `""` | Enables backend error reporting; default PII capture is disabled |
 
-## Authentication & Security
+Keep `TESTING` unset/false in production. The password policy is implemented in request models, not configured through environment variables. `PROJECT_NAME`, `VERSION` and `API_V1_STR` are code defaults for application identity and routing; retain the release version and `/api/v1` prefix unless coordinating all clients and deployment checks.
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `SECRET_KEY` | ✅ | — | JWT signing key — **validated to be ≥ 32 characters** |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | — | `60` | Access-token lifetime in minutes |
-| `ADMIN_SECRET` | — | `""` | Shared secret for `/admin/*` — **if set, must be ≥ 32 characters**; blank disables those routes |
-| `BASE_URL` | — | `http://localhost:8000` | Public API base URL, used when building n8n callback URLs |
+## Language models
 
-> The password policy (minimum 12 characters) is enforced at the model level, not through an environment
-> variable.
+A nonempty `GROQ_API_KEY` selects Groq through `instructor`; otherwise the LLM client uses Ollama. Required models and provider access must be provisioned separately.
 
-## LLM Backend
+| Variable | Default | Purpose |
+|---|---|---|
+| `GROQ_API_KEY` | `""` | Groq credential; selects the hosted LLM path when present |
+| `GROQ_LLM_MODEL` | `openai/gpt-oss-20b` | Groq model identifier |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | Local Ollama endpoint |
+| `OLLAMA_LLM_MODEL` | `llama3.2:3b` | Ollama chat model |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model used by the legacy retrieval fallback |
+| `ATS_MODEL_PATH` | `""` | Direct environment setting for a complete local sentence-transformers model; shared by ATS scoring and document embeddings |
 
-The app runs a **dual-path** LLM stack. When `GROQ_API_KEY` is set, the computed `USE_GROQ` flag is true
-and production uses Groq through `instructor`; otherwise it falls back to Ollama for local development.
+The production backend image sets `ATS_MODEL_PATH=/app/models/all-MiniLM-L6-v2` and loads packaged model weights offline. When blank, local code loads `all-MiniLM-L6-v2` by name. `/health/warm` includes semantic inference health; a healthy vector connection alone does not establish model readiness. Semantic scoring can degrade to the keyword path when model inference is unavailable.
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `GROQ_API_KEY` | — | `""` | Groq API key — **takes priority over Ollama when set** (free key at console.groq.com) |
-| `GROQ_LLM_MODEL` | — | `openai/gpt-oss-20b` | Groq model id |
-| `OLLAMA_BASE_URL` | — | `http://ollama:11434` | Ollama endpoint (local dev) |
-| `OLLAMA_LLM_MODEL` | — | `llama3.2:3b` | Ollama chat model |
-| `OLLAMA_EMBED_MODEL` | — | `nomic-embed-text` | Ollama embedding model |
+## Vector storage
 
-## Embedding model
+| Variable | Default | Purpose |
+|---|---|---|
+| `VECTOR_BACKEND` | `chroma` | Only `chroma` or `qdrant` is valid; another value prevents startup |
+| `CHROMA_PERSIST_DIR` | `/app/chroma_data` | Local persistent storage, mounted as a named volume in Compose |
+| `QDRANT_URL` | `""` | Cluster URL required to use Qdrant |
+| `QDRANT_API_KEY` | `""` | Qdrant credential where authentication is enabled |
+| `QDRANT_COLLECTION` | `careerhub` | Shared collection; application operations filter by authenticated user |
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `ATS_MODEL_PATH` | — | `""` | Optional local model directory shared by ATS scoring and document embeddings. The production Docker image sets `/app/models/all-MiniLM-L6-v2` and loads its packaged weights offline; blank uses the configured code default from the Hugging Face Hub for local development. |
+Changing the backend or collection does not migrate existing vectors. PostgreSQL records and vector chunks have separate lifecycles; see the deletion limitations in [Security](../SECURITY.md).
 
-A configured local directory must contain a complete sentence-transformers model.
-Check the semantic-model result from `/health/warm`; vector-store connectivity alone
-does not establish model readiness.
+The [Keep Warm workflow](../.github/workflows/keepwarm.yml) configures daily cleanup at 03:00 UTC through `/api/v1/admin/lifecycle/run`, using `ADMIN_SECRET` from the `free-prod` GitHub Environment. The six-hour warm schedule is separate. Monitor cleanup authentication and results; the current cleanup covers relational rows, not vector chunks.
 
-## RAG / Vector Store
+## Optional workflow orchestration
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `CHROMA_PERSIST_DIR` | — | `/app/chroma_data` | On-disk path for the persistent ChromaDB collections, mounted as a named Docker volume |
+| Variable | Default | Purpose |
+|---|---|---|
+| `N8N_WEBHOOK_URL` | `""` | n8n trigger URL |
+| `N8N_WEBHOOK_SECRET` | `""` | Shared secret for workflow requests and callbacks |
 
-## Workflow Orchestration (optional)
+`N8N_ENABLED` becomes true when both values are present. Otherwise letter generation uses a local background task. Configure `BASE_URL` for callbacks when enabling n8n. A deployment restart can interrupt in-process work; the stuck-job reaper marks old processing records failed.
 
-When both variables are set, the computed `N8N_ENABLED` flag is true and cover-letter generation is
-dispatched to n8n Cloud; otherwise generation runs as a local `BackgroundTask`.
+## Frontend and local services
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `N8N_WEBHOOK_URL` | — | `""` | n8n Cloud trigger URL |
-| `N8N_WEBHOOK_SECRET` | — | `""` | Shared secret used to authenticate the n8n callback |
+| Variable | Default | Purpose |
+|---|---|---|
+| `API_URL` | `http://api:8000/api/v1` | Frontend process environment: complete API prefix, including `/api/v1` |
+| `STREAMLIT_SERVER_RUN_ON_SAVE` | Set to `true` by local Compose | Development reload behavior |
+| `STREAMLIT_SERVER_FILE_WATCHER_TYPE` | Set to `poll` by local Compose | Bind-mount file watching |
 
-## CORS
+On a direct host run, set `API_URL=http://localhost:8000/api/v1`; the Docker service name `api` resolves inside the Compose network. Use the hosted backend URL on Streamlit Community Cloud. Local Compose publishes PostgreSQL, Redis, Ollama, API, frontend and Nginx on loopback only, so they are not exposed to the local network by default. Production Nginx ingress is configured separately.
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `ALLOWED_ORIGINS` | — | `http://localhost:8501` | Comma-separated allow-list of browser origins, parsed into `CORS_ORIGINS` |
+## Operational check
 
-## Observability
+After configuration changes, check `/health`, then inspect every dependency in `/health/warm`. The warm endpoint reports `down` and exception class names in JSON while still returning HTTP 200; details remain in restricted server logs. Verify a real sign-in and one application workflow as well. Never print a populated Compose config or environment dump into shared logs while troubleshooting secrets.
 
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `SENTRY_DSN` | — | `""` | Sentry project DSN; blank disables error reporting. PII capture is off (`send_default_pii=False`) |
-
-## Runtime Flags
-
-| Variable | Required | Default | Description |
-|---|:--:|---|---|
-| `PRODUCTION` | — | `false` | `true` hides `/docs` and `/redoc` and enables HSTS |
-| `TESTING` | — | `false` | `true` (CI/tests) disables rate limiting — never set in production |
-
-## Computed settings
-
-These are derived from the values above — you do not set them directly:
-
-| Field | Derivation |
-|---|---|
-| `SQLALCHEMY_DATABASE_URI` | Sync Postgres URI from the `POSTGRES_*` values (Alembic, sync tasks) |
-| `SQLALCHEMY_ASYNC_DATABASE_URI` | Async Postgres URI (request handlers) |
-| `USE_GROQ` | `true` when `GROQ_API_KEY` is non-empty |
-| `N8N_ENABLED` | `true` when both `N8N_WEBHOOK_URL` and `N8N_WEBHOOK_SECRET` are set |
-| `CORS_ORIGINS` | `ALLOWED_ORIGINS` split on commas |
+Computed fields (`SQLALCHEMY_DATABASE_URI`, `SQLALCHEMY_ASYNC_DATABASE_URI`, `USE_GROQ`, `N8N_ENABLED`, `CORS_ORIGINS`) are derived from the settings above; do not set them independently.

@@ -159,8 +159,8 @@ def main() -> None:
         fail("generate", f"202 without a task_id — {str(letter)[:200]}")
     print(f"generation accepted (task {task_id})")
 
-    # A failed letter keeps polling as PENDING/null by design — completion is a
-    # non-null result, and the hard timeout below is the failure detector.
+    # Completion requires a nonempty result. The deadline also bounds failed or
+    # interrupted runs that never produce one.
     deadline = time.monotonic() + args.letter_timeout
     body = {}
     while time.monotonic() < deadline:
@@ -187,7 +187,7 @@ def main() -> None:
 
     print(
         f"\nPASS — {len(text)}-char letter in {time.monotonic() - started:.0f}s total; "
-        f"probe rows expire via the 15-day lifecycle purge"
+        f"review probe data for cleanup; the first resume and account do not expire"
     )
 
 

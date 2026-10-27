@@ -3,8 +3,13 @@
 This directory records the load-bearing technical decisions behind AI Career Hub — the context, the
 choice, and what it cost — so the reasoning survives past the commit that implemented it.
 
-The format is lightweight [MADR](https://adr.github.io/madr/). A record is immutable once accepted; when a
-decision changes, a new record supersedes the old one rather than editing history.
+The format is lightweight [MADR](https://adr.github.io/madr/). Preserve the original
+date and decision. Dated implementation clarifications can correct drift; a changed
+architectural decision requires a new record that supersedes the old one.
+
+Reviewed against the code on 2026-10-26. Provider settings and deploy status belong in
+[configuration](../CONFIGURATION.md) and [project status](../PROJECT_STATUS.md),
+so an old provider/model choice here is not an uptime claim.
 
 | ADR | Decision | Status |
 |---|---|---|

@@ -7,13 +7,21 @@ repos:
 
   # ── Python linting + formatting ────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.15.13
     hooks:
       - id: ruff            # lint + auto-fix (isort, unused imports, etc.)
         args: [--fix]
         files: ^(backend|frontend)/
       - id: ruff-format     # black-compatible formatter
         files: ^(backend|frontend)/
+      - id: ruff
+        name: ruff (deployment scripts)
+        args: [--fix, --config, backend/ruff.toml]
+        files: ^\.github/scripts/
+      - id: ruff-format
+        name: ruff-format (deployment scripts)
+        args: [--config, backend/ruff.toml]
+        files: ^\.github/scripts/
 
   # ── General file hygiene ───────────────────────────────────────────────────
   - repo: https://github.com/pre-commit/pre-commit-hooks

@@ -1,1 +1,23 @@
-Generic single-database configuration with an async dbapi.
+Database schema history
+=======================
+
+Alembic applies the ordered revisions in versions/. Keep historical revisions:
+fresh installations and older databases need the full upgrade chain. They are
+not unused application code.
+
+The migration environment imports app.models to populate SQLModel metadata and
+uses the synchronous database URI from app.core.config. Request handlers use the
+separate asynchronous engine. Production startup runs `alembic upgrade head`
+after its database becomes reachable.
+
+Inspect the local Docker database from the repository root:
+
+    docker compose run --rm api alembic -c /app/alembic.ini current
+    docker compose run --rm api alembic -c /app/alembic.ini history
+
+For an approved schema change, generate a revision, review its SQL and implement
+the downgrade. Verify upgrade and downgrade against a disposable local database
+before release. Autogeneration cannot decide whether a data migration is safe.
+
+The regular test suite recreates its own careerhub_test schema. Passing it does
+not prove that an existing production database can migrate successfully.

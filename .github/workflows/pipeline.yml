@@ -88,7 +88,10 @@ jobs:
       - name: Format check
         run: ruff format --check backend/ frontend/
 
-      - name: Test deployment probes
+      - name: Check documentation
+        run: python .github/scripts/check_docs.py
+
+      - name: Test maintenance scripts
         run: python -m unittest discover -s .github/scripts/tests -v
 
       - name: Test
@@ -144,8 +147,8 @@ jobs:
 
   # AWS target — armed only while the AWS_DEPLOY_ENABLED repo variable is
   # 'true'. Clearing it puts the AWS environment in standby: the workflow,
-  # scripts and infra docs all stay in place, and re-arming is a one-variable
-  # flip rather than a re-setup.
+  # scripts and infra docs stay in place. Restore and verify deleted resources
+  # before re-arming; the variable cannot recreate an environment.
   deploy:
     name: Deploy (AWS)
     runs-on: ubuntu-latest
