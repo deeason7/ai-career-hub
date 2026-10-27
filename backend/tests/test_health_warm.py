@@ -65,9 +65,9 @@ async def test_warm_probe_reports_failed_semantic_inference(client, healthy_sema
     assert res.json()["semantic"]["detail"] == "OSError"
 
 
-async def test_warm_probe_carries_redis_failure_detail(client):
+async def test_warm_probe_hides_redis_failure_message(client, caplog):
     broken = AsyncMock()
-    broken.ping.side_effect = ConnectionError("connection reset by peer")
+    broken.ping.side_effect = ConnectionError("private-redis-host: connection reset")
 
     with patch("app.services.task_state._get_redis", return_value=broken):
         res = await client.get("/health/warm")
@@ -75,8 +75,43 @@ async def test_warm_probe_carries_redis_failure_detail(client):
     assert res.status_code == 200
     body = res.json()
     assert body["redis"]["status"] == "down"
-    assert "ConnectionError" in body["redis"]["detail"]
-    assert "connection reset by peer" in body["redis"]["detail"]
+    assert body["redis"]["detail"] == "ConnectionError"
+    assert "private-redis-host" not in res.text
+    assert "Redis warm probe failed" in caplog.text
+
+
+async def test_warm_probe_hides_database_failure_message(client, caplog):
+    with (
+        patch("app.main.async_engine") as engine,
+        patch("app.services.task_state._get_redis", return_value=None),
+    ):
+        engine.connect.side_effect = ConnectionError("private-db-host: authentication failed")
+        res = await client.get("/health/warm")
+
+    assert res.status_code == 200
+    assert res.json()["db"] == {"status": "down", "detail": "ConnectionError"}
+    assert "private-db-host" not in res.text
+    assert "Database warm probe failed" in caplog.text
+
+
+async def test_warm_probe_hides_unexpected_vector_failure_message(client, caplog):
+    with (
+        patch(
+            "app.services.embedding_service.vector_healthcheck",
+            side_effect=RuntimeError("private-vector-host: provider response"),
+        ),
+        patch("app.services.task_state._get_redis", return_value=None),
+    ):
+        res = await client.get("/health/warm")
+
+    assert res.status_code == 200
+    assert res.json()["vector"] == {
+        "backend": "unknown",
+        "status": "down",
+        "detail": "RuntimeError",
+    }
+    assert "private-vector-host" not in res.text
+    assert "Vector warm probe failed" in caplog.text
 
 
 async def test_warm_probe_reports_disabled_when_unconfigured(client):

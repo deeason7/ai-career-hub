@@ -27,9 +27,13 @@ def _refresh_token() -> bool:
     resp.raise_for_status()
     data = safe_json(resp)
     new_token = data.get("access_token") if isinstance(data, dict) else None
-    if not new_token:
+    new_refresh_token = resp.cookies.get("refresh_token")
+    if not new_token or not new_refresh_token:
         raise requests.RequestException("Token refresh is unavailable.", response=resp)
-    st.session_state.token = new_token
+    # The backend revokes the previous refresh token on every successful refresh.
+    # Persist both credentials together so the next expiry can also be recovered.
+    st.session_state["token"] = new_token
+    st.session_state["refresh_token"] = new_refresh_token
     return True
 
 

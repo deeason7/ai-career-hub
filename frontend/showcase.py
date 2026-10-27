@@ -279,7 +279,7 @@ _HERO = (
 
 _FINEPRINT = (
     '<p class="ch-fineprint">AI-generated content can be wrong — review everything '
-    "before you send it. Documents expire after 15 days unless you keep them. "
+    "before you send it. Review document retention and deletion limits before uploading personal information. "
     "Details in 📜 Legal &amp; Info after you sign in.</p>"
 )
 

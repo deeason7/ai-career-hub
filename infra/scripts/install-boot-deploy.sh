@@ -35,7 +35,7 @@ WorkingDirectory=${REPO_DIR}
 Environment="HOME=/home/ubuntu"
 Environment="ECR_REGISTRY=${ECR_REGISTRY}"
 ExecStartPre=/usr/bin/git -C ${REPO_DIR} pull --ff-only origin main
-ExecStart=/usr/bin/docker compose -f ${REPO_DIR}/docker-compose.prod.yml up -d --remove-orphans
+ExecStart=/usr/bin/docker compose --env-file ${REPO_DIR}/.env.prod -f ${REPO_DIR}/docker-compose.prod.yml up -d --remove-orphans
 StandardOutput=journal
 StandardError=journal
 

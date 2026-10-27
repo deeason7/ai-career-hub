@@ -16,4 +16,4 @@ docker tag "${ECR_REGISTRY}/careerhub-backend:${PREV_SHA}"  "${ECR_REGISTRY}/car
 docker tag "${ECR_REGISTRY}/careerhub-frontend:${PREV_SHA}" "${ECR_REGISTRY}/careerhub-frontend:latest"
 
 export ECR_REGISTRY
-docker compose -f docker-compose.prod.yml up -d --force-recreate api frontend
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate api frontend

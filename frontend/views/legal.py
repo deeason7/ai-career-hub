@@ -26,9 +26,9 @@ def page_legal() -> None:
            Label it clearly (e.g. "Software Engineer 2026").
         3. **Set an Active Resume** — Mark one resume as active. All AI tools will use it.
         4. **Job Match Analysis** — Paste one job description and get your ATS score,
-           skill gap breakdown, and 10 tailored interview questions — all in one click.
-           Aim for 70%+ ATS before applying.
-        5. **Cover Letter** — Generates a RAG-based letter using only facts from your resume.
+           skill gap breakdown, and tailored interview questions.
+           Review the matching evidence and gaps; the score is not a hiring prediction.
+        5. **Cover Letter** — Creates a draft grounded in your resume context, with a model QA review.
            Always proofread before sending.
         6. **Job Tracker** — Track every application from wishlist to offer.
 
@@ -106,21 +106,32 @@ def page_legal() -> None:
         **What is stored:**
         - Account email, hashed password (bcrypt), full name
         - Extracted resume text (raw uploaded files are NOT stored)
-        - Cover letters, ATS scores, and job application records you create
+        - Cover letters, revisions, ATS scores, and job application records you create
+        - Document chunks and embeddings used for retrieval
+        - Selected account activity and operational diagnostics
 
         **What is NOT stored:**
         - Raw uploaded files (only text is persisted)
         - Payment data (no payments collected)
-        - Tracking cookies, fingerprints, or analytics data
+        - Advertising profiles or product analytics collected by this application
 
-        **Your rights:**
-        - Delete resumes and job records at any time from the UI
-        - To request full account deletion, open a GitHub issue
+        **Retention and deletion:**
+        - The first resume is retained until deleted. Later resumes and saved letters
+          are scheduled for cleanup after 15 days; there is no pin/unpin control.
+        - You can delete resumes and job records from the UI. Removing a resume also
+          removes its saved letters, while tracker history can remain.
+        - Scheduled cleanup does not yet erase all retrieval copies. Explicit resume
+          deletion attempts to remove that resume's retrieval copies, but related
+          letter and posting copies can remain. Complete deletion is still being improved.
+        - There is no self-service account deletion. Contact the repository owner
+          privately for a request; do not post personal documents in a public issue.
+        - Hosting providers may retain operational logs and backups under their policies.
 
         **Recommendations:**
         - Do **not** upload resumes containing passport numbers, government IDs,
           or financial account details to the public demo
         - For full data control, self-host using the Docker Compose setup
 
-        *This project does not include analytics, advertising, or third-party tracking.*
+        *The app uses a sign-in cookie. Hosting providers and optional error reporting
+        may process technical usage information; this app does not provide advertising.*
         """)

@@ -103,8 +103,8 @@ STEPS = [
         "icon": "🧭",
         "title": "That's the tour",
         "body": "Upload once, score everything, apply with letters that pass an "
-        "honesty check, track it all. Documents expire after 15 days unless you pin "
-        "them — details in 📜 Legal & Info. Replay this any time from the sidebar.",
+        "honesty check, track it all. Review retention and deletion limits in "
+        "📜 Legal & Info. Replay this any time from the sidebar.",
         "try": None,
     },
 ]

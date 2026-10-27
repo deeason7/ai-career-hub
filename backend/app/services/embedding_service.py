@@ -163,7 +163,8 @@ class ChromaVectorStore(VectorStore):
             self._get_client().heartbeat()
             return {"status": "ok", "detail": None}
         except Exception as exc:
-            return {"status": "down", "detail": str(exc)}
+            logger.exception("Chroma health check failed")
+            return {"status": "down", "detail": type(exc).__name__}
 
 
 class QdrantVectorStore(VectorStore):
@@ -337,7 +338,8 @@ class QdrantVectorStore(VectorStore):
             self._get_client().get_collections()
             return {"status": "ok", "detail": None}
         except Exception as exc:
-            return {"status": "down", "detail": str(exc)}
+            logger.exception("Qdrant health check failed")
+            return {"status": "down", "detail": type(exc).__name__}
 
 
 def _get_store() -> VectorStore:
@@ -467,7 +469,12 @@ def vector_healthcheck() -> dict:
     except Exception as exc:
         from app.core.config import settings  # noqa: PLC0415
 
-        return {"backend": settings.VECTOR_BACKEND, "status": "down", "detail": str(exc)}
+        logger.exception("Vector health check failed")
+        return {
+            "backend": settings.VECTOR_BACKEND,
+            "status": "down",
+            "detail": type(exc).__name__,
+        }
     # Name the store the factory built, not the configured string — the two
     # diverged once ("quadrant") and the probe reported the typo as healthy.
     return {"backend": store.name, "status": result["status"], "detail": result.get("detail")}

@@ -272,7 +272,7 @@ class TestHealthcheck:
         result = QdrantVectorStore(client=bad, collection="x").healthcheck()
 
         assert result["status"] == "down"
-        assert "cluster unreachable" in result["detail"]
+        assert result["detail"] == "RuntimeError"
 
     def test_vector_healthcheck_reports_active_backend(self, monkeypatch):
         from app.core.config import settings
@@ -292,7 +292,11 @@ class TestHealthcheck:
         bad.get_collections.side_effect = RuntimeError("boom")
         es._store = QdrantVectorStore(client=bad, collection="x")
 
-        assert es.vector_healthcheck() == {"backend": "qdrant", "status": "down", "detail": "boom"}
+        assert es.vector_healthcheck() == {
+            "backend": "qdrant",
+            "status": "down",
+            "detail": "RuntimeError",
+        }
 
     def test_vector_healthcheck_names_the_resolved_store(self, monkeypatch):
         """If config and factory ever diverge again, the probe must expose it."""
@@ -302,6 +306,24 @@ class TestHealthcheck:
         monkeypatch.setattr(settings, "VECTOR_BACKEND", "chroma")
         es._store = _qdrant_store()
         assert es.vector_healthcheck()["backend"] == "qdrant"
+
+    def test_vector_healthcheck_hides_factory_failure_message(self, monkeypatch, caplog):
+        from app.core.config import settings
+        from app.services import embedding_service as es
+
+        monkeypatch.setattr(settings, "VECTOR_BACKEND", "qdrant")
+        monkeypatch.setattr(
+            es,
+            "_get_store",
+            MagicMock(side_effect=ValueError("private-provider-config: invalid credential")),
+        )
+
+        assert es.vector_healthcheck() == {
+            "backend": "qdrant",
+            "status": "down",
+            "detail": "ValueError",
+        }
+        assert "Vector health check failed" in caplog.text
 
 
 # --- cover_letter _chroma_retrieve fallback ---

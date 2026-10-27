@@ -253,7 +253,8 @@ async def health_warm(request: Request):
         async with async_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
     except Exception as exc:
-        db_state = {"status": "down", "detail": f"{type(exc).__name__}: {exc}"}
+        logger.exception("Database warm probe failed")
+        db_state = {"status": "down", "detail": type(exc).__name__}
 
     # The task-state module already keeps a lazily-created async client around
     # for polling job progress — reuse it rather than opening a second pool
@@ -267,16 +268,17 @@ async def health_warm(request: Request):
             await redis_client.ping()
             redis_state = {"status": "ok", "detail": None}
     except Exception as exc:
-        # Carry the exception like the vector block does — a bare "down" made
-        # the 07-05 blip undiagnosable from the probe body alone.
-        redis_state = {"status": "down", "detail": f"{type(exc).__name__}: {exc}"}
+        # This endpoint is public: keep provider messages in server logs only.
+        logger.exception("Redis warm probe failed")
+        redis_state = {"status": "down", "detail": type(exc).__name__}
 
     try:
         from app.services.embedding_service import vector_healthcheck
 
         vector_state = await asyncio.to_thread(vector_healthcheck)
     except Exception as exc:
-        vector_state = {"backend": "unknown", "status": "down", "detail": str(exc)}
+        logger.exception("Vector warm probe failed")
+        vector_state = {"backend": "unknown", "status": "down", "detail": type(exc).__name__}
 
     from app.services.ats_scorer import semantic_healthcheck
 

@@ -12,6 +12,7 @@ from api_client import _refresh_token, current_user
 
 class _SessionState(dict):
     __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
 
 
 def response(status: int, body: dict | list) -> requests.Response:
@@ -88,3 +89,38 @@ def test_expired_refresh_requires_login(monkeypatch):
     monkeypatch.setattr(st, "session_state", {"refresh_token": "expired-refresh"})
     with patch("api_client.requests.post", return_value=response(401, {})):
         assert _refresh_token() is False
+
+
+def test_consecutive_refreshes_use_rotated_cookie(monkeypatch):
+    state = _SessionState(token="access-0", refresh_token="refresh-0")
+    monkeypatch.setattr(st, "session_state", state)
+    replies = []
+    for generation in (1, 2):
+        reply = response(200, {"access_token": f"access-{generation}"})
+        reply.cookies.set("refresh_token", f"refresh-{generation}")
+        replies.append(reply)
+
+    with patch("api_client.requests.post", side_effect=replies) as post:
+        assert _refresh_token() is True
+        assert _refresh_token() is True
+
+    assert [call.kwargs["cookies"] for call in post.call_args_list] == [
+        {"refresh_token": "refresh-0"},
+        {"refresh_token": "refresh-1"},
+    ]
+    assert state == {"token": "access-2", "refresh_token": "refresh-2"}
+
+
+@pytest.mark.parametrize("missing", ["access", "refresh"])
+def test_incomplete_refresh_response_preserves_credentials(monkeypatch, missing):
+    state = _SessionState(token="access-0", refresh_token="refresh-0")
+    monkeypatch.setattr(st, "session_state", state)
+    reply = response(200, {} if missing == "access" else {"access_token": "access-1"})
+    if missing != "refresh":
+        reply.cookies.set("refresh_token", "refresh-1")
+    with (
+        patch("api_client.requests.post", return_value=reply),
+        pytest.raises(requests.RequestException),
+    ):
+        _refresh_token()
+    assert state == {"token": "access-0", "refresh_token": "refresh-0"}
