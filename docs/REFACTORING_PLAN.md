@@ -22,8 +22,9 @@ outcome was delivered; it does not substitute for evidence that the outcome impr
 
 Finish the [checkpoint gates](CHECKPOINT.md#verification-and-release-gates) before
 starting the next feature branch. Preserve the current release number until a tested
-release is deliberately cut. Full database tests, a fresh image/model build, current
-real-model evaluation and interactive hosted-browser checks remain required.
+release is deliberately cut. Full database/frontend suites, a fresh production
+image and offline model evaluation passed on 2026-10-27. Interactive hosted-browser
+checks, dependency audit review and the new release/post-deploy smoke remain required.
 
 Acceptance: one navigable documentation set, clean feature branch, reconciled branch
 inventory, explicit security limitations, passing available checks and a dated list

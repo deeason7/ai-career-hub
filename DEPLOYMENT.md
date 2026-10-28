@@ -68,8 +68,8 @@ placeholder template are in [CONFIGURATION](docs/CONFIGURATION.md).
 
 The image bundles MiniLM and verifies offline inference as its serving user.
 `ATS_MODEL_PATH` selects the saved model directory; local development can use the
-Hub cache. This build assertion still requires a real image build when validating
-a release. It does not prove runtime availability on its own.
+Hub cache. The local production-image build and offline check passed on 2026-10-27;
+repeat them for a changed release candidate. They do not prove deployed availability.
 
 For Streamlit, select the repository, `main`, and `frontend/app.py`; configure
 `API_URL=https://deeason-careerhub.hf.space/api/v1` through its supported settings.

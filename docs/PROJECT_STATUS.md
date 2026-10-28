@@ -46,30 +46,37 @@ AWS billing has not been reconciled; retained DNS and snapshots may still cost m
 
 ## Verification record
 
-The recovery review recorded the following checks before this housekeeping pass:
+The housekeeping checkpoint was verified on **2026-10-27**. The owner executed the
+isolated Docker script because the review environment could not access the Docker
+socket; the saved test/build/evaluation logs and final zero exit status were inspected.
 
 | Check | Result | Limit |
 |---|---|---|
-| Backend runtime/eval/sanitization checks | 63 passed | Targeted host tests, not the full PostgreSQL suite |
-| Frontend display/session checks | 21 passed | Streamlit was mocked; no browser behavior established |
-| Readiness-monitor checks | 13 passed | Regression coverage for sleep pages, dependency failures, and missing signals |
-| Lint, formatting, workflow syntax | Passed | Static checks do not establish deployment readiness |
-| Full Docker/database suite and model build | Not run | Docker Desktop could not start in the review environment |
-| Fresh model-backed offline evaluation | Not run | Historical benchmark below remains the latest recorded full scorecard |
-| Interactive browser journey | Not run | Browser startup failed in the review environment |
+| Full backend suite in Docker/PostgreSQL | **359 passed, 8 expected failures** | Live-LLM cases remain expected failures without provider credentials |
+| Full frontend suite in Docker | **63 passed** | Real framework imports with mocked session/network behavior; no interactive browser journey |
+| Maintenance-script suite | **29 passed** | Readiness, docs drift and release preflight regression checks |
+| Lint, formatting, documentation | Passed; **27 Markdown files**, five matching current version markers | Static checks do not prove hosted behavior |
+| Production image build | Passed, `linux/amd64` | Candidate image remains local and unreleased |
+| Bundled model inference | Passed offline as the non-root serving user | Verifies packaged model loading rather than deployed-host behavior |
+| Current model-backed scoring evaluation | **7/7 gates passed, 20 pairs**, container network disabled | Synthetic corpus; model details and limits below |
+| Interactive hosted-browser journey | Not run | Runtime/API smoke is separate evidence |
+| Fresh complete dependency audit | Not run | Existing CI exceptions remain documented |
 
-The [cleanup checkpoint](CHECKPOINT.md) records subsequent housekeeping checks and
-remaining release gates. A locally passing test or a running provider container is
-not evidence that an unreleased change is already serving users.
+The frontend's first full run exposed a smoke test that patched configuration after
+Python had cached its imported module. The corrected test loads an isolated namespace
+and covers both default and configured API URLs; the full rerun passed. Test containers,
+network and disposable volumes were removed after verification.
+
+The [cleanup checkpoint](CHECKPOINT.md) records scope and remaining release gates.
+A local image and passing tests do not establish that unreleased code serves users.
 
 ## Measured quality and operating results
 
 | Result | Measurement | Method and limit |
 |---|---|---|
 | More consistent résumé-fit feedback | Employer-boilerplate movement fell **3.5 → 0 points across 20 labeled pairs**, 2026-08-21 | Filtering before both semantic and keyword scoring; synthetic offline corpus, not an employer acceptance result |
-| Repeatable scoring evaluation | **7 gating checks**; strong/weak separation **34.2 points**, strong/related **29.6 points**, 2026-08-21 | Real MiniLM model; four synthetic résumés × five postings; not an independent test set |
+| Repeatable scoring evaluation | **7 gating checks**; strong/weak separation **34.2 points**, strong/related **29.6 points**, reproduced **2026-10-27** | Real MiniLM model; four synthetic résumés × five postings; not an independent test set |
 | Smaller inference container | **3.38 GB → 662 MB (about 80%)**, 2026-06-05 | Historical CPU-only PyTorch build; current image size, startup improvement, and billing savings were not measured |
-| Earlier complete backend regression run | **340 passed, 8 expected failures**, 2026-08-21 | Docker and PostgreSQL at that revision; not validation of today's source |
 
 The [evaluation guide](../backend/evals/README.md) documents the corpus, thresholds,
 and reproduction command. Preserve model, corpus, version, date, and sample size

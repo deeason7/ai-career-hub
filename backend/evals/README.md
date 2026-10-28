@@ -59,9 +59,10 @@ yet expected to hold.
 
 ## Measured baseline
 
-Recorded **2026-08-21** using `all-MiniLM-L6-v2` over the twenty pairs. The figures
-reproduced identically across the recorded runs; they are a historical offline
-baseline, not today's deployment health or a real-world hiring prediction.
+Originally recorded **2026-08-21**, then reproduced **2026-10-27** using the newly
+built production `linux/amd64` image with networking disabled. All seven gates passed
+over the same twenty pairs with the packaged `all-MiniLM-L6-v2` model. These are
+controlled offline results, not deployed availability or a hiring prediction.
 
 | check | measured | bar | |
 |---|---|---|:--:|

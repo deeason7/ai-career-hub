@@ -1,6 +1,8 @@
 """Smoke tests — verify all page modules and shared utilities import cleanly."""
 
-from unittest.mock import MagicMock, patch
+import runpy
+from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,11 +14,22 @@ def mock_streamlit(monkeypatch):
 
 
 class TestModuleImports:
-    def test_api_client_imports(self):
-        with patch.dict("os.environ", {"API_URL": "http://localhost:8000/api/v1"}):
-            from api_client import API_URL, api, detail, safe_json  # noqa: F401
-
-            assert API_URL == "http://localhost:8000/api/v1"
+    @pytest.mark.parametrize(
+        ("configured", "expected"),
+        [
+            (None, "http://api:8000/api/v1"),
+            ("https://example.test/api/v1", "https://example.test/api/v1"),
+        ],
+    )
+    def test_api_client_imports(self, monkeypatch, configured, expected):
+        monkeypatch.delenv("API_URL", raising=False)
+        if configured:
+            monkeypatch.setenv("API_URL", configured)
+        # Other tests import api_client during collection; load a separate module
+        # namespace so configuration checks don't depend on test execution order.
+        namespace = runpy.run_path(str(Path(__file__).resolve().parents[1] / "api_client.py"))
+        assert namespace["API_URL"] == expected
+        assert all(callable(namespace[name]) for name in ("api", "detail", "safe_json"))
 
     def test_components_imports(self):
         from components import (  # noqa: F401
