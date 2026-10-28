@@ -22,9 +22,11 @@ labels: bug
 ## Environment
 
 - Deployment: <!-- local Docker / live site -->
+- Version or branch/commit:
+- Time observed and timezone: <!-- useful for matching hosted logs -->
 - Browser / OS:
 - LLM backend: <!-- Groq / Ollama -->
 
 ## Logs or screenshots
 
-<!-- Paste relevant logs or screenshots. Redact any secrets or personal data. -->
+<!-- Paste relevant logs or screenshots. Redact tokens, environment values, résumé text, and other personal data. For availability failures, include the visible error and whether the API and frontend were both affected. -->

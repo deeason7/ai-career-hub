@@ -1,11 +1,17 @@
-# Evals
+# Scoring evaluations
 
-Offline measurement of the ATS scoring path. Generation-quality and human-judge
-calibration suites are planned, not implemented. These are **not** unit tests.
-A unit test asks whether the code does what it was written to do; an eval asks whether
-the *system* — model included — still behaves the way the product promises. The two
-fail for different reasons and are run at different times, so they live apart:
-`tests/` runs on every PR, `evals/` runs on demand and reports a scorecard.
+[Project home](../../README.md) · [Product measurements](../../docs/PRODUCT.md#measuring-user-value) · [Verified status](../../docs/PROJECT_STATUS.md)
+
+**Does the match score still behave sensibly when the real model runs?**
+
+This suite checks the ATS scoring path against 20 synthetic résumé/job pairs.
+Unit tests catch implementation regressions; these evaluations exercise the model's
+ranking and consistency. Generation-quality and human-judge calibration suites
+remain planned work.
+
+**Latest recorded result: 7/7 gates passed on 2026-10-27**, using the production
+`linux/amd64` image with networking disabled. See [measured baseline](#measured-baseline)
+for the scores and [measurement limits](#measurement-limits) for their scope.
 
 ## Running
 
@@ -20,6 +26,22 @@ the same command on dispatch, fails on gating regressions by default, and publis
 the scorecard to the run summary. Turn off `fail_on_regression` explicitly for a
 measurement-only run.
 
+### Verify the packaged production model
+
+From the repository root:
+
+```bash
+docker build --platform linux/amd64 -t careerhub-api:eval ./backend
+docker run --rm --platform linux/amd64 --network none \
+  -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 \
+  careerhub-api:eval python -m evals.runner
+```
+
+The build downloads dependencies and model weights; the evaluation container then
+runs without network access. This verifies the saved model artifact instead of
+relying on the developer's cache or an on-demand runtime download. It does not test
+hosted availability or a real applicant's preparation time.
+
 ## The corpus
 
 `datasets/` holds four resumes and five job descriptions as plain text, plus
@@ -28,7 +50,7 @@ measurement-only run.
 | relation | meaning |
 |---|---|
 | `strong` | the synthetic resume closely matches the posting's requirements |
-| `related` | same broad field, wrong role — the genuinely hard case |
+| `related` | same broad field, wrong role |
 | `weak` | different discipline, or out of domain entirely |
 
 The resumes are written to be structurally comparable — every one has a summary,
@@ -83,8 +105,8 @@ without letting a real regression through.
 
 `boilerplate_invariance` was not calibrated — it was fixed. The check asserts a promise
 the product already makes, and on the first run the scorer missed it by 3.5 points.
-`_strip_boilerplate` drops EEO and benefits text before keyword matching and does that
-job perfectly: measured across all twenty pairs the keyword channel moved 0.00 points.
+`_strip_boilerplate` drops EEO and benefits text before keyword matching and produced zero drift
+in this corpus: across all twenty pairs the keyword channel moved 0.00 points.
 But `_score_semantic` was handed the raw posting, so the whole 3.5 points came from the
 channel carrying half the composite — a candidate's score moved with the length of an
 employer's legal boilerplate. Both channels now score the stripped posting, the measured

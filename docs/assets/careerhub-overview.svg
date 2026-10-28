@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title description">
+  <title id="title">AI Career Hub — make your next application count</title>
+  <desc id="description">A job application workspace: understand your fit, prepare a letter you can review, and track the next step.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#101e35"/>
+      <stop offset="1" stop-color="#182d49"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop stop-color="#39d8bf" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#39d8bf" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="400" rx="24" fill="url(#background)"/>
+  <circle cx="540" cy="370" r="310" fill="url(#glow)"/>
+  <path d="M0 340H1200M600 0V400" stroke="#ffffff" stroke-opacity=".04"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+    <rect x="48" y="44" width="34" height="34" rx="10" fill="#57dfc4"/>
+    <path d="m57 62 6 6 12-14" fill="none" stroke="#112438" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="96" y="68" fill="#f4f8ff" font-size="22" font-weight="650">AI CAREER HUB</text>
+    <text x="48" y="150" fill="#ffffff" font-size="49" font-weight="750" letter-spacing="-1.5">Make your next</text>
+    <text x="48" y="209" fill="#67e5cb" font-size="49" font-weight="750" letter-spacing="-1.5">application count.</text>
+    <text x="50" y="260" fill="#c3d1e5" font-size="20">Your experience. A role worth exploring.</text>
+    <text x="50" y="291" fill="#c3d1e5" font-size="20">One place to prepare and follow through.</text>
+    <text x="50" y="366" fill="#a8bbd3" font-size="14" letter-spacing="2">RÉSUMÉ → ROLE → REVIEW → NEXT STEP</text>
+    <path d="M678 98V303" stroke="#3d5877" stroke-width="2" stroke-dasharray="4 7"/>
+    <g>
+      <rect x="646" y="40" width="508" height="94" rx="16" fill="#1c334e" stroke="#38536f"/>
+      <circle cx="683" cy="87" r="20" fill="#213f5b"/>
+      <text x="683" y="93" text-anchor="middle" fill="#79d4ff" font-size="16" font-weight="700">01</text>
+      <text x="724" y="80" fill="#ffffff" font-size="22" font-weight="650">Understand your fit</text>
+      <text x="724" y="108" fill="#c3d1e5" font-size="16">Match feedback · Skill gaps · Interview prep</text>
+    </g>
+    <g>
+      <rect x="646" y="153" width="508" height="94" rx="16" fill="#1c334e" stroke="#38536f"/>
+      <circle cx="683" cy="200" r="20" fill="#293c60"/>
+      <text x="683" y="206" text-anchor="middle" fill="#c3b9ff" font-size="16" font-weight="700">02</text>
+      <text x="724" y="193" fill="#ffffff" font-size="22" font-weight="650">Shape your application</text>
+      <text x="724" y="221" fill="#c3d1e5" font-size="16">Draft · Review · Refine · Export</text>
+    </g>
+    <g>
+      <rect x="646" y="266" width="508" height="94" rx="16" fill="#1c334e" stroke="#38536f"/>
+      <circle cx="683" cy="313" r="20" fill="#204b4b"/>
+      <text x="683" y="319" text-anchor="middle" fill="#67e5cb" font-size="16" font-weight="700">03</text>
+      <text x="724" y="306" fill="#ffffff" font-size="22" font-weight="650">Keep the next step visible</text>
+      <text x="724" y="334" fill="#c3d1e5" font-size="16">Application status · Deadlines · Notes</text>
+    </g>
+  </g>
+</svg>

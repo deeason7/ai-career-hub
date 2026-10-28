@@ -1,82 +1,74 @@
+![AI Career Hub: understand your fit, prepare your application, and track the next step](docs/assets/careerhub-overview.svg)
+
 # AI Career Hub
 
-**Turn a résumé and a job posting into an application you can review, refine, and track.**
+**Know where you fit. Tell your story. Keep your applications moving.**
 
-AI Career Hub helps job seekers assess a role, prepare tailored application material,
-and keep the next action visible. It brings résumé feedback, cover-letter drafting,
-interview preparation, and application tracking into one workspace.
+A job-application workspace for turning your résumé and a job posting into
+fit feedback, a cover letter you can review and refine, interview preparation,
+and a record of what to do next.
 
-[**Open the demo →**](https://deeason-career.streamlit.app) ·
-[Product and value](docs/PRODUCT.md) · [Verified status](docs/PROJECT_STATUS.md) ·
-[Documentation](docs/README.md)
+[**Try the demo →**](https://deeason-career.streamlit.app) ·
+[Walk through an application](#try-your-first-application) ·
+[Run locally](#run-locally) · [Explore the docs](docs/README.md)
 
 [![Pipeline](https://github.com/deeason7/ai-career-hub/actions/workflows/pipeline.yml/badge.svg)](https://github.com/deeason7/ai-career-hub/actions/workflows/pipeline.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## From a posting to a prepared application
+## One workspace, three useful outcomes
 
-```mermaid
-flowchart LR
-    input["Your résumé + a job posting"] --> fit["Understand the fit<br/>Match feedback · skill gaps"]
-    fit --> draft["Prepare your application<br/>Cover letter · interview questions"]
-    draft --> review["Review and refine<br/>QA feedback · versions · PDF"]
-    review --> track["Track the next step<br/>Status · deadline · notes"]
-    style input fill:#eef2ff,stroke:#6366f1,color:#1e1b4b
-    style fit fill:#f0f9ff,stroke:#0284c7,color:#0c4a6e
-    style draft fill:#f0f9ff,stroke:#0284c7,color:#0c4a6e
-    style review fill:#f0fdf4,stroke:#16a34a,color:#14532d
-    style track fill:#f0fdf4,stroke:#16a34a,color:#14532d
-```
+Applying involves more than generating a letter: you need to understand the role,
+choose relevant experience, check the draft, and remember the next action.
+AI Career Hub brings those tasks together.
 
-| What you need to do | What the workspace provides |
-|---|---|
-| Decide how your experience fits a role | Semantic, keyword, and résumé-structure feedback, with skill-gap recommendations |
-| Write a relevant application | A cover-letter draft using résumé context and the job description, followed by an AI honesty/tone review |
-| Make the draft your own | Targeted edits, version history, and PDF export from the saved cover-letter workflow |
-| Prepare for a conversation | Interview questions based on your experience and the role |
-| Keep applications organized | Automatic wishlist entries after saved letter generation, plus statuses, deadlines, and notes |
+| Understand your fit | Prepare material you can review | Follow through |
+|---|---|---|
+| Compare your résumé with a posting using semantic, keyword, and structure feedback. Explore skill gaps and interview questions. | Generate a saved cover letter using résumé context, inspect AI review feedback, refine specific passages, and export a PDF. | Saved letter generation creates a wishlist entry. Manage application status, deadlines, and notes in the tracker. |
 
-Upload a résumé, then use **Job Match** and **Cover Letters** for the saved application
-workflow. **Quick Apply** runs a seven-step analysis from a public job URL, including
-company research and a draft. Its results currently remain separate from saved
-letters, QA review, and tracking; connecting those paths is a planned improvement.
+You make the final edits and submit through the employer's application process.
+The fit score is preparation guidance; the AI review helps flag issues for you to check.
 
-You review the material and submit the application yourself. Match scores are
-preparation guidance, not predictions of an employer's screening decision.
+## Try your first application
 
-## What has been demonstrated
+1. **Open the [demo](https://deeason-career.streamlit.app) and create an account.**
+   If Streamlit shows a sleep page, use its wake button and wait for the workspace.
+2. **Upload a résumé in Resumes.** PDF, DOCX, and TXT are supported, up to 5 MB.
+   The [synthetic Python résumé](backend/evals/datasets/resumes/backend_python.txt)
+   is ready to download as a `.txt` file if you want to explore without personal data.
+3. **Open Job Match and paste a posting.** Use the guided tour's sample job, or this
+   [sample Python role](backend/evals/datasets/jobs/python_backend.txt).
+   Review the score breakdown, skill gaps, and interview questions.
+4. **Create a saved draft in Cover Letters.** Review its claims and QA feedback,
+   try a targeted refinement, then export the version you want as a PDF.
+5. **Open Tracker.** Check the automatically created entry and set its next status,
+   deadline, or notes. If automatic extraction failed, add the application manually.
 
-- **The deployed application workflow works through the API.** On 2026-10-26, a
-  synthetic résumé was parsed and scored, a letter generated and refined, its PDF
-  exported, and an automatically created application updated in the tracker.
-- **Résumé feedback is less sensitive to irrelevant posting text.** The recorded
-  offline evaluation reduced boilerplate-driven score movement from **3.5 to 0
-  points across 20 labeled résumé/job pairs**.
-- **Productivity impact is the next measurement.** Preparation time, completion
-  rate, editing effort, and hiring outcomes have not been measured. The
-  [product brief](docs/PRODUCT.md#measuring-user-value) defines the baseline and
-  acceptance criteria before those claims are made.
+**Have a job URL?** Quick Apply runs seven analysis steps, including company research
+and a draft. Its draft currently remains separate from saved letters, QA, PDF export,
+and the tracker. Connecting those paths is the [first planned refactoring](docs/REFACTORING_PLAN.md#1-connect-quick-apply-to-a-saved-application).
+Use Job Match and Cover Letters for the saved workflow above; a pasted posting also
+works when a job site blocks fetching.
 
-See [project status](docs/PROJECT_STATUS.md) for dates, test scope, and remaining
-release checks. A passing workflow badge alone does not establish live availability.
+## What has been verified
 
-## Try it
+| Evidence | Result | Scope |
+|---|---|---|
+| Application workflow | Upload → match → saved letter → refinement → PDF → tracker | Deployed synthetic API journey, 2026-10-26; browser interactions remain to be checked |
+| Regression checks | **451 passed**, 8 expected live-LLM failures | 359 backend, 63 frontend, 29 maintenance checks, 2026-10-27 |
+| Scoring evaluation | **7/7 gates passed across 20 pairs** | Real MiniLM model in the production image with networking disabled, 2026-10-27 |
+| Consistent fit feedback | Irrelevant posting boilerplate caused **0 points of drift**, down from 3.5 | Controlled synthetic benchmark; reproduced in the current image |
 
-Open the [hosted demo](https://deeason-career.streamlit.app), create an account,
-and follow the guided tour. Use a synthetic résumé when exploring the public demo.
-A sleeping Streamlit app may display a wake button before the workspace opens.
-[Recovery instructions](DEPLOYMENT.md#readiness-and-incident-recovery) cover the
-frontend and API separately.
+The latest release is **v4.4.3**. Recovery and housekeeping updates in this branch
+are **unreleased**. See the [checkpoint](docs/CHECKPOINT.md) and
+[verified status](docs/PROJECT_STATUS.md) for remaining release checks.
 
-Résumé text and job descriptions are sent to Groq for generation; application
-records and document embeddings use hosted storage. Avoid uploading sensitive
-identifiers. The app's **Legal & Info** page explains data handling and retention;
-[SECURITY.md](SECURITY.md) describes safeguards and known limitations. Generated
-claims and QA verdicts require your review.
+Preparation time, review effort, and completion rate are the next product measurements.
+The [measurement plan](docs/PRODUCT.md#measuring-user-value) defines a manual baseline;
+user adoption, time savings, and hiring improvements have not been established.
 
 ## Run locally
 
-Use Docker Compose and choose either Groq or local Ollama for generation.
+You need Docker with Compose. Clone the repository and create your local settings:
 
 ```bash
 git clone https://github.com/deeason7/ai-career-hub.git
@@ -84,48 +76,64 @@ cd ai-career-hub
 cp backend/.env.example backend/.env
 ```
 
-Set the database values to match your local Compose configuration, generate a
-unique `SECRET_KEY`, and configure the model provider. Follow the
-[local setup guide](CONTRIBUTING.md#running-locally) and
-[configuration reference](docs/CONFIGURATION.md), then start the stack:
+Edit `backend/.env`: choose local database credentials, replace `SECRET_KEY` with
+an independently generated value, and either add a Groq key or leave it blank for
+Ollama. The [setup guide](CONTRIBUTING.md#running-locally) covers each setting.
 
 ```bash
-docker compose up --build
+docker compose --env-file backend/.env up --build -d
 ```
 
-Open the [frontend](http://localhost:8501) or
-[development API documentation](http://localhost:8000/docs).
+For **Ollama**, download its models after the service starts:
 
 ```bash
-make test     # backend regression suite in an isolated test database
-make lint     # backend and frontend lint/format checks
-make evals    # real embedding model against the labeled scoring corpus
+docker compose exec ollama ollama pull llama3.2:3b
+docker compose exec ollama ollama pull nomic-embed-text
 ```
 
-## How it is built
+Open [the workspace](http://localhost:8501) or [local API docs](http://localhost:8000/docs).
+The first build/model download needs internet access. `--env-file` keeps the database
+container and API settings aligned; see [local setup and troubleshooting](CONTRIBUTING.md#running-locally).
 
-| Responsibility | Implementation |
+For verification, use the [test commands](CONTRIBUTING.md#run-tests), including the
+credential override when your local database differs from Compose's test defaults.
+
+## Under the hood
+
+```mermaid
+flowchart LR
+    candidate["Job seeker"] --> workspace["Streamlit workspace"]
+    workspace --> api["FastAPI"]
+    api --> records[("PostgreSQL<br/>Applications and revisions")]
+    api --> tasks[("Redis<br/>Task and session state")]
+    api --> model["Shared MiniLM<br/>Fit analysis and retrieval"]
+    api --> llm["Groq / optional Ollama<br/>Drafting and review"]
+    model --> vectors[("Qdrant / local Chroma")]
+```
+
+The demo uses Streamlit Community Cloud, Hugging Face Spaces, Neon, Upstash, and
+Qdrant. LangGraph coordinates Quick Apply; Instructor validates structured model
+responses. Docker, GitHub Actions, regression tests, and scoring evaluations support
+delivery. The retained AWS target is deprovisioned and requires restoration before use.
+
+See [architecture](docs/ARCHITECTURE.md) for the request flows and design tradeoffs.
+
+## Your data and your judgment
+
+The hosted demo sends résumé text and job descriptions to Groq for generation and
+uses hosted storage for records and document embeddings. Start with synthetic data;
+review every generated claim before using a draft. The app's **Legal & Info** page
+and [security policy](SECURITY.md) explain retention, deletion limits, and safeguards.
+
+## Explore the project
+
+| I want to… | Start here |
 |---|---|
-| Workspace and API | Streamlit · FastAPI · Pydantic · SQLModel |
-| Application records and task state | PostgreSQL · Redis · Alembic |
-| Drafting and review | Groq · instructor · résumé retrieval · optional local Ollama |
-| Match feedback | Shared MiniLM embeddings · keyword matching · structure heuristics |
-| Guided job analysis | LangGraph workflow with visible step progress |
-| Delivery | Docker · GitHub Actions · regression tests · scoring evaluations |
-
-The active demo runs on Streamlit Community Cloud, Hugging Face Spaces, Neon,
-Upstash, and Qdrant. An AWS deployment remains a hibernated reference. See
-[architecture](docs/ARCHITECTURE.md) for request flows and tradeoffs, and
-[deployment](DEPLOYMENT.md) for operating instructions.
-
-## Documentation
-
-| Start here | Continue here |
-|---|---|
-| [Product brief and value measurement](docs/PRODUCT.md) | Audience, workflow, product boundaries, and outcome definitions |
-| [Project status](docs/PROJECT_STATUS.md) | Released behavior, verified evidence, and outstanding checks |
-| [Documentation map](docs/README.md) | API, configuration, security, deployment, and design decisions |
-| [Contributing](CONTRIBUTING.md) | Setup, development conventions, and verification commands |
+| Understand the product and its business value | [Product brief](docs/PRODUCT.md) |
+| See what works and what comes next | [Verified status](docs/PROJECT_STATUS.md) · [Refactoring plan](docs/REFACTORING_PLAN.md) |
+| Run, contribute to, or integrate the project | [Contributing](CONTRIBUTING.md) · [API reference](docs/API.md) |
+| Deploy or troubleshoot availability | [Deployment and recovery](DEPLOYMENT.md) |
+| Browse every guide | [Documentation map](docs/README.md) |
 
 ## Release History
 
@@ -136,7 +144,8 @@ Upstash, and Qdrant. An AWS deployment remains a hibernated reference. See
 - **More consistent résumé feedback** — semantic and keyword scoring use the same
   job text after removing employer boilerplate.
 - **Repeatable quality checks** — seven scoring checks run against 20 labeled pairs;
-  the image includes the embedding weights.
+  the released image downloads embedding weights during its build. The unreleased
+  checkpoint adds an explicit model directory and offline inference verification.
 
 ## License
 

@@ -1,9 +1,15 @@
-# Documentation
+# AI Career Hub documentation
 
-[Project home](../README.md)
+[Project home](../README.md) · [Try the demo](https://deeason-career.streamlit.app)
 
-Start with the user workflow, then choose the reference for the task at hand.
-Each topic has one primary document; historical release details live in the changelog.
+**From a job posting to a reviewed application and a clear next step.**
+
+New here? Follow the [first-application walkthrough](../README.md#try-your-first-application)
+with synthetic sample data. For a local workspace, start with
+[setup and troubleshooting](../CONTRIBUTING.md#running-locally).
+
+Each topic below has one primary guide. The status and checkpoint pages distinguish
+the deployed release from verified, unreleased changes; the changelog preserves history.
 
 ## Understand the product
 
@@ -33,7 +39,7 @@ Each topic has one primary document; historical release details live in the chan
 |---|---|
 | [Deployment and recovery](../DEPLOYMENT.md) | Run the active hosted deployment, verify readiness, and recover sleeping services |
 | [Security](../SECURITY.md) | Review controls, known limitations, and vulnerability-reporting instructions |
-| [AWS infrastructure reference](../INFRASTRUCTURE.md) | Understand the hibernated AWS target before a separately planned restoration |
+| [AWS infrastructure reference](../INFRASTRUCTURE.md) | Understand the deprovisioned AWS target before a separately planned restoration |
 | [AWS operating procedures](deployment/AWS.md) | Consult the retained deployment and wake/sleep procedures when working on that optional target |
 | [Alternative scheduler](../infra/keep-warm/README.md) | Inspect the optional Cloudflare keep-warm worker and its operational limits |
 
@@ -43,3 +49,7 @@ Product capabilities belong in the product brief; measurements need a date, meth
 and sample size in the status/evaluation documents. Endpoint or environment changes
 must update the corresponding API/configuration reference. Release notes record
 historical behavior; operating guides describe the current deployment.
+
+Run `make docs-check` from the repository root after editing. It checks local Markdown
+links, heading anchors, and the five current release markers. Keep the latest release
+summary in the root README and the complete history in CHANGELOG.

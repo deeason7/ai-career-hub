@@ -48,7 +48,7 @@ Earlier host checks were a subset, not an additional count.
 | Full frontend Docker suite | 63 passed after isolating the API configuration test from Python’s import cache; real framework imports, mocked session/network interactions |
 | Fresh packaged-model build and current real-model eval | Production `linux/amd64` image built; offline inference passed as the serving user; all seven scoring gates passed on 20 pairs with the container network disabled |
 | Interactive hosted-browser journey | Pending; frontend runtime and live API journey were separately verified |
-| New deployment/version and post-deploy smoke | Pending; this checkpoint is local and unreleased |
+| New deployment/version and post-deploy smoke | Pending; this checkpoint is unreleased |
 | Fresh complete dependency audit | Pending; CI's existing accepted-risk exclusions remain documented |
 
 The earlier hosted check restored the sleeping Streamlit runtime and exercised the

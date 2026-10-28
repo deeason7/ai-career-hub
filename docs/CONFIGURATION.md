@@ -1,5 +1,7 @@
 # Configuration
 
+[Documentation](README.md) · [Local setup](../CONTRIBUTING.md#running-locally) · [Deployment](../DEPLOYMENT.md)
+
 Use [`backend/.env.example`](../backend/.env.example) as the local template. Never commit a populated environment file or `.streamlit/secrets.toml`. Active deployment settings live in Hugging Face Spaces, Streamlit Community Cloud and GitHub Environments; the retained AWS target uses SSM Parameter Store. See [Deployment](../DEPLOYMENT.md).
 
 ## Loading settings correctly
@@ -7,6 +9,14 @@ Use [`backend/.env.example`](../backend/.env.example) as the local template. Nev
 Most backend settings come from [`Settings`](../backend/app/core/config.py). Process environment values take precedence over its relative `backend/.env` file. Empty values are ignored by this Pydantic loader, and unknown keys are ignored. Start a direct local backend process from the repository root if relying on that file. In containers, Compose `env_file` or the host injects the process environment; `/app/backend/.env` is not a required image file.
 
 Redis clients, rate limiting, `TESTING` and `ATS_MODEL_PATH` also read `os.environ` directly. The Pydantic file loader does **not** export those values into the process environment. For direct host execution, export the relevant variables; using Compose's `env_file` performs that injection. Do not assume a setting works merely because it appears in the `Settings` model.
+
+For local Compose startup, use `docker compose --env-file backend/.env up --build -d`.
+The CLI flag supplies Compose's `${POSTGRES_*}` interpolation, while the API's
+service-level `env_file` supplies its process environment. Using the same file keeps
+both services aligned. Existing volumes retain their original database credentials.
+The test service deliberately retains separate defaults; follow the
+[test-login override](../CONTRIBUTING.md#run-tests) when using a custom local database
+login, and keep `careerhub_test` separate from application data.
 
 In the tables, **required** means the settings model rejects a missing value. Conditional service credentials are needed when that service is selected, even where startup does not validate them. An empty string is shown as `""`.
 

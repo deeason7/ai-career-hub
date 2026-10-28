@@ -4,7 +4,7 @@
 
 The public demo runs on **Streamlit Community Cloud + Hugging Face Spaces**, with
 Neon PostgreSQL, Upstash Redis and Qdrant Cloud. AWS is a standby reference.
-This guide describes the current checkout; local unreleased changes are identified
+This guide describes the current checkout; unreleased changes are identified
 in [project status](docs/PROJECT_STATUS.md).
 
 ## Active topology
@@ -42,6 +42,8 @@ zero-bill guarantee is implied. The old AWS custom domain is parked.
 4. Verify the expected version, dependency readiness and the user journey.
 
 The pipeline runs on PRs to `main`/`develop`, pushes to `main`, and manual dispatch.
+Pushing a feature or housekeeping branch publishes its commits but does not, by
+itself, run this pipeline or deploy the application.
 Its explicit deploy jobs depend on backend and frontend CI:
 
 | Target | GitHub environment | Repository switch |
@@ -112,7 +114,9 @@ A failed warm job and a failed cleanup job are separate incidents; inspect both.
 
 Scheduled Actions can be disabled after repository inactivity. The optional
 [Cloudflare Worker](infra/keep-warm/README.md) is an alternate scheduler, with its
-own configuration and verification obligations. A scheduler is not a guarantee
+own configuration and verification obligations. Its frontend probe checks only an
+HTTP response and does not verify the Streamlit runtime or semantic inference;
+use the shared readiness checker for release validation. A scheduler is not a guarantee
 against provider suspension. Monitor actual run results and app behavior.
 
 Expired SQL documents are eligible for cleanup after the configured TTL. Derived

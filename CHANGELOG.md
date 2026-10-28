@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Job descriptions are sanitized before cover-letter QA review, matching the generation path.
 
 ### Changed
+- Refresh all six README guides with a product overview, sample application walkthrough, verified setup commands, and clearer navigation. Document the optional Cloudflare scheduler's limited health checks and separate branch publication from deployment.
 - Product-first documentation now separates fit review, saved applications and tracking, with a housekeeping checkpoint and an evidence-driven refactoring plan. API polling and retention documentation match the current implementation.
 - Remove unused frontend PDF/DOCX parsers and redundant source scaffolding; align hooks and tooling pins.
 - CI checks local documentation links, heading anchors and five release markers. Release preparation validates all edits before writing and keeps only the latest summary in README.

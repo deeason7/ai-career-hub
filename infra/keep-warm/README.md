@@ -1,59 +1,80 @@
-# Keep-warm worker (Cloudflare) — alternative scheduler
+# Keep-warm worker — optional Cloudflare scheduler
 
-> The default scheduler is the GitHub Actions workflow (`.github/workflows/keepwarm.yml`);
-> deploy this worker instead when Actions scheduling isn't wanted (exact cron timing,
-> no repo-activity expiry, Discord alerting).
+[Deployment and recovery](../../DEPLOYMENT.md) · [Worker source](src/index.js) · [Schedule and URLs](wrangler.toml)
 
-Laptop-free scheduler for the free-tier stack. One deep-warm call keeps
-Neon + Upstash + Qdrant resident; the frontend is probed too; and the daily
-document-lifecycle cleanup runs from the same worker. Alerts fire only when a
-dependency reports `down` or a service is unreachable.
+This worker can schedule API warming and daily document cleanup independently of
+GitHub Actions. The project's default scheduler is
+[keepwarm.yml](../../.github/workflows/keepwarm.yml); no Cloudflare deployment was
+verified in the current checkpoint.
 
-Free tier: 100k requests/day, no repo-activity expiry (unlike a GitHub Action),
-independent of your laptop.
+## What the current worker checks
 
-## What it does
-
-| Cron (UTC) | Action |
+| Trigger, UTC | Behavior |
 |---|---|
-| `0 */6 * * *` | `GET {API_BASE}/health/warm` (warms DB + Redis + vector) + `HEAD {FRONTEND_URL}`; alert on any `down`/5xx/unreachable |
-| `0 3 * * *` | `POST {API_BASE}/api/v1/admin/lifecycle/run` with `X-Admin-Secret` (15-day TTL cleanup) |
+| `0 */6 * * *` | Fetch `/health/warm`; check returned DB, Redis and vector states; send a `HEAD` request to the frontend |
+| `0 3 * * *` | Call `/api/v1/admin/lifecycle/run` using `X-Admin-Secret` |
+| HTTP request to the worker | Run the warm check and return its JSON result; never trigger cleanup |
 
-Groq is never pinged (no idle pause; saves tokens).
+Requests have a 20-second timeout. `ALERT_WEBHOOK`, when set, receives a
+Discord-shaped message for detected problems. API dependencies reporting `ok` or
+`disabled` are accepted; missing dependency fields are ignored. Frontend 5xx and
+network failures are reported, while 3xx/4xx are accepted. Inspect the worker's
+`ok` and `problems` JSON fields; the HTTP handler itself can return 200 on failure.
 
-## Deploy
+**This is a weaker probe than the current Python readiness checker.** It does not
+inspect the semantic inference field or Streamlit's running state and runtime health.
+A sleeping frontend's outer page can therefore pass. Before adopting this worker as
+a replacement, bring its checks into parity with
+[readiness.py](../../.github/scripts/readiness.py) and verify both healthy and failed
+responses. Scheduled traffic does not guarantee uptime or recover a suspended account.
+
+The worker does not call a generation endpoint, so it does not intentionally consume
+LLM generation tokens. The warm API may perform local embedding inference. Daily
+cleanup currently removes eligible SQL rows; it does not complete vector deletion.
+
+## Configure an optional deployment
+
+Use Wrangler with access to your Cloudflare account. From this directory:
 
 ```bash
-# from this folder
-npm install -g wrangler          # or use: npx wrangler ...
-wrangler login
-
-# 1. Edit wrangler.toml → set API_BASE (HF Space) and FRONTEND_URL (Streamlit app).
-# 2. Set the secrets:
-wrangler secret put ADMIN_SECRET   # paste the SAME value as the backend's ADMIN_SECRET
-wrangler secret put ALERT_WEBHOOK  # optional: a Discord webhook URL (skip to disable alerts)
-
-# 3. Ship it
-wrangler deploy
+npx wrangler login
 ```
 
-## Test without waiting for the cron
+1. Set `API_BASE` and `FRONTEND_URL` in `wrangler.toml` for the intended deployment.
+2. Review the two UTC schedules and the probe limitations above.
+3. Store secrets, then deploy when that environment is ready:
 
 ```bash
-# local dry-run of the scheduled handler
-wrangler dev --test-scheduled
-# then in another shell, fire each trigger:
-curl "http://localhost:8787/__scheduled?cron=0+*/6+*+*+*"   # warm
-curl "http://localhost:8787/__scheduled?cron=0+3+*+*+*"     # cleanup
-
-# once deployed, an on-demand warm is just a GET to the worker URL:
-curl https://careerhub-keepwarm.<your-subdomain>.workers.dev
+npx wrangler secret put ADMIN_SECRET
+npx wrangler secret put ALERT_WEBHOOK  # optional; omit to disable alerts
+npx wrangler deploy
 ```
 
-## Notes
+`ADMIN_SECRET` must match the backend value. Avoid running duplicate cleanup
+schedulers accidentally. Provider plans, quotas and suspension policies should be
+checked in the provider account when provisioning; this guide makes no free-tier or
+alert-delivery-time guarantee.
 
-- Add **UptimeRobot** (free, 5-min HTTP checks on the Space + Streamlit URLs) as a
-  redundant second scheduler — it also gives you an uptime dashboard.
-- A free Qdrant cluster that gets force-suspended can't be *un-paused* by a ping;
-  the alert tells you within minutes so you can resume it with one console click.
-- Times are UTC. Shift the crons if you want the cleanup at a specific local hour.
+## Exercise each trigger
+
+```bash
+npx wrangler dev --test-scheduled
+```
+
+In another terminal:
+
+```bash
+curl 'http://localhost:8787/__scheduled?cron=0+*/6+*+*+*'
+curl 'http://localhost:8787/__scheduled?cron=0+3+*+*+*'
+```
+
+**These execute the handler and can call the configured services.** Point the local
+worker at an isolated API and use test secrets before exercising cleanup; local
+Wrangler execution is not a no-op dry run. Check runtime logs, the warm JSON result,
+the cleanup response, and alert delivery separately.
+
+Once deliberately deployed, requesting its worker URL performs a warm check:
+
+```bash
+curl 'https://careerhub-keepwarm.<your-subdomain>.workers.dev'
+```
