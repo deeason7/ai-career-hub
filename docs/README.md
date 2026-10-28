@@ -39,6 +39,7 @@ the deployed release from verified, unreleased changes; the changelog preserves 
 |---|---|
 | [Deployment and recovery](../DEPLOYMENT.md) | Run the active hosted deployment, verify readiness, and recover sleeping services |
 | [Security](../SECURITY.md) | Review controls, known limitations, and vulnerability-reporting instructions |
+| [Dependency review](DEPENDENCY_REVIEW.md) | Review dated package findings, the JWT fix, and the remaining security release gate |
 | [AWS infrastructure reference](../INFRASTRUCTURE.md) | Understand the deprovisioned AWS target before a separately planned restoration |
 | [AWS operating procedures](deployment/AWS.md) | Consult the retained deployment and wake/sleep procedures when working on that optional target |
 | [Alternative scheduler](../infra/keep-warm/README.md) | Inspect the optional Cloudflare keep-warm worker and its operational limits |

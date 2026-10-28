@@ -1,8 +1,12 @@
 # Housekeeping checkpoint
 
-**Reviewed:** 2026-10-26; verification completed 2026-10-27. **State:** local housekeeping and container verification complete; release pending.
+**Reviewed:** 2026-10-28. **State:** housekeeping branch published; dependency remediation and release verification remain open.
 Latest released version remains **v4.4.3**. Local recovery and housekeeping changes
 have not been deployed. [Project status](PROJECT_STATUS.md) records the hosted evidence.
+
+The 2026-10-27 container results cover the original checkpoint. The subsequent
+[dependency review](DEPENDENCY_REVIEW.md) led to a PyJWT 2.15.0 update with passing
+local token-helper checks; its updated image and HTTP regression suite are unverified.
 
 ## What changed
 
@@ -49,7 +53,7 @@ Earlier host checks were a subset, not an additional count.
 | Fresh packaged-model build and current real-model eval | Production `linux/amd64` image built; offline inference passed as the serving user; all seven scoring gates passed on 20 pairs with the container network disabled |
 | Interactive hosted-browser journey | Pending; frontend runtime and live API journey were separately verified |
 | New deployment/version and post-deploy smoke | Pending; this checkpoint is unreleased |
-| Fresh complete dependency audit | Pending; CI's existing accepted-risk exclusions remain documented |
+| Dependency review and remediation | 177 recorded package versions checked on 2026-10-28; six backend packages have findings. PyJWT updated after a Python 3.11 reproduction; updated backend/container verification, complete audit and remaining remediation pending |
 
 The earlier hosted check restored the sleeping Streamlit runtime and exercised the
 API through login, upload, analysis, saved-letter generation/refinement, PDF and

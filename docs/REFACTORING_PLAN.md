@@ -26,6 +26,12 @@ release is deliberately cut. Full database/frontend suites, a fresh production
 image and offline model evaluation passed on 2026-10-27. Interactive hosted-browser
 checks, dependency audit review and the new release/post-deploy smoke remain required.
 
+The [2026-10-28 dependency review](DEPENDENCY_REVIEW.md) makes the security sequence
+concrete: verify the PyJWT 2.15.0 update, apply the compatible SDK patch, then evaluate
+the encoder/Transformers/PyTorch changes together. Reconcile Chroma's server-specific
+findings with the embedded/hosted configurations and review stale CI exclusions.
+These are release-gate tasks; the earlier container results do not validate new pins.
+
 Acceptance: one navigable documentation set, clean feature branch, reconciled branch
 inventory, explicit security limitations, passing available checks and a dated list
 of unrun checks. No AWS restoration or broad dependency upgrade is part of cleanup.

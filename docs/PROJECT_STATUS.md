@@ -60,7 +60,7 @@ socket; the saved test/build/evaluation logs and final zero exit status were ins
 | Bundled model inference | Passed offline as the non-root serving user | Verifies packaged model loading rather than deployed-host behavior |
 | Current model-backed scoring evaluation | **7/7 gates passed, 20 pairs**, container network disabled | Synthetic corpus; model details and limits below |
 | Interactive hosted-browser journey | Not run | Runtime/API smoke is separate evidence |
-| Fresh complete dependency audit | Not run | Existing CI exceptions remain documented |
+| Dependency review, 2026-10-28 | 177 package/version records queried; findings in six backend packages | Review of Docker installation logs, not a complete installed-image or deployed-environment audit |
 
 The frontend's first full run exposed a smoke test that patched configuration after
 Python had cached its imported module. The corrected test loads an isolated namespace
@@ -69,6 +69,12 @@ network and disposable volumes were removed after verification.
 
 The [cleanup checkpoint](CHECKPOINT.md) records scope and remaining release gates.
 A local image and passing tests do not establish that unreleased code serves users.
+
+The [subsequent dependency review](DEPENDENCY_REVIEW.md) reproduced a JWT parsing
+failure on Python 3.11. Updating PyJWT to 2.15.0 passes eight focused local checks;
+the new HTTP regressions and updated backend image remain unverified. The Docker
+counts above apply to the original checkpoint. Broader dependency remediation and
+the release gate remain open.
 
 ## Measured quality and operating results
 

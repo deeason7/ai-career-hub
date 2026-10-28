@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Update PyJWT to 2.15.0 so deeply nested token headers are rejected through the normal invalid-credential path; add access/refresh and HTTP rejection regressions. Updated container verification is pending.
 - Frontend API-configuration smoke tests load an isolated module so cached imports cannot make results depend on test order or the configured host URL.
 - Preserve the rotated refresh cookie in the frontend so repeated silent renewal does not reuse a revoked token.
 - Public dependency health failures expose exception classes instead of connection details; local Compose ports bind to localhost and AWS Compose requires a nonempty Redis password, loaded consistently by deploy, rollback and boot commands.
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Job descriptions are sanitized before cover-letter QA review, matching the generation path.
 
 ### Changed
+- Add a dated dependency review, distinguish the tested package inventory from GitHub's default-branch alerts, and prioritize remaining security remediation before release.
 - Refresh all six README guides with a product overview, sample application walkthrough, verified setup commands, and clearer navigation. Document the optional Cloudflare scheduler's limited health checks and separate branch publication from deployment.
 - Product-first documentation now separates fit review, saved applications and tracking, with a housekeeping checkpoint and an evidence-driven refactoring plan. API polling and retention documentation match the current implementation.
 - Remove unused frontend PDF/DOCX parsers and redundant source scaffolding; align hooks and tooling pins.
