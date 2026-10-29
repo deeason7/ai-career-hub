@@ -46,23 +46,20 @@ AWS billing has not been reconciled; retained DNS and snapshots may still cost m
 
 ## Verification record
 
-The updated backend and production image were verified on **2026-10-28** at commit
-`0f164b7`, after the PyJWT update. The owner executed the isolated Docker script;
-the saved logs and exit metadata confirm that both verification and cleanup exited
-zero. The unchanged frontend retains its **2026-10-27** result.
-The **2026-10-29** LangGraph/SDK update has four passing local graph tests; the
-earlier Docker run does not verify these newer dependency pins.
+The updated backend and production image were verified on **2026-10-29** at commit
+`6398697`, after the PyJWT and LangGraph/SDK updates. The owner executed the isolated
+Docker script; the saved logs and exit metadata confirm that both verification and
+cleanup exited zero. The unchanged frontend retains its **2026-10-27** result.
 
 | Check | Result | Limit |
 |---|---|---|
-| Full backend suite in Docker/PostgreSQL, 2026-10-28 | **363 passed, 8 expected failures** | Includes all four new JWT regressions; live-LLM cases remain expected failures without provider credentials |
-| LangGraph follow-up, 2026-10-29 | **4 existing graph tests passed** on Python 3.11.16 with LangGraph 1.2.14 / SDK 0.4.6 | Isolated local graph execution with mocked tools; full backend/task and production-image checks pending |
+| Full backend suite in Docker/PostgreSQL, 2026-10-29 | **363 passed, 8 expected failures** | Includes graph execution, task submission/polling and all four JWT regressions; external generation and Redis task storage use test doubles |
 | Full frontend suite in Docker, 2026-10-27 | **63 passed** | Real framework imports with mocked session/network behavior; no interactive browser journey |
 | Maintenance-script suite, 2026-10-28 | **29 passed** | Readiness, docs drift and release preflight regression checks |
 | Lint, formatting, documentation | Passed; **28 Markdown files**, five matching current version markers | Static checks do not prove hosted behavior |
-| Production image build, 2026-10-28 | Passed, `linux/amd64`; installed PyJWT **2.15.0** verified | Candidate image remains local and unreleased |
-| Bundled model inference, 2026-10-28 | Passed offline as the non-root serving user | Verifies packaged model loading rather than deployed-host behavior |
-| Model-backed scoring evaluation, 2026-10-28 | **7/7 gates passed, 20 pairs**, container network disabled | Predates the LangGraph update; synthetic corpus, model details and limits below |
+| Production image build, 2026-10-29 | Passed, `linux/amd64`; PyJWT **2.15.0**, LangGraph **1.2.14**, SDK **0.4.6** verified | Candidate image remains local and unreleased |
+| Bundled model inference, 2026-10-29 | Passed offline as the non-root serving user | Verifies packaged model loading rather than deployed-host behavior |
+| Model-backed scoring evaluation, 2026-10-29 | **7/7 gates passed, 20 pairs**, container network disabled | Synthetic corpus; model details and limits below |
 | Interactive hosted-browser journey | Not run | Runtime/API smoke is separate evidence |
 | Dependency review, 2026-10-28 | 177 package/version records queried; findings in six backend packages | Review of Docker installation logs, not a complete installed-image or deployed-environment audit |
 
@@ -88,7 +85,7 @@ Broader dependency remediation and the release gate remain open.
 | Result | Measurement | Method and limit |
 |---|---|---|
 | More consistent résumé-fit feedback | Employer-boilerplate movement fell **3.5 → 0 points across 20 labeled pairs**, 2026-08-21 | Filtering before both semantic and keyword scoring; synthetic offline corpus, not an employer acceptance result |
-| Repeatable scoring evaluation | **7 gating checks**; strong/weak separation **34.2 points**, strong/related **29.6 points**, reproduced **2026-10-28** | Real MiniLM model; four synthetic résumés × five postings; not an independent test set |
+| Repeatable scoring evaluation | **7 gating checks**; strong/weak separation **34.2 points**, strong/related **29.6 points**, reproduced **2026-10-29** | Real MiniLM model; four synthetic résumés × five postings; not an independent test set |
 | Smaller inference container | **3.38 GB → 662 MB (about 80%)**, 2026-06-05 | Historical CPU-only PyTorch build; current image size, startup improvement, and billing savings were not measured |
 
 The [evaluation guide](../backend/evals/README.md) documents the corpus, thresholds,

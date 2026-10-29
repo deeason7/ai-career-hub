@@ -9,7 +9,7 @@ Unit tests catch implementation regressions; these evaluations exercise the mode
 ranking and consistency. Generation-quality and human-judge calibration suites
 remain planned work.
 
-**Latest recorded result: 7/7 gates passed on 2026-10-28**, using the production
+**Latest recorded result: 7/7 gates passed on 2026-10-29**, using the production
 `linux/amd64` image with networking disabled. See [measured baseline](#measured-baseline)
 for the scores and [measurement limits](#measurement-limits) for their scope.
 
@@ -81,10 +81,10 @@ yet expected to hold.
 
 ## Measured baseline
 
-Originally recorded **2026-08-21**, then reproduced on **2026-10-27** and **2026-10-28**
+Originally recorded **2026-08-21**, then reproduced on **October 27, 28 and 29, 2026**
 using fresh production `linux/amd64` images with networking disabled. The latest run
-used commit `0f164b7`, including the PyJWT 2.15.0 update. All seven gates passed
-over the same twenty pairs with the packaged `all-MiniLM-L6-v2` model. These are
+used commit `6398697`, including PyJWT 2.15.0 and LangGraph 1.2.14 / SDK 0.4.6.
+All seven gates passed over the same twenty pairs with the packaged `all-MiniLM-L6-v2` model. These are
 controlled offline results, not deployed availability or a hiring prediction.
 
 | check | measured | bar | |

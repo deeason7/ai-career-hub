@@ -23,14 +23,13 @@ outcome was delivered; it does not substitute for evidence that the outcome impr
 Finish the [checkpoint gates](CHECKPOINT.md#verification-and-release-gates) before
 starting the next feature branch. Preserve the current release number until a tested
 release is deliberately cut. The updated backend suite, production image and offline
-model evaluation passed on 2026-10-28; the unchanged frontend passed on 2026-10-27.
+model evaluation passed on 2026-10-29; the unchanged frontend passed on 2026-10-27.
 Interactive hosted-browser checks, dependency audit review and the new release/post-deploy
 smoke remain required.
 
 The [2026-10-28 dependency review](DEPENDENCY_REVIEW.md) makes the security sequence
-concrete: the PyJWT 2.15.0 update is now container-verified. The October 29 follow-up
-pins LangGraph 1.2.14 / SDK 0.4.6 and passes local graph checks. Complete its full
-backend/task and production-image verification, then evaluate the
+concrete: PyJWT 2.15.0 and LangGraph 1.2.14 / SDK 0.4.6 are container-verified,
+including graph/task regressions and offline scoring. Next, evaluate the
 encoder/Transformers/PyTorch changes together. Reconcile
 Chroma's server-specific findings with the embedded/hosted configurations and review
 stale CI exclusions.
