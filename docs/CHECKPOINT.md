@@ -1,12 +1,14 @@
 # Housekeeping checkpoint
 
-**Reviewed:** 2026-10-29. **State:** container verification passed; dependency remediation and release verification remain open.
+**Reviewed:** 2026-10-29. **State:** the JWT checkpoint is container-verified; the LangGraph follow-up has local graph checks only. Dependency remediation and release verification remain open.
 Latest released version remains **v4.4.3**. Local recovery and housekeeping changes
 have not been deployed. [Project status](PROJECT_STATUS.md) records the hosted evidence.
 
 The [dependency review](DEPENDENCY_REVIEW.md) led to a PyJWT 2.15.0 update. The full
 backend suite, four new token-parsing regressions and rebuilt production image passed
 on 2026-10-28 at commit `0f164b7`. The image also passed all seven offline scoring gates.
+The subsequent LangGraph 1.2.14 / SDK 0.4.6 update passes four local graph tests;
+its full backend/task and production-image verification is still pending.
 
 ## What changed
 
@@ -40,6 +42,8 @@ Docker suite and 29 stdlib maintenance checks on 2026-10-28, plus 63 frontend Do
 checks on 2026-10-27. The backend rerun includes all four new JWT regressions; the
 unchanged frontend was skipped. Eight live-LLM tests remain expected failures without
 provider credentials. Earlier runs and isolated helper checks are not counted again.
+These dated results predate the LangGraph follow-up; its four local tests overlap
+the backend suite and are not added to the total.
 
 | Gate | Status |
 |---|---|
@@ -50,8 +54,9 @@ provider credentials. Earlier runs and isolated helper checks are not counted ag
 | Secret history review | 416 commits scanned; two findings were historical development/test defaults; the current source scan flags one existing local test database default. No confirmed production credential exposure in these scans |
 | Branch deletion verification | GitHub API independently confirms deletion of the three reviewed heads; `main`, `develop` and all eight open dependency branches remain |
 | Full PostgreSQL-backed Docker suite | 363 passed, 8 expected failures on 2026-10-28; includes malformed access/refresh headers and HTTP 401 responses from profile/refresh routes |
+| LangGraph follow-up, 2026-10-29 | Four existing local graph tests passed with LangGraph 1.2.14 and SDK 0.4.6; full backend/task and image verification pending |
 | Full frontend Docker suite | 63 passed on 2026-10-27 after isolating the API configuration test from Python’s import cache; real framework imports, mocked session/network interactions |
-| Fresh packaged-model build and current real-model eval | Production `linux/amd64` image rebuilt on 2026-10-28; PyJWT 2.15.0 and non-root serving verified; all seven scoring gates passed on 20 pairs with the container network disabled |
+| Packaged-model build and real-model eval, before the LangGraph update | Production `linux/amd64` image rebuilt on 2026-10-28; PyJWT 2.15.0 and non-root serving verified; all seven scoring gates passed on 20 pairs with the container network disabled |
 | Interactive hosted-browser journey | Pending; frontend runtime and live API journey were separately verified |
 | New deployment/version and post-deploy smoke | Pending; this checkpoint is unreleased |
 | Dependency review and remediation | 177 package/version records from the earlier build checked on 2026-10-28; findings in six backend packages. The PyJWT update is container-verified; a complete audit and remaining remediation are pending |

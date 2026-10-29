@@ -50,16 +50,19 @@ The updated backend and production image were verified on **2026-10-28** at comm
 `0f164b7`, after the PyJWT update. The owner executed the isolated Docker script;
 the saved logs and exit metadata confirm that both verification and cleanup exited
 zero. The unchanged frontend retains its **2026-10-27** result.
+The **2026-10-29** LangGraph/SDK update has four passing local graph tests; the
+earlier Docker run does not verify these newer dependency pins.
 
 | Check | Result | Limit |
 |---|---|---|
 | Full backend suite in Docker/PostgreSQL, 2026-10-28 | **363 passed, 8 expected failures** | Includes all four new JWT regressions; live-LLM cases remain expected failures without provider credentials |
+| LangGraph follow-up, 2026-10-29 | **4 existing graph tests passed** on Python 3.11.16 with LangGraph 1.2.14 / SDK 0.4.6 | Isolated local graph execution with mocked tools; full backend/task and production-image checks pending |
 | Full frontend suite in Docker, 2026-10-27 | **63 passed** | Real framework imports with mocked session/network behavior; no interactive browser journey |
 | Maintenance-script suite, 2026-10-28 | **29 passed** | Readiness, docs drift and release preflight regression checks |
 | Lint, formatting, documentation | Passed; **28 Markdown files**, five matching current version markers | Static checks do not prove hosted behavior |
 | Production image build, 2026-10-28 | Passed, `linux/amd64`; installed PyJWT **2.15.0** verified | Candidate image remains local and unreleased |
 | Bundled model inference, 2026-10-28 | Passed offline as the non-root serving user | Verifies packaged model loading rather than deployed-host behavior |
-| Current model-backed scoring evaluation, 2026-10-28 | **7/7 gates passed, 20 pairs**, container network disabled | Synthetic corpus; model details and limits below |
+| Model-backed scoring evaluation, 2026-10-28 | **7/7 gates passed, 20 pairs**, container network disabled | Predates the LangGraph update; synthetic corpus, model details and limits below |
 | Interactive hosted-browser journey | Not run | Runtime/API smoke is separate evidence |
 | Dependency review, 2026-10-28 | 177 package/version records queried; findings in six backend packages | Review of Docker installation logs, not a complete installed-image or deployed-environment audit |
 
@@ -76,7 +79,8 @@ Python 3.11. The updated Docker suite confirms that PyJWT 2.15.0 rejects deeply
 nested headers through both token helpers and returns HTTP 401 from the profile
 and refresh routes. The production image separately verified the installed version
 and non-root user. The latest suite totals are **455 passed**, with eight expected
-failures; the eight focused helper checks overlap and are not added to that total.
+failures; the eight focused helper checks and four local graph checks overlap and
+are not added to that total.
 Broader dependency remediation and the release gate remain open.
 
 ## Measured quality and operating results

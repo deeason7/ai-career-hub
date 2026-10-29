@@ -56,11 +56,13 @@ works when a job site blocks fetching.
 | Application workflow | Upload → match → saved letter → refinement → PDF → tracker | Deployed synthetic API journey, 2026-10-26; browser interactions remain to be checked |
 | Regression checks | **455 passed**, 8 expected live-LLM failures | Latest passing suites: 363 backend and 29 maintenance checks (2026-10-28); 63 frontend checks (2026-10-27) |
 | Scoring evaluation | **7/7 gates passed across 20 pairs** | Real MiniLM model in the production image with networking disabled, 2026-10-28 |
-| Consistent fit feedback | Irrelevant posting boilerplate caused **0 points of drift**, down from 3.5 | Controlled synthetic benchmark; reproduced in the current image |
+| Consistent fit feedback | Irrelevant posting boilerplate caused **0 points of drift**, down from 3.5 | Controlled synthetic benchmark; reproduced in the October 28 image |
 
 The latest release is **v4.4.3**. Recovery and housekeeping updates in this branch
 are **unreleased**. See the [checkpoint](docs/CHECKPOINT.md) and
 [verified status](docs/PROJECT_STATUS.md) for remaining release checks.
+The October 29 LangGraph dependency update passes local graph checks; its full
+container verification is pending, so the dated Docker results above remain the baseline.
 
 Preparation time, review effort, and completion rate are the next product measurements.
 The [measurement plan](docs/PRODUCT.md#measuring-user-value) defines a manual baseline;

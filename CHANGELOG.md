@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Update LangGraph to 1.2.14 and its SDK to 0.4.6 for upstream authorization-filter and remote-streaming path fixes. Existing local graph regression tests pass; full container verification of this pair is pending.
 - Update PyJWT to 2.15.0 so deeply nested token headers are rejected through the normal invalid-credential path; add access/refresh and HTTP rejection regressions, verified in the full PostgreSQL-backed Docker suite.
 - Frontend API-configuration smoke tests load an isolated module so cached imports cannot make results depend on test order or the configured host URL.
 - Preserve the rotated refresh cookie in the frontend so repeated silent renewal does not reuse a revoked token.

@@ -28,8 +28,10 @@ Interactive hosted-browser checks, dependency audit review and the new release/p
 smoke remain required.
 
 The [2026-10-28 dependency review](DEPENDENCY_REVIEW.md) makes the security sequence
-concrete: the PyJWT 2.15.0 update is now container-verified. Next, apply the compatible
-SDK patch, then evaluate the encoder/Transformers/PyTorch changes together. Reconcile
+concrete: the PyJWT 2.15.0 update is now container-verified. The October 29 follow-up
+pins LangGraph 1.2.14 / SDK 0.4.6 and passes local graph checks. Complete its full
+backend/task and production-image verification, then evaluate the
+encoder/Transformers/PyTorch changes together. Reconcile
 Chroma's server-specific findings with the embedded/hosted configurations and review
 stale CI exclusions.
 These are release-gate tasks; each subsequent dependency change needs its own validation.
