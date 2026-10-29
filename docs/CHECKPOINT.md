@@ -1,12 +1,12 @@
 # Housekeeping checkpoint
 
-**Reviewed:** 2026-10-28. **State:** housekeeping branch published; dependency remediation and release verification remain open.
+**Reviewed:** 2026-10-29. **State:** container verification passed; dependency remediation and release verification remain open.
 Latest released version remains **v4.4.3**. Local recovery and housekeeping changes
 have not been deployed. [Project status](PROJECT_STATUS.md) records the hosted evidence.
 
-The 2026-10-27 container results cover the original checkpoint. The subsequent
-[dependency review](DEPENDENCY_REVIEW.md) led to a PyJWT 2.15.0 update with passing
-local token-helper checks; its updated image and HTTP regression suite are unverified.
+The [dependency review](DEPENDENCY_REVIEW.md) led to a PyJWT 2.15.0 update. The full
+backend suite, four new token-parsing regressions and rebuilt production image passed
+on 2026-10-28 at commit `0f164b7`. The image also passed all seven offline scoring gates.
 
 ## What changed
 
@@ -16,7 +16,7 @@ local token-helper checks; its updated image and HTTP regression suite are unver
 | Current references | Correct hosting topology, async contracts, refresh/session behavior, scoring limits and retention limits |
 | Historical material | CHANGELOG remains the release history; old AWS/context snapshots are kept as dated internal archives |
 | Dependency hygiene | Removed unused frontend PDF/DOCX parsers; retained backend parsers and exercised/optional integrations |
-| Security fixes | Retain rotated refresh tokens; expose exception classes rather than detailed public health errors; localhost-only development ports; require production Redis password and load it in deploy/rollback/boot paths |
+| Security fixes | Reject deeply nested JWT headers with PyJWT 2.15.0; retain rotated refresh tokens; redact public health errors; bind development ports to localhost; require and consistently load the production Redis password |
 | Source/build hygiene | Consistent secret/cache exclusions, one Ruff pin, broader hooks, redundant migration placeholder removed |
 | Documentation maintenance | Local-link/heading and five-file release-version checks; bounded README release summary and release preflight validation |
 | Branch inventory | Three confirmed merged GitHub branches and one redundant local recovery branch deleted; nine stale tracking refs pruned; open dependency work preserved |
@@ -35,25 +35,26 @@ local token-helper checks; its updated image and HTTP regression suite are unver
 
 ## Verification and release gates
 
-Verification on 2026-10-27 passed **451 checks**: 359 in the PostgreSQL-backed
-backend Docker suite, 63 in the frontend Docker suite, and 29 stdlib maintenance
-checks. Eight live-LLM tests are expected failures without provider credentials.
-Earlier host checks were a subset, not an additional count.
+The latest passing suites total **455 checks**: 363 in the PostgreSQL-backed backend
+Docker suite and 29 stdlib maintenance checks on 2026-10-28, plus 63 frontend Docker
+checks on 2026-10-27. The backend rerun includes all four new JWT regressions; the
+unchanged frontend was skipped. Eight live-LLM tests remain expected failures without
+provider credentials. Earlier runs and isolated helper checks are not counted again.
 
 | Gate | Status |
 |---|---|
 | Source lint/format | Passed for backend, frontend and maintenance scripts |
-| Documentation links and versions | 27 Markdown files checked; all five current release markers agree at v4.4.3 |
+| Documentation links and versions | 28 Markdown files checked; all five current release markers agree at v4.4.3 |
 | Maintenance regression checks | 29 passed; readiness, documentation and release preflight |
 | Compose and retained scripts | Config validation passed for localhost bindings and required Redis password; rollback passed with stubbed AWS/Docker commands; shell syntax valid. AWS/production Redis startup remains unexercised |
 | Secret history review | 416 commits scanned; two findings were historical development/test defaults; the current source scan flags one existing local test database default. No confirmed production credential exposure in these scans |
 | Branch deletion verification | GitHub API independently confirms deletion of the three reviewed heads; `main`, `develop` and all eight open dependency branches remain |
-| Full PostgreSQL-backed Docker suite | 359 passed, 8 expected failures on 2026-10-27; executed through the isolated terminal script |
-| Full frontend Docker suite | 63 passed after isolating the API configuration test from Python’s import cache; real framework imports, mocked session/network interactions |
-| Fresh packaged-model build and current real-model eval | Production `linux/amd64` image built; offline inference passed as the serving user; all seven scoring gates passed on 20 pairs with the container network disabled |
+| Full PostgreSQL-backed Docker suite | 363 passed, 8 expected failures on 2026-10-28; includes malformed access/refresh headers and HTTP 401 responses from profile/refresh routes |
+| Full frontend Docker suite | 63 passed on 2026-10-27 after isolating the API configuration test from Python’s import cache; real framework imports, mocked session/network interactions |
+| Fresh packaged-model build and current real-model eval | Production `linux/amd64` image rebuilt on 2026-10-28; PyJWT 2.15.0 and non-root serving verified; all seven scoring gates passed on 20 pairs with the container network disabled |
 | Interactive hosted-browser journey | Pending; frontend runtime and live API journey were separately verified |
 | New deployment/version and post-deploy smoke | Pending; this checkpoint is unreleased |
-| Dependency review and remediation | 177 recorded package versions checked on 2026-10-28; six backend packages have findings. PyJWT updated after a Python 3.11 reproduction; updated backend/container verification, complete audit and remaining remediation pending |
+| Dependency review and remediation | 177 package/version records from the earlier build checked on 2026-10-28; findings in six backend packages. The PyJWT update is container-verified; a complete audit and remaining remediation are pending |
 
 The earlier hosted check restored the sleeping Streamlit runtime and exercised the
 API through login, upload, analysis, saved-letter generation/refinement, PDF and

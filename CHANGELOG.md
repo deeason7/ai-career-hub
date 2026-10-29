@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- Update PyJWT to 2.15.0 so deeply nested token headers are rejected through the normal invalid-credential path; add access/refresh and HTTP rejection regressions. Updated container verification is pending.
+- Update PyJWT to 2.15.0 so deeply nested token headers are rejected through the normal invalid-credential path; add access/refresh and HTTP rejection regressions, verified in the full PostgreSQL-backed Docker suite.
 - Frontend API-configuration smoke tests load an isolated module so cached imports cannot make results depend on test order or the configured host URL.
 - Preserve the rotated refresh cookie in the frontend so repeated silent renewal does not reuse a revoked token.
 - Public dependency health failures expose exception classes instead of connection details; local Compose ports bind to localhost and AWS Compose requires a nonempty Redis password, loaded consistently by deploy, rollback and boot commands.

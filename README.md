@@ -54,8 +54,8 @@ works when a job site blocks fetching.
 | Evidence | Result | Scope |
 |---|---|---|
 | Application workflow | Upload → match → saved letter → refinement → PDF → tracker | Deployed synthetic API journey, 2026-10-26; browser interactions remain to be checked |
-| Regression checks | **451 passed**, 8 expected live-LLM failures | 359 backend, 63 frontend, 29 maintenance checks, 2026-10-27 |
-| Scoring evaluation | **7/7 gates passed across 20 pairs** | Real MiniLM model in the production image with networking disabled, 2026-10-27 |
+| Regression checks | **455 passed**, 8 expected live-LLM failures | Latest passing suites: 363 backend and 29 maintenance checks (2026-10-28); 63 frontend checks (2026-10-27) |
+| Scoring evaluation | **7/7 gates passed across 20 pairs** | Real MiniLM model in the production image with networking disabled, 2026-10-28 |
 | Consistent fit feedback | Irrelevant posting boilerplate caused **0 points of drift**, down from 3.5 | Controlled synthetic benchmark; reproduced in the current image |
 
 The latest release is **v4.4.3**. Recovery and housekeeping updates in this branch

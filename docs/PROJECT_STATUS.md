@@ -46,19 +46,20 @@ AWS billing has not been reconciled; retained DNS and snapshots may still cost m
 
 ## Verification record
 
-The housekeeping checkpoint was verified on **2026-10-27**. The owner executed the
-isolated Docker script because the review environment could not access the Docker
-socket; the saved test/build/evaluation logs and final zero exit status were inspected.
+The updated backend and production image were verified on **2026-10-28** at commit
+`0f164b7`, after the PyJWT update. The owner executed the isolated Docker script;
+the saved logs and exit metadata confirm that both verification and cleanup exited
+zero. The unchanged frontend retains its **2026-10-27** result.
 
 | Check | Result | Limit |
 |---|---|---|
-| Full backend suite in Docker/PostgreSQL | **359 passed, 8 expected failures** | Live-LLM cases remain expected failures without provider credentials |
-| Full frontend suite in Docker | **63 passed** | Real framework imports with mocked session/network behavior; no interactive browser journey |
-| Maintenance-script suite | **29 passed** | Readiness, docs drift and release preflight regression checks |
-| Lint, formatting, documentation | Passed; **27 Markdown files**, five matching current version markers | Static checks do not prove hosted behavior |
-| Production image build | Passed, `linux/amd64` | Candidate image remains local and unreleased |
-| Bundled model inference | Passed offline as the non-root serving user | Verifies packaged model loading rather than deployed-host behavior |
-| Current model-backed scoring evaluation | **7/7 gates passed, 20 pairs**, container network disabled | Synthetic corpus; model details and limits below |
+| Full backend suite in Docker/PostgreSQL, 2026-10-28 | **363 passed, 8 expected failures** | Includes all four new JWT regressions; live-LLM cases remain expected failures without provider credentials |
+| Full frontend suite in Docker, 2026-10-27 | **63 passed** | Real framework imports with mocked session/network behavior; no interactive browser journey |
+| Maintenance-script suite, 2026-10-28 | **29 passed** | Readiness, docs drift and release preflight regression checks |
+| Lint, formatting, documentation | Passed; **28 Markdown files**, five matching current version markers | Static checks do not prove hosted behavior |
+| Production image build, 2026-10-28 | Passed, `linux/amd64`; installed PyJWT **2.15.0** verified | Candidate image remains local and unreleased |
+| Bundled model inference, 2026-10-28 | Passed offline as the non-root serving user | Verifies packaged model loading rather than deployed-host behavior |
+| Current model-backed scoring evaluation, 2026-10-28 | **7/7 gates passed, 20 pairs**, container network disabled | Synthetic corpus; model details and limits below |
 | Interactive hosted-browser journey | Not run | Runtime/API smoke is separate evidence |
 | Dependency review, 2026-10-28 | 177 package/version records queried; findings in six backend packages | Review of Docker installation logs, not a complete installed-image or deployed-environment audit |
 
@@ -70,18 +71,20 @@ network and disposable volumes were removed after verification.
 The [cleanup checkpoint](CHECKPOINT.md) records scope and remaining release gates.
 A local image and passing tests do not establish that unreleased code serves users.
 
-The [subsequent dependency review](DEPENDENCY_REVIEW.md) reproduced a JWT parsing
-failure on Python 3.11. Updating PyJWT to 2.15.0 passes eight focused local checks;
-the new HTTP regressions and updated backend image remain unverified. The Docker
-counts above apply to the original checkpoint. Broader dependency remediation and
-the release gate remain open.
+The [dependency review](DEPENDENCY_REVIEW.md) reproduced a JWT parsing failure on
+Python 3.11. The updated Docker suite confirms that PyJWT 2.15.0 rejects deeply
+nested headers through both token helpers and returns HTTP 401 from the profile
+and refresh routes. The production image separately verified the installed version
+and non-root user. The latest suite totals are **455 passed**, with eight expected
+failures; the eight focused helper checks overlap and are not added to that total.
+Broader dependency remediation and the release gate remain open.
 
 ## Measured quality and operating results
 
 | Result | Measurement | Method and limit |
 |---|---|---|
 | More consistent résumé-fit feedback | Employer-boilerplate movement fell **3.5 → 0 points across 20 labeled pairs**, 2026-08-21 | Filtering before both semantic and keyword scoring; synthetic offline corpus, not an employer acceptance result |
-| Repeatable scoring evaluation | **7 gating checks**; strong/weak separation **34.2 points**, strong/related **29.6 points**, reproduced **2026-10-27** | Real MiniLM model; four synthetic résumés × five postings; not an independent test set |
+| Repeatable scoring evaluation | **7 gating checks**; strong/weak separation **34.2 points**, strong/related **29.6 points**, reproduced **2026-10-28** | Real MiniLM model; four synthetic résumés × five postings; not an independent test set |
 | Smaller inference container | **3.38 GB → 662 MB (about 80%)**, 2026-06-05 | Historical CPU-only PyTorch build; current image size, startup improvement, and billing savings were not measured |
 
 The [evaluation guide](../backend/evals/README.md) documents the corpus, thresholds,

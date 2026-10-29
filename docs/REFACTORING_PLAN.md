@@ -22,15 +22,17 @@ outcome was delivered; it does not substitute for evidence that the outcome impr
 
 Finish the [checkpoint gates](CHECKPOINT.md#verification-and-release-gates) before
 starting the next feature branch. Preserve the current release number until a tested
-release is deliberately cut. Full database/frontend suites, a fresh production
-image and offline model evaluation passed on 2026-10-27. Interactive hosted-browser
-checks, dependency audit review and the new release/post-deploy smoke remain required.
+release is deliberately cut. The updated backend suite, production image and offline
+model evaluation passed on 2026-10-28; the unchanged frontend passed on 2026-10-27.
+Interactive hosted-browser checks, dependency audit review and the new release/post-deploy
+smoke remain required.
 
 The [2026-10-28 dependency review](DEPENDENCY_REVIEW.md) makes the security sequence
-concrete: verify the PyJWT 2.15.0 update, apply the compatible SDK patch, then evaluate
-the encoder/Transformers/PyTorch changes together. Reconcile Chroma's server-specific
-findings with the embedded/hosted configurations and review stale CI exclusions.
-These are release-gate tasks; the earlier container results do not validate new pins.
+concrete: the PyJWT 2.15.0 update is now container-verified. Next, apply the compatible
+SDK patch, then evaluate the encoder/Transformers/PyTorch changes together. Reconcile
+Chroma's server-specific findings with the embedded/hosted configurations and review
+stale CI exclusions.
+These are release-gate tasks; each subsequent dependency change needs its own validation.
 
 Acceptance: one navigable documentation set, clean feature branch, reconciled branch
 inventory, explicit security limitations, passing available checks and a dated list

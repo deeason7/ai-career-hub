@@ -9,7 +9,7 @@ Unit tests catch implementation regressions; these evaluations exercise the mode
 ranking and consistency. Generation-quality and human-judge calibration suites
 remain planned work.
 
-**Latest recorded result: 7/7 gates passed on 2026-10-27**, using the production
+**Latest recorded result: 7/7 gates passed on 2026-10-28**, using the production
 `linux/amd64` image with networking disabled. See [measured baseline](#measured-baseline)
 for the scores and [measurement limits](#measurement-limits) for their scope.
 
@@ -81,8 +81,9 @@ yet expected to hold.
 
 ## Measured baseline
 
-Originally recorded **2026-08-21**, then reproduced **2026-10-27** using the newly
-built production `linux/amd64` image with networking disabled. All seven gates passed
+Originally recorded **2026-08-21**, then reproduced on **2026-10-27** and **2026-10-28**
+using fresh production `linux/amd64` images with networking disabled. The latest run
+used commit `0f164b7`, including the PyJWT 2.15.0 update. All seven gates passed
 over the same twenty pairs with the packaged `all-MiniLM-L6-v2` model. These are
 controlled offline results, not deployed availability or a hiring prediction.
 
