@@ -105,19 +105,31 @@ will reject that older response until the matching backend change is deployed;
 this is missing evidence, not proof the old model is broken. A live v4.4.3 scoring
 sample passed on 2026-10-26.
 
+Scheduled warming uses `--allow-missing-semantic` for compatibility. This permits
+only an absent semantic field after independently confirming API version **4.4.3**,
+and reports it as unverified. A present failing semantic signal, missing datastore,
+or newer release without semantic health still fails. Release validation remains
+strict and cannot combine this option with `--expected-version`.
+
 ## Monitoring and document cleanup
 
 [keepwarm.yml](.github/workflows/keepwarm.yml) configures six-hour warming and a
-separate daily **03:00 UTC** cleanup. Manual dispatch also runs cleanup. It calls
+separate daily **03:00 UTC** cleanup. Cleanup calls
 `POST /api/v1/admin/lifecycle/run` with the `free-prod` admin secret.
 A failed warm job and a failed cleanup job are separate incidents; inspect both.
 
-Scheduled Actions can be disabled after repository inactivity. The optional
-[Cloudflare Worker](infra/keep-warm/README.md) is an alternate scheduler, with its
-own configuration and verification obligations. Its frontend probe checks only an
-HTTP response and does not verify the Streamlit runtime or semantic inference;
-use the shared readiness checker for release validation. A scheduler is not a guarantee
-against provider suspension. Monitor actual run results and app behavior.
+Manual dispatch is read-only by default; choose `run-cleanup=true` only when document
+deletion is intended. Cleanup passes the admin secret through an environment variable,
+rejects redirects, and reports only HTTP status, validated counts and safe error classes.
+It sends one POST without automatic retries. A failed warm job does not skip frontend
+verification; each surface has independent bounded retries and execution time limits.
+
+Scheduled Actions can be disabled after repository inactivity. The duplicate
+[Cloudflare Worker source was retired](infra/keep-warm/README.md) because it accepted
+empty API bodies and frontend redirects as healthy. The Python checker is the single
+readiness authority. Existing remote worker deployments were not inspected or removed.
+A scheduler is not a guarantee against provider suspension. Monitor actual run results
+and app behavior. See the [keepalive diagnosis and verification guide](docs/KEEPALIVE.md).
 
 Expired SQL documents are eligible for cleanup after the configured TTL. Derived
 vectors, account records, backups and logs have separate retention concerns;

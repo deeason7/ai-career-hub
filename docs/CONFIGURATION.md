@@ -90,6 +90,11 @@ Changing the backend or collection does not migrate existing vectors. PostgreSQL
 
 The [Keep Warm workflow](../.github/workflows/keepwarm.yml) configures daily cleanup at 03:00 UTC through `/api/v1/admin/lifecycle/run`, using `ADMIN_SECRET` from the `free-prod` GitHub Environment. The six-hour warm schedule is separate. Monitor cleanup authentication and results; the current cleanup covers relational rows, not vector chunks.
 
+Manual Keep Warm dispatches check readiness without cleanup unless `run-cleanup=true`
+is explicitly selected. The secret is passed through the cleanup process environment;
+the client rejects redirects and never automatically retries the POST. See the
+[keepalive contract](KEEPALIVE.md) for legacy API compatibility and runtime checks.
+
 ## Optional workflow orchestration
 
 | Variable | Default | Purpose |

@@ -42,7 +42,8 @@ the deployed release from verified, unreleased changes; the changelog preserves 
 | [Dependency review](DEPENDENCY_REVIEW.md) | Review dated package findings, the JWT fix, and the remaining security release gate |
 | [AWS infrastructure reference](../INFRASTRUCTURE.md) | Understand the deprovisioned AWS target before a separately planned restoration |
 | [AWS operating procedures](deployment/AWS.md) | Consult the retained deployment and wake/sleep procedures when working on that optional target |
-| [Alternative scheduler](../infra/keep-warm/README.md) | Inspect the optional Cloudflare keep-warm worker and its operational limits |
+| [Keepalive diagnosis](KEEPALIVE.md) | Distinguish provider outages from probe defects, reproduce regressions, and verify the active schedule |
+| [Retired alternative scheduler](../infra/keep-warm/README.md) | Understand why the duplicate worker was removed and use the canonical checker |
 
 ## Keep references current
 

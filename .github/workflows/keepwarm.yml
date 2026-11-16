@@ -1,15 +1,17 @@
 name: Keep Warm
 
-# The free-tier providers (Neon, Upstash, Qdrant, HF Space, Streamlit) suspend
-# when idle, and that stack has no scheduler of its own — this workflow is both
-# the keep-alive ping and the app's daily lifecycle cron. A failed run emails
-# the repo owner, which doubles as uptime alerting. Note: schedules fire from
-# the default branch only.
+# Check the serving application as well as its providers. Scheduled traffic
+# does not guarantee residency; schedules run from the default branch only.
 on:
   schedule:
     - cron: "0 */6 * * *" # keep everything resident
     - cron: "0 3 * * *" # daily lifecycle cleanup
   workflow_dispatch:
+    inputs:
+      run-cleanup:
+        description: Purge expired documents as well as checking readiness
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,7 +23,7 @@ env:
 jobs:
   warm:
     name: Warm the stack
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -30,31 +32,47 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Check API dependencies and frontend runtime
-        # A sleeping Streamlit app still serves HTTP 200. Check the viewer's
-        # runtime state, and require the semantic encoder as well as datastores.
+      - name: Record probe runtime
+        run: python -c 'import platform, ssl; print(platform.python_version(), ssl.OPENSSL_VERSION)'
+
+      - name: Test probe contracts and HTTP transport
+        env:
+          CAREERHUB_REQUIRE_NETWORK_TESTS: "1"
+        run: python -m unittest discover -s .github/scripts/tests -v
+
+      - name: Check API and datastores
+        timeout-minutes: 4
+        # v4.4.3 has no semantic signal. Report that limitation explicitly;
+        # a present unhealthy semantic signal still fails. Deploy stays strict.
         run: |
-          python .github/scripts/readiness.py \
-            --api-base "$API_BASE" --frontend-url "$FRONTEND_URL"
+          timeout 210s python .github/scripts/readiness.py \
+            --api-base "$API_BASE" --allow-missing-semantic
+
+      - name: Check frontend runtime
+        if: always()
+        timeout-minutes: 4
+        # A provider wrapper or redirect cannot establish runtime readiness.
+        run: |
+          timeout 210s python .github/scripts/readiness.py \
+            --frontend-url "$FRONTEND_URL"
 
   cleanup:
     name: Lifecycle cleanup
-    # Only on the daily schedule (or a manual dispatch) — not every warm cycle.
-    if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    # Read-only dispatches never delete documents. Keep the existing daily cron.
+    if: github.event.schedule == '0 3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.run-cleanup)
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: free-prod
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
       - name: Purge expired documents (15-day TTL)
-        # Keep the response body — the endpoint names the failure class on a 500,
-        # and discarding it once cost a full offline repro to work out why the
-        # purge was wedged.
+        env:
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+        # A failed POST is not retried automatically; retain safe status/counts.
         run: |
-          body=$(mktemp)
-          code=$(curl -sS -o "$body" -w "%{http_code}" --max-time 60 \
-            -X POST -H "X-Admin-Secret: ${{ secrets.ADMIN_SECRET }}" \
-            "$API_BASE/api/v1/admin/lifecycle/run")
-          echo "cleanup HTTP $code"
-          cat "$body"
-          echo
-          [ "$code" = "200" ]
+          python .github/scripts/lifecycle.py --api-base "$API_BASE"
