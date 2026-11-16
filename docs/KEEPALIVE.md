@@ -84,6 +84,29 @@ Scheduled runs execute the default branch. Publishing a feature branch or passin
 manual run does not activate its schedule. Activation requires the normal authorized
 review/merge path; application deployment and release gates remain separate.
 
+## Verified corrected workflow
+
+Two manual runs used the identical fix commit `e20d0c7` on
+`chore/housekeeping-checkpoint`, with `run-cleanup=false`. They ran November 16 UTC
+(November 15 in America/Chicago):
+
+| Run | Observed result |
+|---|---|
+| [43783949619](https://github.com/deeason7/ai-career-hub/actions/runs/43783949619) | 67 tests passed. API/DB/Redis/Qdrant passed. Frontend correctly failed after three viewer responses reporting asleep, although HTTP was 200. |
+| Normal viewer recovery | Same-site session plus CSRF-protected resume returned 204. Viewer then reported status 5 and runtime health returned `200 ok`. No application release or document cleanup occurred. |
+| [43784385225](https://github.com/deeason7/ai-career-hub/actions/runs/43784385225) | 67 tests passed without skips. Live API, Neon, Upstash, Qdrant and frontend runtime passed on the first attempt. Cleanup was skipped. Semantic readiness was explicitly unverified on v4.4.3. |
+
+The successful runner used Ubuntu 24.04 image `20261111.370.1`, Python 3.11.18 and
+OpenSSL 3.0.13. Local Python 3.11.16 passed 55 tests; its separate 12-method socket
+suite was unavailable under local sandbox binding restrictions and passed on the
+runner. Lint/format, documentation links and five release markers passed. Application
+runtime code and dependencies were unchanged; no database/Docker suite was repeated.
+
+The checker intentionally reports a sleeping app as unavailable; it does not promise
+to prevent Community Cloud sleep or automatically invoke provider recovery controls.
+The ordinary viewer wake restored this sample. Both scheduled activation and any
+long-term hosting/availability change require the normal authorized review path.
+
 Readiness checks do not prove browser login, generation/QA, vector retrieval quality,
 complete document deletion, or continuous uptime. Sleeping/suspended providers may
 require account-console or viewer recovery. Missing v4.4.3 semantic telemetry remains
