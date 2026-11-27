@@ -52,6 +52,27 @@ test("refresh forwards only the intended refresh cookie and preserves it on prov
   assert.equal((await response.json()).error, "api_unavailable");
 });
 
+test("refresh clears cookies only for a FastAPI authentication rejection", async () => {
+  function run(reply: Response) {
+    return handleApi(write("session/refresh", {
+      headers: { cookie: "careerhub_refresh=" + refresh },
+    }), ["session", "refresh"], env, async () => reply);
+  }
+
+  const provider = await run(new Response("<html>Provider auth screen</html>", { status: 401 }));
+  assert.equal(provider.status, 503);
+  assert.deepEqual(provider.headers.getSetCookie(), []);
+
+  const generic = await run(Response.json({ detail: "Hosting authentication required." }, { status: 401 }));
+  assert.equal(generic.status, 503);
+  assert.deepEqual(generic.headers.getSetCookie(), []);
+
+  const expired = await run(Response.json({ detail: "Invalid or expired refresh token. Please log in again." }, { status: 401 }));
+  assert.equal(expired.status, 401);
+  assert.equal(expired.headers.getSetCookie().length, 2);
+  assert(expired.headers.getSetCookie().every((cookie) => cookie.includes("Max-Age=0")));
+});
+
 test("logout revokes upstream then clears both cookies", async () => {
   const response = await handleApi(write("session/logout", {
     headers: { cookie: "careerhub_access=" + access + "; careerhub_refresh=" + refresh },

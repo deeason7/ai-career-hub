@@ -44,6 +44,7 @@ textarea { resize: vertical; }
 .secondary { background: var(--white); border-color: var(--line); color: var(--indigo-dark); }
 .secondary:hover:not(:disabled) { background: var(--indigo-light); }
 .error { color: var(--danger); margin-block: .35rem; font-size: .95rem; }
+.recovery { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-block: .6rem; color: var(--muted); }
 .status-panel { display: grid; justify-items: start; gap: 1.25rem; }
 .status-panel h1 { font-size: clamp(1.8rem, 4vw, 3rem); }
 .section-header, .list-header, .actions { display: flex; align-items: center; gap: 1rem; }

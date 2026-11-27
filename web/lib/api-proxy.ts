@@ -1,3 +1,5 @@
+import { createReadinessProbe, isJson } from "./readiness.ts";
+
 type Environment = Readonly<Record<string, string | undefined>>;
 
 const ACCESS_COOKIE = "careerhub_access";
@@ -5,6 +7,13 @@ const REFRESH_COOKIE = "careerhub_refresh";
 const REQUEST_TIMEOUT_MS = 12_000;
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const JWT = /^[\w-]+\.[\w-]+\.[\w-]+$/;
+const readiness = createReadinessProbe();
+const refreshRejections = new Set([
+  "No refresh token provided.",
+  "Invalid or expired refresh token. Please log in again.",
+  "Token has been revoked. Please log in again.",
+  "User account not found or inactive.",
+]);
 
 type Route = {
   upstream: string;
@@ -131,6 +140,12 @@ export async function handleApi(
     "cache-control": "private, no-store",
     "x-request-id": crypto.randomUUID(),
   });
+  if (request.method === "GET" && path.length === 1 && path[0] === "readiness") {
+    const origin = apiOrigin(env.CAREER_HUB_API_ORIGIN, Boolean(env.VERCEL));
+    const result = origin ? await readiness.check(origin, send) : { status: "misconfigured" };
+    if (result.status !== "ready") headers.set("retry-after", "5");
+    return Response.json(result, { status: result.status === "ready" ? 200 : 503, headers });
+  }
   const route = matchRoute(request, path);
   if (!route) return fail(headers, 404, "not_found", "This endpoint could not be found.");
 
@@ -177,7 +192,15 @@ export async function handleApi(
       cache: "no-store",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (route.kind === "refresh" && upstream.status === 401) clearSession(headers, secure);
+    if (upstream.status === 401) {
+      const detail = isJson(upstream) ? (await upstream.json().catch(() => null))?.detail : null;
+      if (typeof detail !== "string" || (route.kind === "refresh" && !refreshRejections.has(detail))) {
+        readiness.invalidate(upstreamOrigin);
+        return fail(headers, 503, "api_unavailable", "The Career Hub API is temporarily unavailable.");
+      }
+      if (route.kind === "refresh") clearSession(headers, secure);
+    }
+    if (upstream.status >= 500) readiness.invalidate(upstreamOrigin);
     if (!upstream.ok) return upstreamFailure(upstream, headers);
 
     if (route.kind === "logout") {
@@ -199,6 +222,7 @@ export async function handleApi(
     }
     return Response.json(payload, { status: upstream.status, headers });
   } catch {
+    readiness.invalidate(upstreamOrigin);
     return fail(headers, 503, "api_unavailable", "The Career Hub API is temporarily unavailable. Try again shortly.");
   }
 }
