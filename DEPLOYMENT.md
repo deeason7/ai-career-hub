@@ -463,9 +463,6 @@ PRODUCTION=true
 
 Chose **not** to add a `.python-version` file at `frontend/` or the repo root. Streamlit Community Cloud's own docs describe the Python version as a choice made in the **Advanced settings** dialog at deploy time (changed later only by deleting and redeploying the app). Neither that page nor the recognized-dependency-file docs (`requirements.txt`, `pyproject.toml`, `environment.yml`, `Pipfile`, `uv.lock`) mention a `.python-version` or `runtime.txt` file controlling it. A committed file Streamlit silently ignores would be worse than no file at all. So: when deploying, open **Advanced settings** and choose **Python 3.12**.
 
-### Keep-warm
+### Hosted readiness and cleanup
 
-An external scheduler should ping `GET /health/warm` roughly every 6 hours to keep both free tiers from cold-sleeping, and trigger the daily lifecycle cleanup on the same cadence as [Document Lifecycle Cleanup](#document-lifecycle-cleanup) above. The repo ships two interchangeable implementations:
-
-- **`.github/workflows/keepwarm.yml` (default)** — GitHub Actions crons: a 6-hourly warm and the daily cleanup, with `ADMIN_SECRET` read from the `free-prod` environment; a failed run emails the repo owner. No extra accounts. Caveats: schedules only fire from the default branch, run with some jitter, and GitHub pauses them after ~60 days without repo activity (it emails a warning first).
-- **`infra/keep-warm/` (alternative)** — an equivalent Cloudflare Worker (exact cron timing + optional Discord alerting) for when Actions scheduling isn't wanted — see its `README.md`.
+[Keep Warm](.github/workflows/keepwarm.yml) checks API dependencies and the Streamlit runtime in separate jobs every six hours. It runs document cleanup daily at 03:00 UTC with the `free-prod` admin secret. Manual runs are read-only unless production cleanup is explicitly selected on `main`. Scheduled runs can be delayed or disabled after repository inactivity. See the [Hugging Face recovery runbook](docs/HF_API_RECOVERY.md) for diagnosing cold starts, upstream failures, and interrupted cleanup.

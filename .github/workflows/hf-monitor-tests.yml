@@ -1,0 +1,34 @@
+name: API monitoring tests
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - ".github/scripts/readiness.py"
+      - ".github/scripts/lifecycle.py"
+      - ".github/scripts/tests/test_readiness.py"
+      - ".github/scripts/tests/test_lifecycle.py"
+      - ".github/workflows/keepwarm.yml"
+      - ".github/workflows/hf-monitor-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Readiness and lifecycle contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Test readiness and redacted lifecycle reporting
+        env:
+          CAREERHUB_REQUIRE_NETWORK_TESTS: "1"
+        run: |
+          python -m unittest discover -s .github/scripts/tests -p 'test_readiness.py' -v
+          python -m unittest discover -s .github/scripts/tests -p 'test_lifecycle.py' -v
