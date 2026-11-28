@@ -17,8 +17,36 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
 
 jobs:
+  hosted-image:
+    name: Verify hosted API image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the Space image
+        run: docker build --target hosted -t careerhub-hosted backend
+
+      - name: Verify hosted vector dependencies and offline scoring
+        run: |
+          docker run --rm --network none careerhub-hosted python -c \
+            "import os, importlib.util as u; assert os.environ['VECTOR_BACKEND'] == 'qdrant' and u.find_spec('qdrant_client') and u.find_spec('chromadb') is None"
+          docker run --rm --network none -e HF_HUB_OFFLINE=1 -e OMP_NUM_THREADS=2 \
+            careerhub-hosted python -m evals.runner
+
+      - name: Audit the installed production packages
+        shell: bash
+        run: |
+          # PyPI records advisories for the public torch release underlying the CPU build.
+          docker run --rm --network none careerhub-hosted pip list --format=freeze \
+            | sed -E 's/^(torch==[0-9.]+)[+]cpu$/\1/' > "$RUNNER_TEMP/hosted-requirements.txt"
+          pipx run pip-audit --strict --no-deps --disable-pip -r "$RUNNER_TEMP/hosted-requirements.txt"
+
   ci:
     name: Lint & Test
+    needs: hosted-image
+    if: always()
     runs-on: ubuntu-latest
 
     services:
@@ -37,6 +65,10 @@ jobs:
           - 5432:5432
 
     steps:
+      - name: Require the audited hosted image
+        if: needs.hosted-image.result != 'success'
+        run: exit 1
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
@@ -44,43 +76,16 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: |
+            backend/requirements.qdrant.txt
             backend/requirements.txt
             backend/requirements.dev.txt
 
       - name: Install dependencies
         run: pip install -r backend/requirements.dev.txt
 
-      - name: Audit Python dependencies
-        run: |
-          pip install pip-audit
-          pip-audit -r backend/requirements.txt \
-            --ignore-vuln CVE-2026-1839 \
-            --ignore-vuln CVE-2026-4372 \
-            --ignore-vuln PYSEC-2024-278 \
-            --ignore-vuln PYSEC-2025-183 \
-            --ignore-vuln PYSEC-2024-277 \
-            --ignore-vuln PYSEC-2025-211 \
-            --ignore-vuln PYSEC-2025-212 \
-            --ignore-vuln PYSEC-2025-213 \
-            --ignore-vuln PYSEC-2025-214 \
-            --ignore-vuln PYSEC-2025-215 \
-            --ignore-vuln PYSEC-2025-216 \
-            --ignore-vuln PYSEC-2025-217 \
-            --ignore-vuln PYSEC-2025-218 \
-            --ignore-vuln PYSEC-2025-189 \
-            --ignore-vuln PYSEC-2025-190 \
-            --ignore-vuln PYSEC-2025-191 \
-            --ignore-vuln PYSEC-2025-192 \
-            --ignore-vuln PYSEC-2025-193 \
-            --ignore-vuln PYSEC-2025-194 \
-            --ignore-vuln PYSEC-2025-195 \
-            --ignore-vuln PYSEC-2025-196 \
-            --ignore-vuln PYSEC-2025-197 \
-            --ignore-vuln PYSEC-2025-210 \
-            --ignore-vuln PYSEC-2026-139 \
-            --ignore-vuln CVE-2026-45829 \
-            --ignore-vuln PYSEC-2026-3447 \
-            --ignore-vuln PYSEC-2026-2290
+      - name: Audit the AWS profile before an armed release
+        if: vars.AWS_DEPLOY_ENABLED == 'true'
+        run: pipx run pip-audit -r backend/requirements.txt
 
       - name: Lint
         run: ruff check backend/ frontend/
@@ -142,6 +147,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          target: legacy
           push: true
           platforms: linux/amd64
           cache-from: type=gha

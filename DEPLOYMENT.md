@@ -385,6 +385,21 @@ aws lambda invoke \
 
 ## Free-tier deployment (Hugging Face Spaces + Streamlit Community Cloud)
 
+The Space builds the default `hosted` target in `backend/Dockerfile`. It installs
+`requirements.qdrant.txt`, defaults to Qdrant and bundles the MiniLM model at a
+fixed revision. Configure the existing Qdrant URL, collection and API key on the
+Space. Existing hosted collections use the same 384-dimensional model.
+
+Local Compose and the AWS `legacy` image retain embedded Chroma and its existing
+data format. Build that image with `docker build --target legacy backend`. The
+shared CI gate audits packages installed in the hosted image on every PR and also audits the
+complete legacy requirements whenever AWS deployment is enabled. Both audits
+fail on reported advisories. Before restoring AWS, run
+`pip-audit -r backend/requirements.txt`. Chroma 1.5.9 has open advisories and
+requires a patched release or a separately reviewed storage migration before
+AWS can ship.
+
+
 An alternative to the AWS stack above, for a $0/month deploy: the backend runs on a Hugging Face Space (Docker SDK), the frontend on Streamlit Community Cloud, and Postgres/Redis/the vector store move to their free managed equivalents (Neon/Upstash/Qdrant Cloud). Both app hosts sleep on inactivity and cold-start in seconds — no Wake-on-Visit machinery needed, but see [Keep-warm](#keep-warm) below. This is additive documentation; it does not change how the AWS path above works.
 
 ### Continuous deployment — one branch, two environments
