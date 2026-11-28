@@ -1,15 +1,17 @@
 name: Keep Warm
 
-# The free-tier providers (Neon, Upstash, Qdrant, HF Space, Streamlit) suspend
-# when idle, and that stack has no scheduler of its own — this workflow is both
-# the keep-alive ping and the app's daily lifecycle cron. A failed run emails
-# the repo owner, which doubles as uptime alerting. Note: schedules fire from
-# the default branch only.
+# Scheduled health checks and document cleanup are independent. A green
+# provider page does not prove the app is serving the expected responses.
 on:
   schedule:
-    - cron: "0 */6 * * *" # keep everything resident
-    - cron: "0 3 * * *" # daily lifecycle cleanup
+    - cron: "0 */6 * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      run-cleanup:
+        description: Run production document cleanup from main
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,62 +21,57 @@ env:
   FRONTEND_URL: https://deeason-career.streamlit.app
 
 jobs:
-  warm:
-    name: Warm the stack
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  api-readiness:
+    name: API and datastores
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - name: Warm API + datastores
-        # One cheap call touches Postgres, Redis and the vector store at once.
-        # The first hit doubles as the wake-up call: these providers drop idle
-        # connections between pings, so a dependency can read "down" for one
-        # sample and be fine seconds later (redis did on 2026-07-05). Probe up
-        # to three times and only alert if the stack stays unhealthy.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Validate API readiness
         run: |
-          for attempt in 1 2 3; do
-            if [ "$attempt" -gt 1 ]; then sleep 30; fi
-            bad=""
-            body=$(curl -sS --max-time 60 "$API_BASE/health/warm") \
-              || { bad=" api-unreachable"; echo "attempt $attempt: curl failed"; continue; }
-            echo "attempt $attempt: $body"
-            # Dep checks accept both the {status,detail} object and the legacy
-            # string shape, so the cron can't false-alarm mid Space rebuild.
-            for dep in db redis; do
-              echo "$body" | grep -Eq "\"$dep\":(\"(ok|disabled)\"|\{\"status\":\"(ok|disabled)\")" || bad="$bad $dep"
-            done
-            echo "$body" | grep -Eq '"vector":\{[^}]*"status":"ok"' || bad="$bad vector"
-            if [ -z "$bad" ]; then exit 0; fi
-          done
-          echo "::error::still unhealthy after 3 attempts:$bad"
-          exit 1
+          timeout 150s python .github/scripts/readiness.py \
+            --api-base "$API_BASE" --require-redis --report-version \
+            --allow-missing-semantic --request-timeout 15 --retry-delay 15
 
-      - name: Ping the frontend
-        # Any response means the edge took the hit; Streamlit sends cookie-less
-        # clients a redirect loop, so don't follow (-L) — the 3xx itself is fine.
+  frontend-readiness:
+    name: Streamlit runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Validate frontend runtime
         run: |
-          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 \
-            --retry 3 --retry-all-errors --retry-delay 10 "$FRONTEND_URL")
-          echo "frontend HTTP $code"
-          [ "$code" -lt 500 ]
+          timeout 150s python .github/scripts/readiness.py \
+            --frontend-url "$FRONTEND_URL" --request-timeout 15 --retry-delay 15
 
   cleanup:
     name: Lifecycle cleanup
-    # Only on the daily schedule (or a manual dispatch) — not every warm cycle.
-    if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event.schedule == '0 3 * * *' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run-cleanup))
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: free-prod
     steps:
-      - name: Purge expired documents (15-day TTL)
-        # Keep the response body — the endpoint names the failure class on a 500,
-        # and discarding it once cost a full offline repro to work out why the
-        # purge was wedged.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Purge expired documents and report counts
+        env:
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
         run: |
-          body=$(mktemp)
-          code=$(curl -sS -o "$body" -w "%{http_code}" --max-time 60 \
-            -X POST -H "X-Admin-Secret: ${{ secrets.ADMIN_SECRET }}" \
-            "$API_BASE/api/v1/admin/lifecycle/run")
-          echo "cleanup HTTP $code"
-          cat "$body"
-          echo
-          [ "$code" = "200" ]
+          timeout 90s python .github/scripts/lifecycle.py --api-base "$API_BASE"
