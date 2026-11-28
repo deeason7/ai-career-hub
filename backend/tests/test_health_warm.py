@@ -2,9 +2,19 @@
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
 import pytest_asyncio
 
 from app import main as app_main
+
+
+@pytest.fixture(autouse=True)
+def healthy_semantic_model():
+    with patch(
+        "app.services.ats_scorer.semantic_healthcheck",
+        return_value={"status": "ok", "model": "all-MiniLM-L6-v2", "detail": None},
+    ) as probe:
+        yield probe
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -39,6 +49,20 @@ async def test_warm_probe_reports_ok_dependencies(client):
     assert body["db"] == {"status": "ok", "detail": None}
     assert body["redis"] == {"status": "ok", "detail": None}
     assert body["vector"]["backend"] == "chroma"
+    assert body["semantic"] == {"status": "ok", "model": "all-MiniLM-L6-v2", "detail": None}
+
+
+async def test_warm_probe_reports_failed_semantic_inference(client, healthy_semantic_model):
+    healthy_semantic_model.return_value = {
+        "status": "down",
+        "model": "all-MiniLM-L6-v2",
+        "detail": "OSError",
+    }
+    with patch("app.services.task_state._get_redis", return_value=None):
+        res = await client.get("/health/warm")
+    assert res.status_code == 200
+    assert res.json()["semantic"]["status"] == "down"
+    assert res.json()["semantic"]["detail"] == "OSError"
 
 
 async def test_warm_probe_carries_redis_failure_detail(client):

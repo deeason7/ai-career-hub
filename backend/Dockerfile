@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS common
 
 WORKDIR /app
 
@@ -8,22 +8,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.qdrant.txt .
+RUN pip install --no-cache-dir --upgrade pip==26.3 \
+    && pip install --no-cache-dir -r requirements.qdrant.txt && pip check
 
-# The Space sets HOME=/home/user, which this image's non-root user cannot write.
-# sentence-transformers then resolves its cache under that path, the download
-# raises PermissionError, and calculate_ats_score quietly drops to keyword-only
-# scoring. Pin the cache somewhere we own, and fetch the weights at build time so
-# a cold request never waits on a download either.
-ENV HF_HOME=/app/.cache/huggingface
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# Export a standalone model rather than relying on the hosting user's Hub cache.
+# Runtime inference uses only this directory, including when HOME is overridden.
+ENV ATS_MODEL_PATH=/app/models/all-MiniLM-L6-v2
+RUN --mount=type=cache,target=/root/.cache/huggingface \
+    python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', revision='1110a243fdf4706b3f48f1d95db1a4f5529b4d41').save(os.environ['ATS_MODEL_PATH'])"
 
 COPY . .
 
 # Run as non-root for security hardening
 RUN useradd -m -r appuser && chown -R appuser /app
 USER appuser
+
+# Fail the build if the serving user cannot run inference without Hub access.
+RUN HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HOME=/tmp/runtime-home \
+    python -c "from app.services.ats_scorer import semantic_healthcheck; result = semantic_healthcheck(); assert result['status'] == 'ok', result"
 
 EXPOSE 8000
 
@@ -37,3 +40,14 @@ EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
      "--proxy-headers", "--forwarded-allow-ips", "*"]
 
+
+# The standby AWS deployment explicitly builds this target.
+FROM common AS legacy
+USER root
+RUN pip install --no-cache-dir -r requirements.txt && pip check
+USER appuser
+ENV VECTOR_BACKEND=chroma
+
+# Hugging Face Spaces builds the final stage.
+FROM common AS hosted
+ENV VECTOR_BACKEND=qdrant
